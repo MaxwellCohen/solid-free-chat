@@ -1,0 +1,22 @@
+{
+  "projectName": "solid-free-chat",
+  "mode": "file-router",
+  "typescript": true,
+  "packageManager": "npm",
+  "includeExamples": true,
+  "tailwind": true,
+  "addOnOptions": {},
+  "envVarValues": {},
+  "git": true,
+  "routerOnly": false,
+  "version": 1,
+  "framework": "solid",
+  "chosenAddOns": [
+    "eslint",
+    "tanstack-query",
+    "store",
+    "solid-ui",
+    "sentry",
+    "tanchat"
+  ]
+}
