@@ -32,8 +32,27 @@ const OPENROUTER_API_KEY_LS_KEY = 'solid-free-chat-openrouter-api-key'
 const SKIP_MODEL_LIST_SSR = '__skip_model_list_ssr__'
 
 export default function ChatApp() {
-  const state = useChatStore()
   const actions = useChatActions()
+  const currentConversationId = useChatStore((state) => state.currentConversationId)
+  const currentConversationMessages = useChatStore((state) => {
+    const id = state.currentConversationId
+    return id ? (state.messagesByConversationId[id] ?? []) : []
+  })
+  const currentConversationSystemMessage = useChatStore((state) => {
+    const id = state.currentConversationId
+    return id ? (state.conversationsById[id]?.customSystemMessage ?? '') : ''
+  })
+  const conversations = useChatStore((state) =>
+    state.conversationOrder
+      .map((id) => state.conversationsById[id])
+      .filter((conversation) => conversation != null),
+  )
+  const savedSystemPrompts = useChatStore((state) => state.savedSystemPrompts)
+  const selectedModel = useChatStore((state) => state.selectedModel)
+  const initialMessagesForActiveConversation = createMemo(() => {
+    currentConversationId()
+    return untrack(currentConversationMessages)
+  })
   /** Input value while typing (does not trigger model refetch). */
   const [openRouterApiKeyDraft, setOpenRouterApiKeyDraft] = createSignal('')
   /** Last committed value (blur): sent to server fns for OpenRouter; optional `.env` fallback for local dev only. */
@@ -61,21 +80,14 @@ export default function ChatApp() {
     createSignal(false)
   const [openRouterApiKeyModalOpen, setOpenRouterApiKeyModalOpen] =
     createSignal(false)
-  const activeConversationId = createMemo(() => state().currentConversationId)
+  /** Below `sm`: one panel for system message + conversation list. */
+  const [mobileSidebarPanelOpen, setMobileSidebarPanelOpen] = createSignal(true)
 
   let saveSystemTimer: ReturnType<typeof setTimeout> | null = null
 
   createEffect(() => {
-    const id = activeConversationId()
-    const fromStore =
-      id != null
-        ? untrack(
-            () =>
-              state().conversations.find((c) => c.id === id)
-                ?.customSystemMessage ?? '',
-          )
-        : ''
-    setSystemDraft(fromStore)
+    currentConversationId()
+    setSystemDraft(untrack(currentConversationSystemMessage))
   })
 
   onCleanup(() => {
@@ -86,8 +98,8 @@ export default function ChatApp() {
   })
 
   function persistSystemDraft(value: string) {
-    const id = state().currentConversationId
-    if (id) actions.setConversationCustomSystemMessage(id, value)
+    const id = currentConversationId() as string
+    actions.setConversationCustomSystemMessage(id, value)
   }
 
   function onSystemMessageInput(
@@ -114,7 +126,7 @@ export default function ChatApp() {
     const list = modelList()
     if (!list?.length) return
     const ids = new Set(list.map((m) => m.id))
-    if (!ids.has(state().selectedModel)) {
+    if (!ids.has(selectedModel())) {
       actions.setSelectedModel(list[0].id)
     }
   })
@@ -150,7 +162,7 @@ export default function ChatApp() {
     {
       id: DEFAULT_CHAT_MODEL,
       name: 'Free Models Router (offline list)',
-      inputModalities: ['text', 'image', 'document'],
+      inputModalities: ['text'],
     },
   ]
 
@@ -158,9 +170,9 @@ export default function ChatApp() {
   const selectOptions = createMemo(() => {
     if (modelList.loading) return []
     if (modelList.error) {
-      const id = state().selectedModel
+      const id = selectedModel()
       const fb = modelListErrorFallback()
-      if (id && !fb.some((o) => o.id === id)) {
+      if (!fb.some((o) => o.id === id)) {
         return [
           ...fb,
           {
@@ -169,14 +181,14 @@ export default function ChatApp() {
               id === DEFAULT_CHAT_MODEL
                 ? `${id} (fallback)`
                 : `${id} (saved)`,
+            inputModalities: id === DEFAULT_CHAT_MODEL ? ['text'] : undefined,
           },
         ]
       }
       return fb
     }
     const fromApi = modelList() ?? []
-    const id = state().selectedModel
-    if (!id) return fromApi
+    const id = selectedModel()
     if (fromApi.some((o) => o.id === id)) return fromApi
     return [
       ...fromApi,
@@ -186,6 +198,7 @@ export default function ChatApp() {
           id === DEFAULT_CHAT_MODEL
             ? `${id} (fallback)`
             : `${id} (saved; not in free list)`,
+        inputModalities: id === DEFAULT_CHAT_MODEL ? ['text'] : undefined,
       },
     ]
   })
@@ -223,7 +236,7 @@ export default function ChatApp() {
   }
 
   const selectedModelMeta = createMemo((): ChatModelOption | undefined => {
-    const id = state().selectedModel
+    const id = selectedModel()
     return selectOptions().find((m) => m.id === id)
   })
 
@@ -244,6 +257,27 @@ export default function ChatApp() {
       }
       return next
     })
+  }
+
+  function collapseSidebarIfNarrow() {
+    if (typeof window === 'undefined') return
+    if (!window.matchMedia('(max-width: 639.98px)').matches) return
+    setSidebarOpen(false)
+    try {
+      localStorage.setItem(SIDEBAR_OPEN_LS_KEY, '0')
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function selectConversation(id: string) {
+    actions.setCurrentConversationId(id)
+    collapseSidebarIfNarrow()
+  }
+
+  function createConversationFromSidebar() {
+    actions.createConversation()
+    collapseSidebarIfNarrow()
   }
 
   createEffect(() => {
@@ -270,7 +304,7 @@ export default function ChatApp() {
         id="chat-sidebar"
         class="border-border flex shrink-0 flex-col border-b transition-[width] duration-200 ease-out sm:border-r sm:border-b-0"
         classList={{
-          'flex w-full min-h-0 max-h-40 flex-col sm:max-h-none sm:w-64 md:w-72':
+          'flex w-full min-h-0 max-h-[min(55dvh,24rem)] flex-col overflow-x-hidden overflow-y-auto sm:max-h-none sm:overflow-hidden sm:w-64 md:w-72':
             sidebarOpen(),
           'hidden sm:flex sm:h-full sm:w-12 sm:min-w-12 sm:max-h-none sm:flex-col':
             !sidebarOpen(),
@@ -291,10 +325,25 @@ export default function ChatApp() {
               >
                 <PanelLeft class="size-5 shrink-0" aria-hidden={true} />
               </button>
+              <button
+                type="button"
+                class="text-muted-foreground hover:bg-muted hover:text-foreground relative rounded-lg p-2"
+                classList={{
+                  'ring-primary/50 ring-2 ring-offset-2 ring-offset-background':
+                    openRouterApiKeyApplied().trim().length > 0,
+                }}
+                onClick={openOpenRouterApiKeyModal}
+                title="OpenRouter API key"
+                aria-label="OpenRouter API key"
+                aria-haspopup="dialog"
+                aria-expanded={openRouterApiKeyModalOpen()}
+              >
+                <KeyRound class="size-5 shrink-0" aria-hidden={true} />
+              </button>
             </div>
           }
         >
-          <div class="border-border flex shrink-0 items-center border-b px-3 py-2">
+          <div class="border-border order-1 flex shrink-0 items-center border-b px-3 py-2">
             <button
               type="button"
               class="text-muted-foreground hover:bg-muted hover:text-foreground shrink-0 rounded-lg p-1.5"
@@ -307,97 +356,165 @@ export default function ChatApp() {
               <PanelLeftClose class="size-4 shrink-0" aria-hidden={true} />
             </button>
           </div>
-          <Show when={state().currentConversationId}>
-            <div class="border-border shrink-0 space-y-2 border-b px-2 py-2">
-              <details class="group/sys border-border bg-card/30 rounded-lg border">
-                <summary class="text-muted-foreground hover:bg-muted/40 flex cursor-pointer list-none items-start gap-2 px-2 py-1.5 text-[11px] leading-snug [&::-webkit-details-marker]:hidden">
-                  <ChevronRight
-                    class="text-muted-foreground mt-0.5 size-3.5 shrink-0 transition-transform group-open/sys:rotate-90"
-                    aria-hidden={true}
-                  />
-                  <span class="min-w-0 flex-1">
-                    <span class="text-foreground font-semibold">
-                      System message
-                    </span>
-                    <span class="text-muted-foreground/80 block font-normal">
-                      (this chat only; sent with every reply)
-                    </span>
-                    <span class="text-muted-foreground mt-0.5 block truncate font-normal">
-                      {systemMessagePreview()}
-                    </span>
-                  </span>
-                </summary>
-                <div
-                  class="border-border border-t px-2 py-1.5"
-                  role="region"
-                  aria-label="System message (read-only)"
-                >
-                  <Show
-                    when={systemDraft().trim()}
-                    fallback={
-                      <p class="text-muted-foreground m-0 text-xs italic">
-                        No system message for this chat.
-                      </p>
-                    }
-                  >
-                    <pre class="text-foreground m-0 max-h-32 overflow-y-auto font-sans text-xs whitespace-pre-wrap wrap-break-word">
-                      {systemDraft()}
-                    </pre>
-                  </Show>
-                </div>
-              </details>
+          <div class="order-2 flex min-h-0 flex-1 flex-col sm:order-3">
+            <div class="border-border flex shrink-0 items-center justify-between gap-2 border-b p-3 sm:hidden">
               <button
                 type="button"
-                class="bg-secondary text-secondary-foreground hover:bg-secondary/90 inline-flex w-full items-center justify-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium"
-                onClick={() => setSystemPromptLibraryOpen(true)}
-                aria-haspopup="dialog"
+                class="hover:bg-muted/50 -mx-1 flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1 py-1 text-left"
+                onClick={() =>
+                  setMobileSidebarPanelOpen((open) => !open)
+                }
+                aria-expanded={mobileSidebarPanelOpen()}
+                aria-controls="sidebar-panel-content"
+                id="sidebar-panel-disclosure"
               >
-                <SquarePen class="size-3.5 shrink-0" aria-hidden={true} />
-                Edit system prompt
+                <ChevronRight
+                  class="text-muted-foreground size-4 shrink-0 transition-transform"
+                  classList={{
+                    'rotate-90': mobileSidebarPanelOpen(),
+                  }}
+                  aria-hidden={true}
+                />
+                <span class="text-muted-foreground truncate text-xs font-semibold tracking-wide uppercase">
+                  Chats & settings
+                </span>
+              </button>
+              <button
+                type="button"
+                class="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium"
+                onClick={createConversationFromSidebar}
+              >
+                New
               </button>
             </div>
-          </Show>
-          <div class="flex shrink-0 items-center justify-between gap-2 p-3">
-            <h2 class="text-muted-foreground min-w-0 flex-1 truncate text-xs font-semibold tracking-wide uppercase">
-              Chats
-            </h2>
-            <button
-              type="button"
-              class="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium"
-              onClick={() => actions.createConversation()}
+            <div
+              id="sidebar-panel-content"
+              class="flex min-h-0 flex-1 flex-col"
+              classList={{
+                'max-sm:hidden': !mobileSidebarPanelOpen(),
+              }}
             >
-              New
-            </button>
+              <div class="flex min-h-0 flex-1 flex-col">
+                <div class="order-1 flex min-h-0 flex-1 flex-col sm:order-2">
+                  <div class="hidden shrink-0 items-center justify-between gap-2 p-3 sm:flex">
+                    <h2 class="text-muted-foreground min-w-0 flex-1 truncate text-xs font-semibold tracking-wide uppercase">
+                      Chats
+                    </h2>
+                    <button
+                      type="button"
+                      class="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium"
+                      onClick={createConversationFromSidebar}
+                    >
+                      New
+                    </button>
+                  </div>
+                  <nav
+                    id="sidebar-conversations-nav"
+                    class="min-h-0 flex-1 overflow-y-auto"
+                    aria-label="Conversations"
+                  >
+                    <ul class="space-y-0.5 px-2 pb-3">
+                      <For each={conversations()}>
+                        {(c) => (
+                          <li class="flex items-stretch gap-0.5">
+                            <button
+                              type="button"
+                              class="hover:bg-muted min-w-0 flex-1 rounded-lg px-2 py-2 text-left text-sm"
+                              classList={{
+                                'bg-muted font-medium':
+                                  currentConversationId() === c.id,
+                              }}
+                              onClick={() => selectConversation(c.id)}
+                            >
+                              <span class="truncate">
+                                {c.title || NEW_CHAT_TITLE}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              title="Delete chat"
+                              class="text-muted-foreground hover:text-destructive hover:bg-muted shrink-0 rounded-lg px-2 text-sm"
+                              onClick={() => actions.deleteConversation(c.id)}
+                            >
+                              ×
+                            </button>
+                          </li>
+                        )}
+                      </For>
+                    </ul>
+                  </nav>
+                </div>
+                <div class="border-border order-2 shrink-0 space-y-2 border-b px-2 py-2 sm:order-1">
+                  <button
+                    type="button"
+                    class="border-border text-muted-foreground hover:bg-muted hover:text-foreground inline-flex w-full items-center justify-center gap-2 rounded-lg border px-2 py-1.5 text-xs font-medium"
+                    onClick={openOpenRouterApiKeyModal}
+                    aria-haspopup="dialog"
+                    aria-expanded={openRouterApiKeyModalOpen()}
+                  >
+                    <KeyRound class="size-3.5 shrink-0" aria-hidden={true} />
+                    <span class="whitespace-nowrap">API key</span>
+                    <Show when={openRouterApiKeyApplied().trim().length > 0}>
+                      <span
+                        class="bg-primary/15 text-primary rounded px-1.5 py-px text-[10px] font-medium"
+                        title="A browser-stored key is in use"
+                      >
+                        Set
+                      </span>
+                    </Show>
+                  </button>
+                  <Show when={currentConversationId()}>
+                    <details class="group/sys border-border bg-card/30 rounded-lg border">
+                      <summary class="text-muted-foreground hover:bg-muted/40 flex cursor-pointer list-none items-start gap-2 px-2 py-1.5 text-[11px] leading-snug [&::-webkit-details-marker]:hidden">
+                        <ChevronRight
+                          class="text-muted-foreground mt-0.5 size-3.5 shrink-0 transition-transform group-open/sys:rotate-90"
+                          aria-hidden={true}
+                        />
+                        <span class="min-w-0 flex-1">
+                          <span class="text-foreground font-semibold">
+                            System message
+                          </span>
+                          <span class="text-muted-foreground/80 hidden md:block font-normal">
+                            (this chat only; sent with every reply)
+                          </span>
+                          <span class="text-muted-foreground mt-0.5 block truncate font-normal">
+                            {systemMessagePreview()}
+                          </span>
+                        </span>
+                      </summary>
+                      <div
+                        class="border-border border-t px-2 py-1.5"
+                        role="region"
+                        aria-label="System message (read-only)"
+                      >
+                        <Show
+                          when={systemDraft().trim()}
+                          fallback={
+                            <p class="text-muted-foreground m-0 text-xs italic">
+                              No system message for this chat.
+                            </p>
+                          }
+                        >
+                          <pre class="text-foreground m-0 max-h-32 overflow-y-auto font-sans text-xs whitespace-pre-wrap wrap-break-word">
+                            {systemDraft()}
+                          </pre>
+                        </Show>
+                      </div>
+                    </details>
+                    <button
+                      type="button"
+                      class="bg-secondary text-secondary-foreground hover:bg-secondary/90 inline-flex w-full items-center justify-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium"
+                      onClick={() => setSystemPromptLibraryOpen(true)}
+                      aria-haspopup="dialog"
+                    >
+                      <SquarePen class="size-3.5 shrink-0" aria-hidden={true} />
+                      Edit system prompt
+                    </button>
+                  </Show>
+                </div>
+              </div>
+            </div>
           </div>
-          <nav class="min-h-0 flex-1 overflow-y-auto">
-            <ul class="space-y-0.5 px-2 pb-3">
-              <For each={state().conversations}>
-                {(c) => (
-                  <li class="flex items-stretch gap-0.5">
-                    <button
-                      type="button"
-                      class="hover:bg-muted min-w-0 flex-1 rounded-lg px-2 py-2 text-left text-sm"
-                      classList={{
-                        'bg-muted font-medium':
-                          state().currentConversationId === c.id,
-                      }}
-                      onClick={() => actions.setCurrentConversationId(c.id)}
-                    >
-                      <span class="truncate">{c.title || NEW_CHAT_TITLE}</span>
-                    </button>
-                    <button
-                      type="button"
-                      title="Delete chat"
-                      class="text-muted-foreground hover:text-destructive hover:bg-muted shrink-0 rounded-lg px-2 text-sm"
-                      onClick={() => actions.deleteConversation(c.id)}
-                    >
-                      ×
-                    </button>
-                  </li>
-                )}
-              </For>
-            </ul>
-          </nav>
         </Show>
       </aside>
 
@@ -416,36 +533,18 @@ export default function ChatApp() {
                 Chats
               </button>
             </Show>
-            <button
-              type="button"
-              class="border-border text-muted-foreground hover:bg-muted hover:text-foreground inline-flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm font-medium"
-              onClick={openOpenRouterApiKeyModal}
-              aria-haspopup="dialog"
-              aria-expanded={openRouterApiKeyModalOpen()}
-            >
-              <KeyRound class="size-4 shrink-0" aria-hidden={true} />
-              <span class="whitespace-nowrap">API key</span>
-              <Show when={openRouterApiKeyApplied().trim().length > 0}>
-                <span
-                  class="bg-primary/15 text-primary rounded px-1.5 py-px text-[10px] font-medium"
-                  title="A browser-stored key is in use"
-                >
-                  Set
-                </span>
-              </Show>
-            </button>
             <label class="text-muted-foreground flex flex-wrap items-center gap-2 text-sm">
               <span class="whitespace-nowrap">Model</span>
               <select
                 class="border-input bg-background min-w-48 max-w-[min(100%,24rem)] rounded-lg border px-2 py-1.5 text-sm"
-                value={state().selectedModel}
+                value={selectedModel()}
                 disabled={selectDisabled()}
                 onChange={(e) =>
                   actions.setSelectedModel(e.currentTarget.value)
                 }
               >
                 <Show when={modelList.loading}>
-                  <option value={state().selectedModel}>Loading models…</option>
+                  <option value={selectedModel()}>Loading models…</option>
                 </Show>
                 <Show when={!modelList.loading && modelList.error}>
                   <For each={selectOptions()}>
@@ -487,19 +586,17 @@ export default function ChatApp() {
           </div>
         </header>
 
-        <Show when={state().currentConversationId} keyed>
-          {(id) => {
-            const conv = state().conversations.find((c) => c.id === id)
-            const initial = conv?.messages ?? []
-            return (
+        <Show when={currentConversationId()} keyed>
+          {(id) => (
+            <div class="flex min-h-0 min-w-0 flex-1 flex-col">
               <ChatThread
                 conversationId={id}
-                initialMessages={initial}
+                initialMessages={initialMessagesForActiveConversation()}
                 inputModalities={selectedModelMeta()?.inputModalities}
                 openRouterApiKey={openRouterApiKeyApplied()}
               />
-            )
-          }}
+            </div>
+          )}
         </Show>
 
         <Show when={openRouterApiKeyModalOpen()}>
@@ -589,7 +686,7 @@ export default function ChatApp() {
           </div>
         </Show>
 
-        <Show when={systemPromptLibraryOpen() && state().currentConversationId}>
+        <Show when={systemPromptLibraryOpen() && currentConversationId()}>
           <div
             class="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4"
             role="presentation"
@@ -651,7 +748,7 @@ export default function ChatApp() {
                         onChange={(e) => {
                           const pid = e.currentTarget.value
                           if (!pid) return
-                          const p = state().savedSystemPrompts.find(
+                          const p = savedSystemPrompts().find(
                             (x) => x.id === pid,
                           )
                           if (p) {
@@ -662,7 +759,7 @@ export default function ChatApp() {
                         }}
                       >
                         <option value="">Choose…</option>
-                        <For each={state().savedSystemPrompts}>
+                        <For each={savedSystemPrompts()}>
                           {(p) => <option value={p.id}>{p.name}</option>}
                         </For>
                       </select>
@@ -699,13 +796,13 @@ export default function ChatApp() {
                       Save to library
                     </button>
                   </div>
-                  <Show when={state().savedSystemPrompts.length > 0}>
+                  <Show when={savedSystemPrompts().length > 0}>
                     <div class="text-muted-foreground border-border border-t pt-3 text-xs">
                       <p class="text-foreground mb-2 font-medium">
-                        Manage saved ({state().savedSystemPrompts.length})
+                        Manage saved ({savedSystemPrompts().length})
                       </p>
                       <ul class="space-y-1">
-                        <For each={state().savedSystemPrompts}>
+                        <For each={savedSystemPrompts()}>
                           {(p) => (
                             <li class="flex items-center justify-between gap-2">
                               <span class="min-w-0 truncate" title={p.name}>

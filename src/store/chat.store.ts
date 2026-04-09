@@ -10,17 +10,25 @@ export interface TokenUsageSnapshot {
   recordedAt: number
 }
 
+/** UIMessage with optional per-reply usage (extension; persisted in local storage). */
+export type ChatUIMessage = UIMessage & {
+  tokenUsage?: TokenUsageSnapshot
+}
+
 export interface ChatConversation {
   id: string
   title: string
   updatedAt: number
   /** Per-chat instructions sent as a system message on each model request (server-injected). */
   customSystemMessage: string
-  messages: UIMessage[]
   /** Most recent usage reported by the API for this chat. */
   lastUsage?: TokenUsageSnapshot
   /** Sum of `totalTokens` from each completed run in this chat (approx. session usage). */
   sessionTotalTokens?: number
+}
+
+export interface ChatConversationWithMessages extends ChatConversation {
+  messages: ChatUIMessage[]
 }
 
 /** Reusable system prompt templates (browser-local). */
@@ -32,16 +40,38 @@ export interface SavedSystemPrompt {
 }
 
 export interface ChatAppState {
-  conversations: ChatConversation[]
+  conversationOrder: string[]
+  conversationsById: Record<string, ChatConversation>
+  messagesByConversationId: Record<string, ChatUIMessage[]>
   currentConversationId: string | null
   selectedModel: string
   savedSystemPrompts: SavedSystemPrompt[]
 }
 
+type LegacyChatConversation = ChatConversationWithMessages
+
+type LegacyChatAppState = {
+  conversations?: LegacyChatConversation[]
+  currentConversationId?: string | null
+  selectedModel?: string
+  savedSystemPrompts?: unknown
+}
+
+type PersistedChatState = {
+  conversationOrder?: unknown
+  conversationsById?: unknown
+  messagesByConversationId?: unknown
+  currentConversationId?: unknown
+  selectedModel?: unknown
+  savedSystemPrompts?: unknown
+}
+
 export const NEW_CHAT_TITLE = 'New chat'
 
 const emptyState = (): ChatAppState => ({
-  conversations: [],
+  conversationOrder: [],
+  conversationsById: {},
+  messagesByConversationId: {},
   currentConversationId: null,
   selectedModel: DEFAULT_CHAT_MODEL,
   savedSystemPrompts: [],
@@ -61,6 +91,15 @@ function newSavedPromptId(): string {
     return crypto.randomUUID()
   }
   return `sp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+}
+
+function newConversation(now = Date.now(), id = newConversationId()): ChatConversation {
+  return {
+    id,
+    title: NEW_CHAT_TITLE,
+    updatedAt: now,
+    customSystemMessage: '',
+  }
 }
 
 export function normalizeTokenUsageSnapshot(
@@ -114,76 +153,263 @@ export function normalizeSavedSystemPrompts(raw: unknown): SavedSystemPrompt[] {
     }))
 }
 
+function normalizeMessage(raw: unknown): ChatUIMessage | null {
+  if (!raw || typeof raw !== 'object') return null
+  const message = raw as UIMessage & { tokenUsage?: unknown }
+  const tokenUsage = normalizeTokenUsageSnapshot(message.tokenUsage)
+  return {
+    ...message,
+    createdAt:
+      message.createdAt != null
+        ? new Date(message.createdAt as unknown as string | number)
+        : undefined,
+    ...(tokenUsage ? { tokenUsage } : {}),
+  } as ChatUIMessage
+}
+
+function normalizeMessages(raw: unknown): ChatUIMessage[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((message) => normalizeMessage(message))
+    .filter((message): message is ChatUIMessage => message != null)
+}
+
+function normalizeConversationRecord(
+  raw: unknown,
+  fallbackId: string,
+): ChatConversation {
+  const now = Date.now()
+  const source = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+  const id =
+    typeof source.id === 'string' && source.id.trim() ? source.id.trim() : fallbackId
+  const title =
+    typeof source.title === 'string' && source.title.trim()
+      ? source.title
+      : NEW_CHAT_TITLE
+  const updatedAt =
+    typeof source.updatedAt === 'number' && Number.isFinite(source.updatedAt)
+      ? source.updatedAt
+      : now
+  const customSystemMessage =
+    typeof source.customSystemMessage === 'string' ? source.customSystemMessage : ''
+  const lastUsage = normalizeTokenUsageSnapshot(source.lastUsage)
+  const sessionTotalTokens =
+    typeof source.sessionTotalTokens === 'number' &&
+    Number.isFinite(source.sessionTotalTokens)
+      ? source.sessionTotalTokens
+      : undefined
+
+  return {
+    id,
+    title,
+    updatedAt,
+    customSystemMessage,
+    ...(lastUsage ? { lastUsage } : {}),
+    ...(sessionTotalTokens !== undefined ? { sessionTotalTokens } : {}),
+  }
+}
+
+function normalizeConversationOrder(
+  raw: unknown,
+  conversationsById: Record<string, ChatConversation>,
+): string[] {
+  if (!Array.isArray(raw)) return Object.keys(conversationsById)
+  const seen = new Set<string>()
+  const order: string[] = []
+  for (const value of raw) {
+    if (typeof value !== 'string') continue
+    const id = value.trim()
+    if (!id || seen.has(id) || !(id in conversationsById)) continue
+    seen.add(id)
+    order.push(id)
+  }
+  for (const id of Object.keys(conversationsById)) {
+    if (seen.has(id)) continue
+    seen.add(id)
+    order.push(id)
+  }
+  return order
+}
+
+function normalizePersistedChatState(raw: PersistedChatState): ChatAppState | null {
+  if (!raw || typeof raw !== 'object') return null
+  const rawConversationsById =
+    raw.conversationsById &&
+    typeof raw.conversationsById === 'object' &&
+    !Array.isArray(raw.conversationsById)
+      ? (raw.conversationsById as Record<string, unknown>)
+      : null
+
+  if (!rawConversationsById) return null
+
+  const rawMessagesByConversationId =
+    raw.messagesByConversationId &&
+    typeof raw.messagesByConversationId === 'object' &&
+    !Array.isArray(raw.messagesByConversationId)
+      ? (raw.messagesByConversationId as Record<string, unknown>)
+      : {}
+
+  const conversationsById: Record<string, ChatConversation> = {}
+  const messagesByConversationId: Record<string, ChatUIMessage[]> = {}
+
+  for (const [key, value] of Object.entries(rawConversationsById)) {
+    const conversation = normalizeConversationRecord(value, key)
+    conversationsById[conversation.id] = conversation
+    messagesByConversationId[conversation.id] = normalizeMessages(
+      rawMessagesByConversationId[conversation.id],
+    )
+  }
+
+  const conversationOrder = normalizeConversationOrder(raw.conversationOrder, conversationsById)
+  const currentConversationId =
+    typeof raw.currentConversationId === 'string' &&
+    raw.currentConversationId in conversationsById
+      ? raw.currentConversationId
+      : conversationOrder[0] ?? null
+
+  return {
+    conversationOrder,
+    conversationsById,
+    messagesByConversationId,
+    currentConversationId,
+    selectedModel:
+      typeof raw.selectedModel === 'string' && raw.selectedModel.trim()
+        ? raw.selectedModel
+        : DEFAULT_CHAT_MODEL,
+    savedSystemPrompts: normalizeSavedSystemPrompts(raw.savedSystemPrompts),
+  }
+}
+
+function normalizeLegacyChatState(raw: LegacyChatAppState): ChatAppState | null {
+  const legacyConversations = Array.isArray(raw.conversations) ? raw.conversations : null
+  if (!legacyConversations) return null
+
+  const conversationsById: Record<string, ChatConversation> = {}
+  const messagesByConversationId: Record<string, ChatUIMessage[]> = {}
+  const conversationOrder: string[] = []
+
+  for (const value of legacyConversations) {
+    const conversation = normalizeConversationRecord(value, newConversationId())
+    if (conversation.id in conversationsById) continue
+    conversationsById[conversation.id] = conversation
+    messagesByConversationId[conversation.id] = normalizeMessages(value.messages)
+    conversationOrder.push(conversation.id)
+  }
+
+  const currentConversationId =
+    typeof raw.currentConversationId === 'string' &&
+    raw.currentConversationId in conversationsById
+      ? raw.currentConversationId
+      : conversationOrder[0] ?? null
+
+  return {
+    conversationOrder,
+    conversationsById,
+    messagesByConversationId,
+    currentConversationId,
+    selectedModel:
+      typeof raw.selectedModel === 'string' && raw.selectedModel.trim()
+        ? raw.selectedModel
+        : DEFAULT_CHAT_MODEL,
+    savedSystemPrompts: normalizeSavedSystemPrompts(raw.savedSystemPrompts),
+  }
+}
+
+export function normalizeChatAppState(raw: unknown): ChatAppState | null {
+  if (!raw || typeof raw !== 'object') return null
+  const source = raw as Record<string, unknown>
+  if (
+    'conversationOrder' in source ||
+    'conversationsById' in source ||
+    'messagesByConversationId' in source
+  ) {
+    return normalizePersistedChatState(source as PersistedChatState)
+  }
+  if ('conversations' in source) {
+    return normalizeLegacyChatState(source as LegacyChatAppState)
+  }
+  return null
+}
+
+function getConversationMessages(state: ChatAppState, conversationId: string): ChatUIMessage[] {
+  return state.messagesByConversationId[conversationId] ?? []
+}
+
+function getConversationWithMessages(
+  state: ChatAppState,
+  conversationId: string,
+): ChatConversationWithMessages | undefined {
+  const conversation = state.conversationsById[conversationId]
+  if (!conversation) return undefined
+  return {
+    ...conversation,
+    messages: getConversationMessages(state, conversationId),
+  }
+}
+
 export const chatActions = {
   resetToEmpty() {
     chatStore.setState(() => emptyState())
   },
 
-  hydrate(state: ChatAppState) {
-    chatStore.setState(() => ({
-      ...state,
-      selectedModel: state.selectedModel || DEFAULT_CHAT_MODEL,
-      savedSystemPrompts: normalizeSavedSystemPrompts(state.savedSystemPrompts),
-      conversations: state.conversations.map((c) => ({
-        ...c,
-        customSystemMessage:
-          typeof c.customSystemMessage === 'string' ? c.customSystemMessage : '',
-        lastUsage: normalizeTokenUsageSnapshot(c.lastUsage),
-        sessionTotalTokens:
-          typeof c.sessionTotalTokens === 'number' &&
-          Number.isFinite(c.sessionTotalTokens)
-            ? c.sessionTotalTokens
-            : undefined,
-      })),
-    }))
+  hydrate(state: unknown) {
+    const normalized = normalizeChatAppState(state)
+    if (!normalized) return
+    chatStore.setState(() => normalized)
   },
 
   ensureDefaultConversation() {
     chatStore.setState((s) => {
-      if (s.conversations.length > 0) {
+      if (s.conversationOrder.length > 0) {
         if (!s.currentConversationId) {
           return {
             ...s,
-            currentConversationId: s.conversations[0].id,
+            currentConversationId: s.conversationOrder[0],
           }
         }
         return s
       }
-      const id = newConversationId()
-      const conv: ChatConversation = {
-        id,
-        title: NEW_CHAT_TITLE,
-        updatedAt: Date.now(),
-        customSystemMessage: '',
-        messages: [],
-      }
+      const conversation = newConversation()
       return {
         ...s,
-        conversations: [conv],
-        currentConversationId: id,
+        conversationOrder: [conversation.id],
+        conversationsById: {
+          ...s.conversationsById,
+          [conversation.id]: conversation,
+        },
+        messagesByConversationId: {
+          ...s.messagesByConversationId,
+          [conversation.id]: [],
+        },
+        currentConversationId: conversation.id,
       }
     })
   },
 
   createConversation() {
-    const id = newConversationId()
-    const conv: ChatConversation = {
-      id,
-      title: NEW_CHAT_TITLE,
-      updatedAt: Date.now(),
-      customSystemMessage: '',
-      messages: [],
-    }
+    const conversation = newConversation()
     chatStore.setState((s) => ({
       ...s,
-      conversations: [conv, ...s.conversations],
-      currentConversationId: id,
+      conversationOrder: [conversation.id, ...s.conversationOrder],
+      conversationsById: {
+        ...s.conversationsById,
+        [conversation.id]: conversation,
+      },
+      messagesByConversationId: {
+        ...s.messagesByConversationId,
+        [conversation.id]: [],
+      },
+      currentConversationId: conversation.id,
     }))
-    return id
+    return conversation.id
   },
 
   setCurrentConversationId(id: string | null) {
-    chatStore.setState((s) => ({ ...s, currentConversationId: id }))
+    chatStore.setState((s) => ({
+      ...s,
+      currentConversationId:
+        id && id in s.conversationsById ? id : (s.conversationOrder[0] ?? null),
+    }))
   },
 
   setSelectedModel(model: string) {
@@ -191,14 +417,21 @@ export const chatActions = {
   },
 
   setConversationCustomSystemMessage(conversationId: string, value: string) {
-    chatStore.setState((s) => ({
-      ...s,
-      conversations: s.conversations.map((c) =>
-        c.id !== conversationId
-          ? c
-          : { ...c, customSystemMessage: value, updatedAt: Date.now() },
-      ),
-    }))
+    chatStore.setState((s) => {
+      const current = s.conversationsById[conversationId]
+      if (!current) return s
+      return {
+        ...s,
+        conversationsById: {
+          ...s.conversationsById,
+          [conversationId]: {
+            ...current,
+            customSystemMessage: value,
+            updatedAt: Date.now(),
+          },
+        },
+      }
+    })
   },
 
   addSavedSystemPrompt(name: string, text: string) {
@@ -229,12 +462,25 @@ export const chatActions = {
 
   deleteConversation(id: string) {
     chatStore.setState((s) => {
-      const conversations = s.conversations.filter((c) => c.id !== id)
-      let currentConversationId = s.currentConversationId
-      if (currentConversationId === id) {
-        currentConversationId = conversations[0]?.id ?? null
+      if (!(id in s.conversationsById)) return s
+      const { [id]: _removedConversation, ...conversationsById } = s.conversationsById
+      const { [id]: _removedMessages, ...messagesByConversationId } =
+        s.messagesByConversationId
+      const conversationOrder = s.conversationOrder.filter(
+        (conversationId) => conversationId !== id,
+      )
+      const currentConversationId =
+        s.currentConversationId === id
+          ? (conversationOrder[0] ?? null)
+          : s.currentConversationId
+
+      return {
+        ...s,
+        conversationOrder,
+        conversationsById,
+        messagesByConversationId,
+        currentConversationId,
       }
-      return { ...s, conversations, currentConversationId }
     })
   },
 
@@ -243,50 +489,72 @@ export const chatActions = {
     usage: Omit<TokenUsageSnapshot, 'recordedAt'>,
   ) {
     const recordedAt = Date.now()
-    chatStore.setState((s) => ({
-      ...s,
-      conversations: s.conversations.map((c) => {
-        if (c.id !== conversationId) return c
-        const prevSession = c.sessionTotalTokens ?? 0
-        return {
-          ...c,
-          lastUsage: { ...usage, recordedAt },
-          sessionTotalTokens: prevSession + usage.totalTokens,
-          updatedAt: Date.now(),
-        }
-      }),
-    }))
-  },
-
-  /** Replace messages for a conversation (from live useChat sync). */
-  setConversationMessages(conversationId: string, messages: UIMessage[]) {
     chatStore.setState((s) => {
-      const titleHint = deriveTitleFromMessages(messages)
+      const conversation = s.conversationsById[conversationId]
+      if (!conversation) return s
+      const prevSession = conversation.sessionTotalTokens ?? 0
       return {
         ...s,
-        conversations: s.conversations.map((c) => {
-          if (c.id !== conversationId) return c
-          let title = c.title
-          if (c.title === NEW_CHAT_TITLE && titleHint) {
-            title = truncate(titleHint, 52)
-          }
-          return {
-            ...c,
-            messages,
+        conversationsById: {
+          ...s.conversationsById,
+          [conversationId]: {
+            ...conversation,
+            lastUsage: { ...usage, recordedAt },
+            sessionTotalTokens: prevSession + usage.totalTokens,
+            updatedAt: Date.now(),
+          },
+        },
+      }
+    })
+  },
+
+  /** Replace the committed history for one conversation. */
+  setConversationMessages(conversationId: string, messages: ChatUIMessage[]) {
+    chatStore.setState((s) => {
+      const conversation = s.conversationsById[conversationId]
+      if (!conversation) return s
+      const titleHint = deriveTitleFromMessages(messages)
+      let title = conversation.title
+      if (conversation.title === NEW_CHAT_TITLE && titleHint) {
+        title = truncate(titleHint, 52)
+      }
+      return {
+        ...s,
+        conversationsById: {
+          ...s.conversationsById,
+          [conversationId]: {
+            ...conversation,
             title,
             updatedAt: Date.now(),
-          }
-        }),
+          },
+        },
+        messagesByConversationId: {
+          ...s.messagesByConversationId,
+          [conversationId]: messages,
+        },
       }
     })
   },
 }
 
 export const chatSelectors = {
-  currentConversation(state: ChatAppState): ChatConversation | undefined {
+  currentConversation(state: ChatAppState): ChatConversationWithMessages | undefined {
     const id = state.currentConversationId
     if (!id) return undefined
-    return state.conversations.find((c) => c.id === id)
+    return getConversationWithMessages(state, id)
+  },
+
+  conversationList(state: ChatAppState): ChatConversation[] {
+    return state.conversationOrder
+      .map((id) => state.conversationsById[id])
+      .filter((conversation): conversation is ChatConversation => conversation != null)
+  },
+
+  conversationMessages(
+    state: ChatAppState,
+    conversationId: string,
+  ): ChatUIMessage[] {
+    return getConversationMessages(state, conversationId)
   },
 }
 
@@ -294,6 +562,21 @@ function truncate(s: string, max: number): string {
   const t = s.trim()
   if (t.length <= max) return t
   return `${t.slice(0, max - 1)}…`
+}
+
+/** Attach usage to the last assistant message (the one that just finished streaming). */
+export function attachTokenUsageToLastAssistantMessage(
+  messages: ChatUIMessage[],
+  usage: TokenUsageSnapshot,
+): ChatUIMessage[] {
+  const next = messages.slice()
+  for (let i = next.length - 1; i >= 0; i--) {
+    if (next[i].role === 'assistant') {
+      next[i] = { ...next[i], tokenUsage: usage }
+      break
+    }
+  }
+  return next
 }
 
 function deriveTitleFromMessages(messages: UIMessage[]): string | null {

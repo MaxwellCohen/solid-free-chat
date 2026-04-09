@@ -97,7 +97,7 @@ export function ensureFreeModelsRouterInOptions(
     {
       id: FREE_MODELS_ROUTER_ID,
       name: 'Free Models Router',
-      inputModalities: ['text', 'image', 'document'],
+      inputModalities: ['text'],
     },
     ...options,
   ]
@@ -106,11 +106,15 @@ export function ensureFreeModelsRouterInOptions(
 export function modelSupportsImageInput(
   inputModalities: string[] | undefined,
 ): boolean {
-  return inputModalities?.includes('image') ?? false
+  // Undefined = metadata missing (e.g. synthetic `<select>` option). Allow UI;
+  // OpenRouter still enforces what the model accepts.
+  if (inputModalities === undefined) return true
+  return inputModalities.includes('image')
 }
 
 export function modelSupportsDocumentInput(
   inputModalities: string[] | undefined,
 ): boolean {
-  return inputModalities?.includes('document') ?? false
+  if (inputModalities === undefined) return true
+  return inputModalities.includes('document')
 }

@@ -1,51 +1,50 @@
-import type { ChatAppState } from '../store/chat.store'
-import { chatStore, normalizeSavedSystemPrompts } from '../store/chat.store'
+import {
+  chatStore,
+  normalizeChatAppState,
+  type ChatAppState,
+} from '../store/chat.store'
 
-export const CHAT_STORAGE_KEY = 'solid-free-chat:v1'
+export const CHAT_STORAGE_KEY = 'solid-free-chat:v2'
+export const LEGACY_CHAT_STORAGE_KEY = 'solid-free-chat:v1'
 
 const DEBOUNCE_MS = 280
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 
 function serialize(state: ChatAppState): string {
-  return JSON.stringify(state, (_, v) =>
+  return JSON.stringify(toPersistedChatState(state), (_, v) =>
     v instanceof Date ? v.toISOString() : v,
   )
 }
 
-export function loadChatState(): ChatAppState | null {
-  if (typeof localStorage === 'undefined') return null
-  const raw = localStorage.getItem(CHAT_STORAGE_KEY)
-  if (!raw) return null
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    if (typeof parsed !== 'object' || parsed === null) return null
-    if (!Array.isArray((parsed as { conversations?: unknown }).conversations)) {
-      return null
-    }
-    return reviveChatState(parsed as ChatAppState)
-  } catch {
-    return null
+function toPersistedChatState(state: ChatAppState): ChatAppState {
+  return {
+    conversationOrder: state.conversationOrder,
+    conversationsById: state.conversationsById,
+    messagesByConversationId: state.messagesByConversationId,
+    currentConversationId: state.currentConversationId,
+    selectedModel: state.selectedModel,
+    savedSystemPrompts: state.savedSystemPrompts,
   }
 }
 
-function reviveChatState(state: ChatAppState): ChatAppState {
-  return {
-    ...state,
-    savedSystemPrompts: normalizeSavedSystemPrompts(state.savedSystemPrompts),
-    conversations: state.conversations.map((c) => ({
-      ...c,
-      customSystemMessage:
-        typeof c.customSystemMessage === 'string' ? c.customSystemMessage : '',
-      messages: (Array.isArray(c.messages) ? c.messages : []).map((m) => ({
-        ...m,
-        createdAt:
-          m.createdAt != null
-            ? new Date(m.createdAt as unknown as string | number)
-            : undefined,
-      })),
-    })),
+export function loadChatState(): ChatAppState | null {
+  if (typeof localStorage === 'undefined') return null
+  const candidates = [
+    localStorage.getItem(CHAT_STORAGE_KEY),
+    localStorage.getItem(LEGACY_CHAT_STORAGE_KEY),
+  ]
+  for (const raw of candidates) {
+    if (!raw) continue
+    try {
+      const parsed: unknown = JSON.parse(raw)
+      const normalized = normalizeChatAppState(parsed)
+      if (normalized) return normalized
+    } catch {
+      /* ignore malformed entry and try fallback */
+    }
   }
+  return null
 }
 
 export function persistChatStateNow() {
