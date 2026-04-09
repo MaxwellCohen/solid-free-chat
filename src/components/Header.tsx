@@ -43,14 +43,6 @@ export default function Header() {
           >
             About
           </Link>
-          <a
-            href="https://tanstack.com/start/latest/docs/framework/solid/overview"
-            target="_blank"
-            rel="noreferrer"
-            class="text-muted-foreground hover:text-foreground rounded-md px-2.5 py-1.5 no-underline transition-colors"
-          >
-            Docs
-          </a>
         </div>
 
         <div class="order-2 ml-auto flex shrink-0 items-center gap-2 sm:order-3 sm:ml-0">

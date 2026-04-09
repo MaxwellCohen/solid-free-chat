@@ -1,5 +1,5 @@
 import type { ChatAppState } from '../store/chat.store'
-import { chatStore } from '../store/chat.store'
+import { chatStore, normalizeSavedSystemPrompts } from '../store/chat.store'
 
 export const CHAT_STORAGE_KEY = 'solid-free-chat:v1'
 
@@ -32,8 +32,11 @@ export function loadChatState(): ChatAppState | null {
 function reviveChatState(state: ChatAppState): ChatAppState {
   return {
     ...state,
+    savedSystemPrompts: normalizeSavedSystemPrompts(state.savedSystemPrompts),
     conversations: state.conversations.map((c) => ({
       ...c,
+      customSystemMessage:
+        typeof c.customSystemMessage === 'string' ? c.customSystemMessage : '',
       messages: (Array.isArray(c.messages) ? c.messages : []).map((m) => ({
         ...m,
         createdAt:

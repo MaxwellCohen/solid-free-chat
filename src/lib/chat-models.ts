@@ -1,5 +1,8 @@
-/** Fallback when the free-model list cannot be loaded (known OpenRouter free-tier slug). */
-export const FALLBACK_DEFAULT_MODEL = 'google/gemini-2.0-flash-exp:free'
+/** OpenRouter Free Models Router — picks a capable free model per request. */
+export const FREE_MODELS_ROUTER_ID = 'openrouter/free'
+
+/** Fallback when the free-model list cannot be loaded. */
+export const FALLBACK_DEFAULT_MODEL = FREE_MODELS_ROUTER_ID
 
 export const DEFAULT_CHAT_MODEL: string = FALLBACK_DEFAULT_MODEL
 
@@ -21,6 +24,8 @@ export interface OpenRouterUserModelRow {
 export interface ChatModelOption {
   id: string
   name: string
+  /** From OpenRouter `architecture.input_modalities`; controls upload UI. */
+  inputModalities?: string[]
 }
 
 function coercePricingScalar(v: unknown): number | null {
@@ -73,9 +78,39 @@ export function toFreeTextChatOptions(
   const options: ChatModelOption[] = filtered.map((m) => ({
     id: m.id,
     name: m.name,
+    inputModalities: m.architecture.input_modalities,
   }))
   options.sort((a, b) =>
     a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
   )
   return options
+}
+
+/** Ensures the Free Models Router is selectable if the user-models API omits it. */
+export function ensureFreeModelsRouterInOptions(
+  options: ChatModelOption[],
+): ChatModelOption[] {
+  if (options.some((o) => o.id === FREE_MODELS_ROUTER_ID)) {
+    return options
+  }
+  return [
+    {
+      id: FREE_MODELS_ROUTER_ID,
+      name: 'Free Models Router',
+      inputModalities: ['text', 'image', 'document'],
+    },
+    ...options,
+  ]
+}
+
+export function modelSupportsImageInput(
+  inputModalities: string[] | undefined,
+): boolean {
+  return inputModalities?.includes('image') ?? false
+}
+
+export function modelSupportsDocumentInput(
+  inputModalities: string[] | undefined,
+): boolean {
+  return inputModalities?.includes('document') ?? false
 }

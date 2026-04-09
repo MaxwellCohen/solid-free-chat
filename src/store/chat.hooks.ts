@@ -1,7 +1,12 @@
 import { useStore } from '@tanstack/solid-store'
 import { chatStore, chatActions, chatSelectors } from './chat.store'
 
-export type { ChatAppState, ChatConversation } from './chat.store'
+export type {
+  ChatAppState,
+  ChatConversation,
+  SavedSystemPrompt,
+  TokenUsageSnapshot,
+} from './chat.store'
 
 export function useChatStore() {
   return useStore(chatStore)

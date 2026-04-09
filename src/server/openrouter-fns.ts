@@ -1,25 +1,34 @@
+import type { AnyTextAdapter, StreamChunk } from '@tanstack/ai'
 import { chat } from '@tanstack/ai'
 import { createOpenRouterText } from '@tanstack/ai-openrouter'
 import { createServerFn } from '@tanstack/solid-start'
 import { getRequest } from '@tanstack/solid-start/server'
 import { startSpan } from '@sentry/core'
 import type { ChatModelOption } from '../lib/chat-models'
-import { readOpenRouterApiKey } from '../lib/openrouter-api-key.server'
+import {
+  resolveOpenRouterApiKeyFromRequest,
+} from '../lib/openrouter-api-key.server'
 import {
   getFreeTextChatModelOptionsCached,
   resolveAllowedChatModel,
 } from '../lib/openrouter-user-models.server'
 
-export const getFreeChatModels = createServerFn({ method: 'GET' }).handler(
-  async (): Promise<ChatModelOption[]> => {
+type GetFreeChatModelsInput = { apiKey?: string }
+
+export const getFreeChatModels = createServerFn({ method: 'POST' })
+  .inputValidator((input: GetFreeChatModelsInput | undefined) => {
+    if (input != null && typeof input !== 'object') {
+      throw new Error('Invalid request body')
+    }
+    return input ?? {}
+  })
+  .handler(async ({ data }): Promise<ChatModelOption[]> => {
     return startSpan(
       { name: 'getFreeChatModels', op: 'function.server' },
       async () => {
-        const apiKey = readOpenRouterApiKey()
+        const apiKey = resolveOpenRouterApiKeyFromRequest(getRequest(), data.apiKey)
         if (!apiKey) {
-          throw new Error(
-            'OPENROUTER_API_KEY is missing or empty. Add it to .env.local (see https://openrouter.ai/keys).',
-          )
+          return []
         }
         try {
           return await getFreeTextChatModelOptionsCached(apiKey)
@@ -32,12 +41,32 @@ export const getFreeChatModels = createServerFn({ method: 'GET' }).handler(
         }
       },
     )
-  },
-)
+  })
 
 type StreamChatPayload = {
   messages: unknown
-  data?: { model?: string }
+  /** Fallback if nested `data` is flattened by the RPC layer */
+  apiKey?: string
+  data?: { model?: string; customSystemMessage?: string; apiKey?: string }
+}
+
+function clientApiKeyFromStreamPayload(
+  payload: StreamChatPayload,
+): string | undefined {
+  const nested = payload.data?.apiKey
+  const top = payload.apiKey
+  return nested ?? top
+}
+
+async function* streamMissingOpenRouterApiKey(): AsyncGenerator<StreamChunk> {
+  yield {
+    type: 'RUN_ERROR',
+    timestamp: Date.now(),
+    error: {
+      message:
+        'OpenRouter API key is missing. Add your key in the app (https://openrouter.ai/keys).',
+    },
+  }
 }
 
 export const streamOpenRouterChat = createServerFn({ method: 'POST' })
@@ -51,11 +80,13 @@ export const streamOpenRouterChat = createServerFn({ method: 'POST' })
     return startSpan(
       { name: 'streamOpenRouterChat', op: 'function.server' },
       async () => {
-        const apiKey = readOpenRouterApiKey()
+        const request = getRequest()
+        const apiKey = resolveOpenRouterApiKeyFromRequest(
+          request,
+          clientApiKeyFromStreamPayload(data),
+        )
         if (!apiKey) {
-          throw new Error(
-            'OPENROUTER_API_KEY is missing or empty. Add it to .env.local (see https://openrouter.ai/keys).',
-          )
+          return streamMissingOpenRouterApiKey()
         }
 
         const resolved = await resolveAllowedChatModel(apiKey, data.data?.model)
@@ -66,7 +97,6 @@ export const streamOpenRouterChat = createServerFn({ method: 'POST' })
           })
         }
 
-        const request = getRequest()
         const abortController = new AbortController()
         const onAbort = () => abortController.abort()
         request.signal.addEventListener('abort', onAbort, { once: true })
@@ -79,9 +109,17 @@ export const streamOpenRouterChat = createServerFn({ method: 'POST' })
           ...(xTitle ? { xTitle } : {}),
         })
 
+        const rawCustom = data.data?.customSystemMessage
+        const trimmedSystem =
+          typeof rawCustom === 'string' ? rawCustom.trim() : ''
+        // TanStack AI strips role=system UIMessages during conversion; OpenRouter
+        // adapter injects via systemPrompts (see mapTextOptionsToSDK).
         return chat({
-          adapter,
+          adapter: adapter as unknown as AnyTextAdapter,
           messages: data.messages as never,
+          ...(trimmedSystem.length > 0
+            ? { systemPrompts: [trimmedSystem] }
+            : {}),
           abortController,
         })
       },

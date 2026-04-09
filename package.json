@@ -5,8 +5,10 @@
   "scripts": {
     "dev": "vite dev --port 3000",
     "build": "vite build",
-    "start": "node .output/server/index.mjs",
+    "start": "wrangler dev",
     "preview": "vite preview",
+    "deploy": "npm run build && wrangler deploy",
+    "cf-typegen": "wrangler types",
     "test": "vitest run",
     "lint": "eslint",
     "format": "prettier --check .",
@@ -15,6 +17,10 @@
   "dependencies": {
     "@fontsource/inter": "^5.1.1",
     "@sentry/solid": "^10.42.0",
+    "@shikijs/core": "^4.0.2",
+    "@shikijs/engine-oniguruma": "^4.0.2",
+    "@shikijs/langs": "^4.0.2",
+    "@shikijs/themes": "^4.0.2",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/ai": "^0.10.0",
     "@tanstack/ai-openrouter": "^0.7.1",
@@ -30,9 +36,9 @@
     "@tanstack/store": "latest",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "highlight.js": "^11.11.1",
     "lucide-solid": "^0.577.0",
     "markdown-it": "^14.1.0",
+    "shiki": "^4.0.2",
     "solid-js": "^1.9.11",
     "tailwind-merge": "^3.0.2",
     "tailwindcss": "^4.1.18",
@@ -40,12 +46,15 @@
     "vite-tsconfig-paths": "^5.1.4"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.31.1",
     "@tanstack/devtools-vite": "latest",
     "@tanstack/eslint-config": "latest",
+    "@types/markdown-it": "^14.1.2",
     "prettier": "^3.8.1",
     "typescript": "^5.7.2",
     "vite": "^7.3.1",
-    "vite-plugin-solid": "^2.11.10"
+    "vite-plugin-solid": "^2.11.10",
+    "wrangler": "^4.81.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
