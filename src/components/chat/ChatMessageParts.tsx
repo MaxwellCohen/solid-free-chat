@@ -118,17 +118,15 @@ function TextPart(props: {
 }) {
   const theme = useTheme()
   const [html, setHtml] = createSignal(
-    props.role === 'assistant' && !props.streaming
-      ? renderMarkdownToHtmlSync(props.content)
-      : '',
+    props.role === 'assistant' ? renderMarkdownToHtmlSync(props.content) : '',
   )
 
   createEffect(() => {
     if (props.role !== 'assistant') return
-    if (props.streaming) return
     const raw = props.content
-    const dark = theme.effective() === 'dark'
     setHtml(renderMarkdownToHtmlSync(raw))
+    if (props.streaming) return
+    const dark = theme.effective() === 'dark'
     const run = { cancelled: false }
     void (async () => {
       const { renderMarkdownToHtml } = await import('../../lib/markdown')
@@ -140,9 +138,6 @@ function TextPart(props: {
     })
   })
 
-  if (props.role === 'assistant' && props.streaming) {
-    return <p class="whitespace-pre-wrap">{props.content}</p>
-  }
   if (props.role === 'assistant') {
     return <div class="chat-md" innerHTML={html()}></div>
   }

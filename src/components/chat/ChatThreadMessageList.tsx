@@ -230,7 +230,7 @@ function UserResendButton(props: {
     >
       <button
         type="button"
-        class="text-primary-foreground/85 hover:text-primary-foreground inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-[11px] font-medium underline-offset-2 hover:underline disabled:pointer-events-none disabled:opacity-40"
+        class="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-[11px] font-medium underline-offset-2 hover:underline disabled:pointer-events-none disabled:opacity-40"
         disabled={props.isLoading()}
         aria-label={
           props.failedUserMessage()?.id === props.message.id

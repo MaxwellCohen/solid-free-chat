@@ -3,6 +3,7 @@ import {
   createMemo,
   createSignal,
   onCleanup,
+  Show,
 } from 'solid-js'
 import { stream, useChat } from '@tanstack/ai-solid'
 import type { UIMessage } from '@tanstack/ai-solid'
@@ -51,6 +52,30 @@ export default function ChatThread(props: {
   openRouterApiKey: string
   onLoadingChange: (isLoading: boolean) => void
 }) {
+  return (
+    <Show when={props.conversationId} keyed>
+      {(conversationId) => (
+        <ChatThreadSession
+          conversationId={conversationId}
+          initialMessages={props.initialMessages}
+          inputModalities={props.inputModalities}
+          openRouterApiKey={props.openRouterApiKey}
+          onLoadingChange={props.onLoadingChange}
+        />
+      )}
+    </Show>
+  )
+}
+
+function ChatThreadSession(props: {
+  conversationId: string
+  initialMessages: ChatUIMessage[]
+  inputModalities?: string[]
+  /** Committed key from the client (after blur); optional server env only for local dev. */
+  openRouterApiKey: string
+  onLoadingChange: (isLoading: boolean) => void
+}) {
+  const conversationId = props.conversationId
   const [draft, setDraft] = createSignal('')
   const [pendingImages, setPendingImages] = createSignal<PendingImage[]>([])
   const [pendingFiles, setPendingFiles] = createSignal<PendingFile[]>([])
@@ -122,10 +147,10 @@ export default function ChatThread(props: {
 
   const selectedModel = useChatStore((state) => state.selectedModel)
   const customSystemMessage = useChatStore(
-    (state) => state.conversationsById[props.conversationId].customSystemMessage,
+    (state) => state.conversationsById[conversationId].customSystemMessage,
   )
   const sessionTotalTokens = useChatStore(
-    (state) => state.conversationsById[props.conversationId].sessionTotalTokens,
+    (state) => state.conversationsById[conversationId].sessionTotalTokens,
   )
   const sessionTotalSuffix = createMemo(() => {
     const session = sessionTotalTokens()
@@ -136,7 +161,7 @@ export default function ChatThread(props: {
   const streamChat = useServerFn(streamOpenRouterChat)
 
   const chat = useChat({
-    id: props.conversationId,
+    id: conversationId,
     initialMessages: props.initialMessages,
     /** Merged into each stream request; keeps apiKey in sync when ChatClient is memoized by id. */
     body: {
@@ -146,7 +171,7 @@ export default function ChatThread(props: {
       if (chunk.type !== 'RUN_FINISHED') return
       const u = chunk.usage
       if (!u) return
-      chatActions.recordConversationTokenUsage(props.conversationId, {
+      chatActions.recordConversationTokenUsage(conversationId, {
         promptTokens: u.promptTokens,
         completionTokens: u.completionTokens,
         totalTokens: u.totalTokens,
@@ -217,7 +242,7 @@ export default function ChatThread(props: {
   })
 
   function commitConversationMessages(messages = chat.messages() as ChatUIMessage[]) {
-    chatActions.setConversationMessages(props.conversationId, messages)
+    chatActions.setConversationMessages(conversationId, messages)
   }
 
   function scheduleCommitCurrentMessages() {

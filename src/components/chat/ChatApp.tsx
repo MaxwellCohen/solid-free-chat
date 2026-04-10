@@ -65,7 +65,7 @@ export default function ChatApp() {
       })
     },
   )
-  const [sidebarOpen, setSidebarOpen] = createSignal(true)
+  const [sidebarOpen, setSidebarOpen] = createSignal(false)
   const [currentConversationLoading, setCurrentConversationLoading] =
     createSignal(false)
   const [systemDraft, setSystemDraft] = createSignal('')
@@ -128,8 +128,8 @@ export default function ChatApp() {
 
   onMount(() => {
     try {
-      if (localStorage.getItem(SIDEBAR_OPEN_LS_KEY) === '0') {
-        setSidebarOpen(false)
+      if (localStorage.getItem(SIDEBAR_OPEN_LS_KEY) === '1') {
+        setSidebarOpen(true)
       }
     } catch {
       /* ignore */
