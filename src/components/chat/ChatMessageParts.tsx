@@ -64,9 +64,13 @@ function PartBlock(props: {
     )
   }
   if (part.type === 'tool-result') {
+    const resultContent =
+      typeof part.content === 'string'
+        ? part.content
+        : JSON.stringify(part.content, null, 2)
     return (
       <pre class="bg-muted mt-2 max-h-48 overflow-auto rounded-lg p-2 text-xs first:mt-0">
-        {part.content}
+        {resultContent}
       </pre>
     )
   }

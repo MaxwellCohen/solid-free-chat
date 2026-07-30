@@ -1,6 +1,9 @@
 import type { AnyTextAdapter, StreamChunk } from '@tanstack/ai'
-import { chat } from '@tanstack/ai'
-import { createOpenRouterText } from '@tanstack/ai-openrouter'
+import { chat, EventType } from '@tanstack/ai'
+import {
+  createOpenRouterResponsesText,
+  createOpenRouterText,
+} from '@tanstack/ai-openrouter'
 import { createServerFn } from '@tanstack/solid-start'
 import { getRequest } from '@tanstack/solid-start/server'
 import { startSpan } from '@sentry/core'
@@ -58,18 +61,43 @@ function clientApiKeyFromStreamPayload(
   return nested ?? top
 }
 
+/** Chat Completions adapter rejects inline document data; Responses supports it. */
+function messagesIncludeDocumentParts(messages: unknown): boolean {
+  if (!Array.isArray(messages)) return false
+  for (const message of messages) {
+    if (!message || typeof message !== 'object') continue
+    const parts = (message as { parts?: unknown }).parts
+    if (!Array.isArray(parts)) continue
+    if (parts.some((p) => p && typeof p === 'object' && (p as { type?: string }).type === 'document')) {
+      return true
+    }
+    const content = (message as { content?: unknown }).content
+    if (
+      Array.isArray(content) &&
+      content.some(
+        (p) => p && typeof p === 'object' && (p as { type?: string }).type === 'document',
+      )
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
 async function* streamMissingOpenRouterApiKey(): AsyncGenerator<StreamChunk> {
   yield {
-    type: 'RUN_ERROR',
+    type: EventType.RUN_ERROR,
     timestamp: Date.now(),
-    error: {
-      message:
-        'OpenRouter API key is missing. Add your key in the app (https://openrouter.ai/keys).',
-    },
+    message:
+      'OpenRouter API key is missing. Add your key in the app (https://openrouter.ai/keys).',
   }
 }
 
-export const streamOpenRouterChat = createServerFn({ method: 'POST' })
+export const streamOpenRouterChat = createServerFn({
+  method: 'POST',
+  // Streaming AsyncIterables are not JSON-serializable; disable output checks.
+  strict: { output: false },
+})
   .inputValidator((input: StreamChatPayload) => {
     if (!Array.isArray(input.messages)) {
       throw new Error('Expected messages array')
@@ -102,12 +130,18 @@ export const streamOpenRouterChat = createServerFn({ method: 'POST' })
         request.signal.addEventListener('abort', onAbort, { once: true })
 
         const httpReferer = process.env.OPENROUTER_HTTP_REFERER
-        const xTitle = process.env.OPENROUTER_APP_TITLE
-
-        const adapter = createOpenRouterText(resolved.model as never, apiKey, {
+        const appTitle = process.env.OPENROUTER_APP_TITLE
+        const adapterConfig = {
           ...(httpReferer ? { httpReferer } : {}),
-          ...(xTitle ? { xTitle } : {}),
-        })
+          ...(appTitle ? { appTitle } : {}),
+        }
+        const adapter = messagesIncludeDocumentParts(data.messages)
+          ? createOpenRouterResponsesText(
+              resolved.model as never,
+              apiKey,
+              adapterConfig,
+            )
+          : createOpenRouterText(resolved.model as never, apiKey, adapterConfig)
 
         const rawCustom = data.data?.customSystemMessage
         const trimmedSystem =

@@ -1,8 +1,5 @@
-import {
-  chatStore,
-  normalizeChatAppState,
-  type ChatAppState,
-} from '../store/chat.store'
+import type { ChatAppState } from '../store/chat.store'
+import { chatStore, normalizeChatAppState } from '../store/chat.store'
 
 export const CHAT_STORAGE_KEY = 'solid-free-chat:v2'
 export const LEGACY_CHAT_STORAGE_KEY = 'solid-free-chat:v1'

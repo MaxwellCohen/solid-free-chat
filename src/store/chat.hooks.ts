@@ -1,4 +1,4 @@
-import { useStore } from '@tanstack/solid-store'
+import { useSelector } from '@tanstack/solid-store'
 import type { ChatAppState } from './chat.store'
 import { chatStore, chatActions, chatSelectors } from './chat.store'
 
@@ -17,7 +17,9 @@ export function useChatStore<TSelected = ChatAppState>(
     state as unknown as TSelected,
   options?: { equal?: EqualityFn<TSelected> },
 ) {
-  return useStore(chatStore, selector, options)
+  return useSelector(chatStore, selector, {
+    compare: options?.equal,
+  })
 }
 
 export function useChatActions() {

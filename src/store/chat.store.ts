@@ -231,22 +231,23 @@ function normalizeConversationOrder(
   return order
 }
 
-function normalizePersistedChatState(raw: PersistedChatState): ChatAppState | null {
+function normalizePersistedChatState(raw: unknown): ChatAppState | null {
   if (!raw || typeof raw !== 'object') return null
+  const source = raw as PersistedChatState
   const rawConversationsById =
-    raw.conversationsById &&
-    typeof raw.conversationsById === 'object' &&
-    !Array.isArray(raw.conversationsById)
-      ? (raw.conversationsById as Record<string, unknown>)
+    source.conversationsById &&
+    typeof source.conversationsById === 'object' &&
+    !Array.isArray(source.conversationsById)
+      ? (source.conversationsById as Record<string, unknown>)
       : null
 
   if (!rawConversationsById) return null
 
   const rawMessagesByConversationId =
-    raw.messagesByConversationId &&
-    typeof raw.messagesByConversationId === 'object' &&
-    !Array.isArray(raw.messagesByConversationId)
-      ? (raw.messagesByConversationId as Record<string, unknown>)
+    source.messagesByConversationId &&
+    typeof source.messagesByConversationId === 'object' &&
+    !Array.isArray(source.messagesByConversationId)
+      ? (source.messagesByConversationId as Record<string, unknown>)
       : {}
 
   const conversationsById: Record<string, ChatConversation> = {}
@@ -260,11 +261,14 @@ function normalizePersistedChatState(raw: PersistedChatState): ChatAppState | nu
     )
   }
 
-  const conversationOrder = normalizeConversationOrder(raw.conversationOrder, conversationsById)
+  const conversationOrder = normalizeConversationOrder(
+    source.conversationOrder,
+    conversationsById,
+  )
   const currentConversationId =
-    typeof raw.currentConversationId === 'string' &&
-    raw.currentConversationId in conversationsById
-      ? raw.currentConversationId
+    typeof source.currentConversationId === 'string' &&
+    source.currentConversationId in conversationsById
+      ? source.currentConversationId
       : conversationOrder[0] ?? null
 
   return {
@@ -273,10 +277,10 @@ function normalizePersistedChatState(raw: PersistedChatState): ChatAppState | nu
     messagesByConversationId,
     currentConversationId,
     selectedModel:
-      typeof raw.selectedModel === 'string' && raw.selectedModel.trim()
-        ? raw.selectedModel
+      typeof source.selectedModel === 'string' && source.selectedModel.trim()
+        ? source.selectedModel
         : DEFAULT_CHAT_MODEL,
-    savedSystemPrompts: normalizeSavedSystemPrompts(raw.savedSystemPrompts),
+    savedSystemPrompts: normalizeSavedSystemPrompts(source.savedSystemPrompts),
   }
 }
 
@@ -331,6 +335,14 @@ export function normalizeChatAppState(raw: unknown): ChatAppState | null {
   return null
 }
 
+function getConversation(
+  state: ChatAppState,
+  conversationId: string,
+): ChatConversation | undefined {
+  if (!(conversationId in state.conversationsById)) return undefined
+  return state.conversationsById[conversationId]
+}
+
 function getConversationMessages(state: ChatAppState, conversationId: string): ChatUIMessage[] {
   return state.messagesByConversationId[conversationId] ?? []
 }
@@ -339,7 +351,7 @@ function getConversationWithMessages(
   state: ChatAppState,
   conversationId: string,
 ): ChatConversationWithMessages | undefined {
-  const conversation = state.conversationsById[conversationId]
+  const conversation = getConversation(state, conversationId)
   if (!conversation) return undefined
   return {
     ...conversation,
@@ -418,7 +430,7 @@ export const chatActions = {
 
   setConversationCustomSystemMessage(conversationId: string, value: string) {
     chatStore.setState((s) => {
-      const current = s.conversationsById[conversationId]
+      const current = getConversation(s, conversationId)
       if (!current) return s
       return {
         ...s,
@@ -490,7 +502,7 @@ export const chatActions = {
   ) {
     const recordedAt = Date.now()
     chatStore.setState((s) => {
-      const conversation = s.conversationsById[conversationId]
+      const conversation = getConversation(s, conversationId)
       if (!conversation) return s
       const prevSession = conversation.sessionTotalTokens ?? 0
       return {
@@ -511,7 +523,7 @@ export const chatActions = {
   /** Replace the committed history for one conversation. */
   setConversationMessages(conversationId: string, messages: ChatUIMessage[]) {
     chatStore.setState((s) => {
-      const conversation = s.conversationsById[conversationId]
+      const conversation = getConversation(s, conversationId)
       if (!conversation) return s
       const titleHint = deriveTitleFromMessages(messages)
       let title = conversation.title
@@ -546,7 +558,7 @@ export const chatSelectors = {
 
   conversationList(state: ChatAppState): ChatConversation[] {
     return state.conversationOrder
-      .map((id) => state.conversationsById[id])
+      .map((id) => getConversation(state, id))
       .filter((conversation): conversation is ChatConversation => conversation != null)
   },
 
