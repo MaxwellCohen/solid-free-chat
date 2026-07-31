@@ -1,19 +1,12 @@
-import { For, createEffect, createSignal, onCleanup } from 'solid-js'
+import { For, createMemo } from 'solid-js'
 import type { UIMessage } from '@tanstack/ai-solid'
 import { FileText } from 'lucide-solid'
-import { useTheme } from '../../lib/theme-context'
-import { renderMarkdownToHtmlSync } from '../../lib/markdown-sync'
+import { renderMarkdownToHtml } from '../../lib/markdown'
 
-export function MessageParts(props: { message: UIMessage; streaming: boolean }) {
+export function MessageParts(props: { message: UIMessage }) {
   return (
     <For each={props.message.parts}>
-      {(part) => (
-        <PartBlock
-          part={part}
-          role={props.message.role}
-          streaming={props.streaming}
-        />
-      )}
+      {(part) => <PartBlock part={part} role={props.message.role} />}
     </For>
   )
 }
@@ -21,17 +14,10 @@ export function MessageParts(props: { message: UIMessage; streaming: boolean }) 
 function PartBlock(props: {
   part: UIMessage['parts'][number]
   role: UIMessage['role']
-  streaming: boolean
 }) {
   const part = props.part
   if (part.type === 'text') {
-    return (
-      <TextPart
-        role={props.role}
-        content={part.content}
-        streaming={props.streaming}
-      />
-    )
+    return <TextPart role={props.role} content={part.content} />
   }
   if (part.type === 'image') {
     return <ImagePart part={part} />
@@ -115,32 +101,10 @@ function DocumentPart(props: {
   )
 }
 
-function TextPart(props: {
-  role: UIMessage['role']
-  content: string
-  streaming: boolean
-}) {
-  const theme = useTheme()
-  const [html, setHtml] = createSignal(
-    props.role === 'assistant' ? renderMarkdownToHtmlSync(props.content) : '',
+function TextPart(props: { role: UIMessage['role']; content: string }) {
+  const html = createMemo(() =>
+    props.role === 'assistant' ? renderMarkdownToHtml(props.content) : '',
   )
-
-  createEffect(() => {
-    if (props.role !== 'assistant') return
-    const raw = props.content
-    setHtml(renderMarkdownToHtmlSync(raw))
-    if (props.streaming) return
-    const dark = theme.effective() === 'dark'
-    const run = { cancelled: false }
-    void (async () => {
-      const { renderMarkdownToHtml } = await import('../../lib/markdown')
-      const rendered = await renderMarkdownToHtml(raw, { dark })
-      if (!run.cancelled) setHtml(rendered)
-    })()
-    onCleanup(() => {
-      run.cancelled = true
-    })
-  })
 
   if (props.role === 'assistant') {
     return <div class="chat-md" innerHTML={html()}></div>

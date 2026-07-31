@@ -170,13 +170,22 @@ code {
   .chat-md :where(a) {
     @apply text-primary underline underline-offset-2;
   }
-  .chat-md :where(pre) {
-    @apply bg-muted my-2 overflow-x-auto rounded-lg p-3 text-xs;
+  .chat-md :where(pre.tm-code) {
+    @apply my-2 overflow-x-auto rounded-lg p-3 text-xs;
   }
-  .chat-md :where(code) {
-    @apply text-[0.9em];
+  .chat-md :where(:not(pre) > code) {
+    @apply bg-muted rounded px-1 py-0.5 text-[0.9em];
   }
   .chat-md :where(pre code) {
-    @apply bg-transparent p-0;
+    @apply bg-transparent p-0 text-[0.9em];
+  }
+  .chat-md :where(blockquote) {
+    @apply border-muted-foreground/30 text-muted-foreground my-2 border-l-2 pl-3;
+  }
+  .chat-md :where(table) {
+    @apply my-2 w-full border-collapse text-xs;
+  }
+  .chat-md :where(th, td) {
+    @apply border-border border px-2 py-1 text-left;
   }
 }

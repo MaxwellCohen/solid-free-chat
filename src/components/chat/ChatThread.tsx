@@ -75,7 +75,9 @@ function ChatThreadSession(props: {
   openRouterApiKey: string
   onLoadingChange: (isLoading: boolean) => void
 }) {
+  // Capture once at session mount — props stay reactive in Solid.
   const conversationId = props.conversationId
+  const initialMessages = props.initialMessages
   const [draft, setDraft] = createSignal('')
   const [pendingImages, setPendingImages] = createSignal<PendingImage[]>([])
   const [pendingFiles, setPendingFiles] = createSignal<PendingFile[]>([])
@@ -162,7 +164,7 @@ function ChatThreadSession(props: {
 
   const chat = useChat({
     id: conversationId,
-    initialMessages: props.initialMessages,
+    initialMessages,
     /** Merged into each stream request; keeps apiKey in sync when ChatClient is memoized by id. */
     body: {
       apiKey: props.openRouterApiKey.trim() || undefined,

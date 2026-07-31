@@ -14,7 +14,7 @@ import type { ChatModelOption } from '../../lib/chat-models'
 import { DEFAULT_CHAT_MODEL } from '../../lib/chat-models'
 import { getFreeChatModels } from '../../server/openrouter-fns'
 import { useChatActions, useChatStore } from '../../store/chat.hooks'
-import { chatSelectors } from '../../store/chat.store'
+import { chatSelectors, chatStore } from '../../store/chat.store'
 import ChatThread from './ChatThread'
 import {
   OPENROUTER_API_KEY_LS_KEY,
@@ -29,10 +29,6 @@ import { ChatAppSystemPromptModal } from './ChatAppSystemPromptModal'
 export default function ChatApp() {
   const actions = useChatActions()
   const currentConversationId = useChatStore((state) => state.currentConversationId)
-  const currentConversationMessages = useChatStore((state) => {
-    const id = state.currentConversationId
-    return id ? state.messagesByConversationId[id] : []
-  })
   const currentConversationSystemMessage = useChatStore((state) => {
     const id = state.currentConversationId
     return id ? state.conversationsById[id].customSystemMessage : ''
@@ -42,10 +38,6 @@ export default function ChatApp() {
   )
   const savedSystemPrompts = useChatStore((state) => state.savedSystemPrompts)
   const selectedModel = useChatStore((state) => state.selectedModel)
-  const initialMessagesForActiveConversation = createMemo(() => {
-    currentConversationId()
-    return untrack(currentConversationMessages)
-  })
   /** Input value while typing (does not trigger model refetch). */
   const [openRouterApiKeyDraft, setOpenRouterApiKeyDraft] = createSignal('')
   /** Last committed value (blur): sent to server fns for OpenRouter; optional `.env` fallback for local dev only. */
@@ -339,17 +331,22 @@ export default function ChatApp() {
         />
 
         <Show when={currentConversationId()} keyed>
-          {(id) => (
-            <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-              <ChatThread
-                conversationId={id}
-                initialMessages={initialMessagesForActiveConversation()}
-                inputModalities={selectedModelMeta()?.inputModalities}
-                openRouterApiKey={openRouterApiKeyApplied()}
-                onLoadingChange={setCurrentConversationLoading}
-              />
-            </div>
-          )}
+          {(id) => {
+            // Read messages for this id atomically at mount (avoids stale untrack).
+            const initialMessages =
+              chatStore.state.messagesByConversationId[id] ?? []
+            return (
+              <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                <ChatThread
+                  conversationId={id}
+                  initialMessages={initialMessages}
+                  inputModalities={selectedModelMeta()?.inputModalities}
+                  openRouterApiKey={openRouterApiKeyApplied()}
+                  onLoadingChange={setCurrentConversationLoading}
+                />
+              </div>
+            )
+          }}
         </Show>
 
         <ChatAppOpenRouterModal

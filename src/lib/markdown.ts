@@ -1,115 +1,45 @@
-import MarkdownIt from 'markdown-it'
-import { escapeHtmlFence } from './markdown-sync'
-import { createBundledHighlighter } from '@shikijs/core'
-import type { HighlighterGeneric } from '@shikijs/core'
-import { createOnigurumaEngine } from '@shikijs/engine-oniguruma'
+import { createHighlighter } from '@tanstack/highlight/core'
+import { css } from '@tanstack/highlight/languages/css'
+import { html as htmlLang } from '@tanstack/highlight/languages/html'
+import { js } from '@tanstack/highlight/languages/js'
+import { json } from '@tanstack/highlight/languages/json'
+import { jsx } from '@tanstack/highlight/languages/jsx'
+import { plaintext } from '@tanstack/highlight/languages/plaintext'
+import { python } from '@tanstack/highlight/languages/python'
+import { shell } from '@tanstack/highlight/languages/shell'
+import { ts } from '@tanstack/highlight/languages/ts'
+import { tsx } from '@tanstack/highlight/languages/tsx'
+import { createTanStackMarkdownHighlighter } from '@tanstack/highlight/markdown'
+import { streamingMarkdownExtension } from '@tanstack/markdown/extensions/streaming'
+import { renderHtml } from '@tanstack/markdown/html'
+import type { CodeHighlighter } from '@tanstack/markdown'
 
-type BundledLang = 'javascript' | 'jsx' | 'typescript' | 'tsx' | 'bash'
-type BundledTheme = 'github-light' | 'github-dark'
-
-const createHighlighter = createBundledHighlighter({
-  themes: {
-    'github-light': () => import('@shikijs/themes/github-light'),
-    'github-dark': () => import('@shikijs/themes/github-dark'),
-  },
-  langs: {
-    javascript: () => import('@shikijs/langs/javascript'),
-    jsx: () => import('@shikijs/langs/jsx'),
-    typescript: () => import('@shikijs/langs/typescript'),
-    tsx: () => import('@shikijs/langs/tsx'),
-    bash: () => import('@shikijs/langs/bash'),
-  },
-  engine: () => createOnigurumaEngine(import('shiki/wasm')),
+const highlighter = createHighlighter({
+  languages: [
+    plaintext,
+    htmlLang,
+    css,
+    js,
+    jsx,
+    ts,
+    tsx,
+    shell,
+    json,
+    python,
+  ],
 })
 
-let highlighterPromise: Promise<
-  HighlighterGeneric<BundledLang, BundledTheme>
-> | null = null
+const highlightMarkdownCode: CodeHighlighter =
+  createTanStackMarkdownHighlighter(highlighter)
 
-function getHighlighter() {
-  if (!highlighterPromise) {
-    highlighterPromise = createHighlighter({
-      themes: ['github-light', 'github-dark'],
-      langs: [],
-    })
-  }
-  return highlighterPromise
-}
+const streamingExtensions = [streamingMarkdownExtension()]
 
-function normalizeFenceLang(raw: string | undefined): BundledLang | 'text' {
-  if (!raw) return 'text'
-  const x = raw.toLowerCase().trim().split(/[\s.]+/)[0] ?? ''
-  const map: Record<string, BundledLang> = {
-    js: 'javascript',
-    javascript: 'javascript',
-    jsx: 'jsx',
-    mjs: 'javascript',
-    cjs: 'javascript',
-    ts: 'typescript',
-    typescript: 'typescript',
-    tsx: 'tsx',
-    bash: 'bash',
-    sh: 'bash',
-    shell: 'bash',
-    zsh: 'bash',
-    fish: 'bash',
-    pwsh: 'bash',
-  }
-  return map[x] ?? 'text'
-}
-
-async function highlightFence(
-  md: MarkdownIt,
-  highlighter: HighlighterGeneric<BundledLang, BundledTheme>,
-  code: string,
-  fenceLang: string,
-  theme: BundledTheme,
-): Promise<string> {
-  const lang = normalizeFenceLang(fenceLang || undefined)
-  if (lang === 'text') {
-    return escapeHtmlFence(md, code)
-  }
-  if (!highlighter.getLoadedLanguages().includes(lang)) {
-    await highlighter.loadLanguage(lang)
-  }
-  return highlighter.codeToHtml(code, { lang, theme })
-}
-
-export async function renderMarkdownToHtml(
-  source: string,
-  options: { dark?: boolean } = {},
-): Promise<string> {
-  const blocks: { lang: string; code: string }[] = []
-  const md = new MarkdownIt({
-    html: false,
-    linkify: true,
-    breaks: true,
-    highlight(code: string, lang: string) {
-      const i = blocks.length
-      blocks.push({ lang: lang || '', code })
-      return `__MD_SHIKI_BLOCK_${i}__`
-    },
+/** Sync Markdown → HTML for chat (streaming-safe, Highlight fences). */
+export function renderMarkdownToHtml(source: string): string {
+  return renderHtml(source, {
+    highlighter: highlightMarkdownCode,
+    extensions: streamingExtensions,
+    frontmatter: false,
+    headingIds: false,
   })
-
-  let html = md.render(source)
-  const highlighter = await getHighlighter()
-  const theme: BundledTheme = options.dark ? 'github-dark' : 'github-light'
-
-  for (let i = 0; i < blocks.length; i++) {
-    const shikiHtml = await highlightFence(
-      md,
-      highlighter,
-      blocks[i].code,
-      blocks[i].lang,
-      theme,
-    )
-    const token = `__MD_SHIKI_BLOCK_${i}__`
-    const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    html = html.replace(
-      new RegExp(`<pre><code[^>]*>\\s*${escapedToken}\\s*</code></pre>`),
-      shikiHtml,
-    )
-  }
-
-  return html
 }

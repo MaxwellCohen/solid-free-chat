@@ -18,6 +18,7 @@ import { THEME_INLINE_INIT_SCRIPT } from '../lib/theme-preference'
 
 // Plain import so dev SSR CSS aggregation includes Tailwind (`?url` is excluded).
 import '../styles.css'
+import '../styles/markdown-highlight.css'
 
 const theme = createThemeController()
 
