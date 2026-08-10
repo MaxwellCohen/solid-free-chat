@@ -1,4 +1,4 @@
-import { For, Show } from 'solid-js'
+import { For, Show, createSignal } from 'solid-js'
 import {
   ChevronRight,
   KeyRound,
@@ -22,9 +22,9 @@ type ChatAppSidebarProps = {
   onOpenOpenRouterModal: () => void
   mobileSidebarPanelOpen: () => boolean
   onToggleMobileSidebarPanel: () => void
-  systemMessagePreview: () => string
-  systemDraft: () => string
-  onOpenSystemPromptLibrary: () => void
+  skillsPreview: () => string
+  attachedSkillNames: () => string[]
+  onOpenSkillsLibrary: () => void
 }
 
 export function ChatAppSidebar(props: ChatAppSidebarProps) {
@@ -227,6 +227,8 @@ function ConversationListItem(props: {
   onSelectConversation: (id: string) => void
   onDeleteConversation: (id: string) => void
 }) {
+  const [confirmingDelete, setConfirmingDelete] = createSignal(false)
+
   return (
     <li class="flex items-stretch gap-0.5">
       <button
@@ -236,20 +238,43 @@ function ConversationListItem(props: {
           'bg-muted font-medium':
             props.currentConversationId() === props.conversation.id,
         }}
-        onClick={() => props.onSelectConversation(props.conversation.id)}
+        onClick={() => {
+          setConfirmingDelete(false)
+          props.onSelectConversation(props.conversation.id)
+        }}
       >
         <span class="truncate">
           {props.conversation.title || NEW_CHAT_TITLE}
         </span>
       </button>
-      <button
-        type="button"
-        title="Delete chat"
-        class="text-muted-foreground hover:text-destructive hover:bg-muted shrink-0 rounded-lg px-2 text-sm"
-        onClick={() => props.onDeleteConversation(props.conversation.id)}
+      <Show
+        when={confirmingDelete()}
+        fallback={
+          <button
+            type="button"
+            title="Delete chat"
+            aria-label={`Delete chat: ${props.conversation.title || NEW_CHAT_TITLE}`}
+            class="text-muted-foreground hover:text-destructive hover:bg-muted shrink-0 rounded-lg px-2 text-sm"
+            onClick={() => setConfirmingDelete(true)}
+          >
+            ×
+          </button>
+        }
       >
-        ×
-      </button>
+        <button
+          type="button"
+          title="Confirm delete"
+          aria-label={`Confirm delete: ${props.conversation.title || NEW_CHAT_TITLE}`}
+          class="text-destructive hover:bg-muted shrink-0 rounded-lg px-2 text-xs font-medium"
+          onClick={() => {
+            setConfirmingDelete(false)
+            props.onDeleteConversation(props.conversation.id)
+          }}
+          onBlur={() => setConfirmingDelete(false)}
+        >
+          Delete?
+        </button>
+      </Show>
     </li>
   )
 }
@@ -291,21 +316,21 @@ function ApiKeyButton(props: { props: ChatAppSidebarProps }) {
 function CurrentConversationSettings(props: { props: ChatAppSidebarProps }) {
   return (
     <>
-      <SystemPromptPreview props={props.props} />
+      <SkillsPreview props={props.props} />
       <button
         type="button"
         class="bg-secondary text-secondary-foreground hover:bg-secondary/90 inline-flex w-full items-center justify-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium"
-        onClick={props.props.onOpenSystemPromptLibrary}
+        onClick={props.props.onOpenSkillsLibrary}
         aria-haspopup="dialog"
       >
         <SquarePen class="size-3.5 shrink-0" aria-hidden={true} />
-        Edit system prompt
+        Manage skills
       </button>
     </>
   )
 }
 
-function SystemPromptPreview(props: { props: ChatAppSidebarProps }) {
+function SkillsPreview(props: { props: ChatAppSidebarProps }) {
   return (
     <details class="group/sys border-border bg-card/30 rounded-lg border">
       <summary class="text-muted-foreground hover:bg-muted/40 flex cursor-pointer list-none items-start gap-2 px-2 py-1.5 text-[11px] leading-snug [&::-webkit-details-marker]:hidden">
@@ -314,31 +339,35 @@ function SystemPromptPreview(props: { props: ChatAppSidebarProps }) {
           aria-hidden={true}
         />
         <span class="min-w-0 flex-1">
-          <span class="text-foreground font-semibold">System message</span>
+          <span class="text-foreground font-semibold">Skills</span>
           <span class="text-muted-foreground/80 hidden md:block font-normal">
-            (this chat only; sent with every reply)
+            (attached to this chat)
           </span>
           <span class="text-muted-foreground mt-0.5 block truncate font-normal">
-            {props.props.systemMessagePreview()}
+            {props.props.skillsPreview()}
           </span>
         </span>
       </summary>
       <div
         class="border-border border-t px-2 py-1.5"
         role="region"
-        aria-label="System message (read-only)"
+        aria-label="Attached skills"
       >
         <Show
-          when={props.props.systemDraft().trim()}
+          when={props.props.attachedSkillNames().length > 0}
           fallback={
             <p class="text-muted-foreground m-0 text-xs italic">
-              No system message for this chat.
+              Baseline only — no skills attached.
             </p>
           }
         >
-          <pre class="text-foreground m-0 max-h-32 overflow-y-auto font-sans text-xs whitespace-pre-wrap wrap-break-word">
-            {props.props.systemDraft()}
-          </pre>
+          <ul class="m-0 list-disc space-y-0.5 pl-4 text-xs">
+            <For each={props.props.attachedSkillNames()}>
+              {(name) => (
+                <li class="text-foreground">{name}</li>
+              )}
+            </For>
+          </ul>
         </Show>
       </div>
     </details>

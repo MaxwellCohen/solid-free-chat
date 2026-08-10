@@ -6,7 +6,6 @@ import {
   createSignal,
   onCleanup,
   onMount,
-  untrack,
 } from 'solid-js'
 import { isServer } from 'solid-js/web'
 import { loadChatState, startChatPersistence } from '../../lib/chat-persistence'
@@ -24,19 +23,20 @@ import {
 import { ChatAppModelToolbar } from './ChatAppModelToolbar'
 import { ChatAppOpenRouterModal } from './ChatAppOpenRouterModal'
 import { ChatAppSidebar } from './ChatAppSidebar'
-import { ChatAppSystemPromptModal } from './ChatAppSystemPromptModal'
+import { ChatAppSkillsModal } from './ChatAppSkillsModal'
 
 export default function ChatApp() {
   const actions = useChatActions()
   const currentConversationId = useChatStore((state) => state.currentConversationId)
-  const currentConversationSystemMessage = useChatStore((state) => {
-    const id = state.currentConversationId
-    return id ? state.conversationsById[id].customSystemMessage : ''
-  })
   const conversations = useChatStore((state) =>
     chatSelectors.conversationList(state),
   )
-  const savedSystemPrompts = useChatStore((state) => state.savedSystemPrompts)
+  const skills = useChatStore((state) => state.skills)
+  const attachedSkillIds = useChatStore((state) => {
+    const id = state.currentConversationId
+    if (!id) return [] as string[]
+    return state.conversationsById[id]?.skillIds ?? []
+  })
   const selectedModel = useChatStore((state) => state.selectedModel)
   /** Input value while typing (does not trigger model refetch). */
   const [openRouterApiKeyDraft, setOpenRouterApiKeyDraft] = createSignal('')
@@ -60,54 +60,11 @@ export default function ChatApp() {
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
   const [currentConversationLoading, setCurrentConversationLoading] =
     createSignal(false)
-  const [systemDraft, setSystemDraft] = createSignal('')
-  const [loadPromptSelectKey, setLoadPromptSelectKey] = createSignal(0)
-  const [savePromptName, setSavePromptName] = createSignal('')
-  const [systemPromptLibraryOpen, setSystemPromptLibraryOpen] =
-    createSignal(false)
+  const [skillsLibraryOpen, setSkillsLibraryOpen] = createSignal(false)
   const [openRouterApiKeyModalOpen, setOpenRouterApiKeyModalOpen] =
     createSignal(false)
-  /** Below `sm`: one panel for system message + conversation list. */
+  /** Below `sm`: one panel for skills + conversation list. */
   const [mobileSidebarPanelOpen, setMobileSidebarPanelOpen] = createSignal(true)
-
-  let saveSystemTimer: ReturnType<typeof setTimeout> | null = null
-
-  createEffect(() => {
-    currentConversationId()
-    setSystemDraft(untrack(currentConversationSystemMessage))
-  })
-
-  onCleanup(() => {
-    if (saveSystemTimer !== null) {
-      clearTimeout(saveSystemTimer)
-      saveSystemTimer = null
-    }
-  })
-
-  function persistSystemDraft(value: string) {
-    const id = currentConversationId() as string
-    actions.setConversationCustomSystemMessage(id, value)
-  }
-
-  function onSystemMessageInput(
-    e: Event & { currentTarget: HTMLTextAreaElement },
-  ) {
-    const v = e.currentTarget.value
-    setSystemDraft(v)
-    if (saveSystemTimer !== null) clearTimeout(saveSystemTimer)
-    saveSystemTimer = setTimeout(() => {
-      persistSystemDraft(v)
-      saveSystemTimer = null
-    }, 300)
-  }
-
-  function onSystemMessageBlur() {
-    if (saveSystemTimer !== null) {
-      clearTimeout(saveSystemTimer)
-      saveSystemTimer = null
-    }
-    persistSystemDraft(systemDraft())
-  }
 
   createEffect(() => {
     const list = modelList()
@@ -227,11 +184,20 @@ export default function ChatApp() {
     return selectOptions().find((m) => m.id === id)
   })
 
-  const systemMessagePreview = createMemo(() => {
-    const t = systemDraft().trim()
-    if (!t) return 'Not set'
-    const oneLine = t.replace(/\s+/g, ' ')
-    return oneLine.length > 72 ? `${oneLine.slice(0, 72)}…` : oneLine
+  const attachedSkillNames = createMemo(() => {
+    const ids = attachedSkillIds()
+    if (ids.length === 0) return [] as string[]
+    const byId = new Map(skills().map((skill) => [skill.id, skill.name]))
+    return ids
+      .map((id) => byId.get(id))
+      .filter((name): name is string => typeof name === 'string')
+  })
+
+  const skillsPreview = createMemo(() => {
+    const names = attachedSkillNames()
+    if (names.length === 0) return 'Baseline only'
+    const joined = names.join(', ')
+    return joined.length > 72 ? `${joined.slice(0, 72)}…` : joined
   })
 
   function toggleSidebar() {
@@ -270,9 +236,9 @@ export default function ChatApp() {
   }
 
   createEffect(() => {
-    if (!systemPromptLibraryOpen()) return
+    if (!skillsLibraryOpen()) return
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSystemPromptLibraryOpen(false)
+      if (e.key === 'Escape') setSkillsLibraryOpen(false)
     }
     window.addEventListener('keydown', onKeyDown)
     onCleanup(() => window.removeEventListener('keydown', onKeyDown))
@@ -311,9 +277,9 @@ export default function ChatApp() {
         onToggleMobileSidebarPanel={() =>
           setMobileSidebarPanelOpen((open) => !open)
         }
-        systemMessagePreview={systemMessagePreview}
-        systemDraft={systemDraft}
-        onOpenSystemPromptLibrary={() => setSystemPromptLibraryOpen(true)}
+        skillsPreview={skillsPreview}
+        attachedSkillNames={attachedSkillNames}
+        onOpenSkillsLibrary={() => setSkillsLibraryOpen(true)}
       />
 
       <section class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -357,32 +323,28 @@ export default function ChatApp() {
           onSave={saveOpenRouterApiKeyFromModal}
         />
 
-        <ChatAppSystemPromptModal
-          open={systemPromptLibraryOpen}
+        <ChatAppSkillsModal
+          open={skillsLibraryOpen}
           currentConversationId={currentConversationId}
-          systemDraft={systemDraft}
-          onSystemMessageInput={onSystemMessageInput}
-          onSystemMessageBlur={onSystemMessageBlur}
-          loadPromptSelectKey={loadPromptSelectKey}
-          onChooseSavedPromptId={(pid) => {
-            const p = savedSystemPrompts().find((x) => x.id === pid)
-            if (p) {
-              setSystemDraft(p.text)
-              persistSystemDraft(p.text)
+          skills={skills}
+          attachedSkillIds={attachedSkillIds}
+          onToggleSkill={(skillId) => {
+            const id = currentConversationId()
+            if (!id) return
+            actions.toggleConversationSkill(id, skillId)
+          }}
+          onAddSkill={(name, instructions) => {
+            const skillId = actions.addSkill(name, instructions)
+            const conversationId = currentConversationId()
+            if (skillId && conversationId) {
+              actions.toggleConversationSkill(conversationId, skillId)
             }
-            setLoadPromptSelectKey((k) => k + 1)
           }}
-          savedSystemPrompts={savedSystemPrompts}
-          savePromptName={savePromptName}
-          onSavePromptNameInput={setSavePromptName}
-          onSaveCurrentToLibrary={() => {
-            actions.addSavedSystemPrompt(savePromptName(), systemDraft())
-            setSavePromptName('')
-          }}
-          onDeleteSavedSystemPrompt={(id) =>
-            actions.deleteSavedSystemPrompt(id)
+          onUpdateSkill={(skillId, patch) =>
+            actions.updateSkill(skillId, patch)
           }
-          onClose={() => setSystemPromptLibraryOpen(false)}
+          onDeleteSkill={(skillId) => actions.deleteSkill(skillId)}
+          onClose={() => setSkillsLibraryOpen(false)}
         />
       </section>
     </div>

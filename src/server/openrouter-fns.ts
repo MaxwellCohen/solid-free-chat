@@ -50,7 +50,7 @@ type StreamChatPayload = {
   messages: unknown
   /** Fallback if nested `data` is flattened by the RPC layer */
   apiKey?: string
-  data?: { model?: string; customSystemMessage?: string; apiKey?: string }
+  data?: { model?: string; systemPrompt?: string; apiKey?: string }
 }
 
 function clientApiKeyFromStreamPayload(
@@ -143,9 +143,9 @@ export const streamOpenRouterChat = createServerFn({
             )
           : createOpenRouterText(resolved.model as never, apiKey, adapterConfig)
 
-        const rawCustom = data.data?.customSystemMessage
+        const rawSystem = data.data?.systemPrompt
         const trimmedSystem =
-          typeof rawCustom === 'string' ? rawCustom.trim() : ''
+          typeof rawSystem === 'string' ? rawSystem.trim() : ''
         // TanStack AI strips role=system UIMessages during conversion; OpenRouter
         // adapter injects via systemPrompts (see mapTextOptionsToSDK).
         return chat({

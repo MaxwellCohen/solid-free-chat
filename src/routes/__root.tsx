@@ -9,7 +9,7 @@ import { TanStackRouterDevtools } from '@tanstack/solid-router-devtools'
 import '@fontsource/inter/400.css'
 
 import { HydrationScript } from 'solid-js/web'
-import { Suspense } from 'solid-js'
+import { Show, Suspense } from 'solid-js'
 
 import Header from '../components/Header'
 import { ThemeProvider } from '../lib/theme-context'
@@ -39,7 +39,9 @@ function RootComponent() {
           <ThemeProvider value={theme}>
             <Header />
             <Outlet />
-            <TanStackRouterDevtools />
+            <Show when={import.meta.env.DEV}>
+              <TanStackRouterDevtools />
+            </Show>
           </ThemeProvider>
         </Suspense>
         <Scripts />

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { startSpan } from '@sentry/core'
 import type {
   ChatModelOption,
@@ -43,6 +44,11 @@ type CacheEntry = {
 
 /** Per-key cache so switching browser keys does not reuse another key's model list. */
 const cacheByApiKey = new Map<string, CacheEntry>()
+
+/** Hash the API key so raw secrets are not retained as Map keys in Worker memory. */
+function cacheKeyForApiKey(apiKey: string): string {
+  return createHash('sha256').update(apiKey).digest('hex')
+}
 
 function parseUserModelRow(raw: unknown): OpenRouterUserModelRow | null {
   if (!raw || typeof raw !== 'object') return null
@@ -154,12 +160,13 @@ async function refreshCache(apiKey: string): Promise<CacheEntry> {
 export async function getFreeTextChatModelOptionsCached(
   apiKey: string,
 ): Promise<ChatModelOption[]> {
-  const hit = cacheByApiKey.get(apiKey)
+  const cacheKey = cacheKeyForApiKey(apiKey)
+  const hit = cacheByApiKey.get(cacheKey)
   if (hit && Date.now() < hit.expires) {
     return hit.options
   }
   const next = await refreshCache(apiKey)
-  cacheByApiKey.set(apiKey, next)
+  cacheByApiKey.set(cacheKey, next)
   return next.options
 }
 
@@ -171,10 +178,6 @@ export type ResolveModelResult =
  * Resolves the model for chat requests: explicit ids must be allowlisted;
  * when omitted, uses DEFAULT_CHAT_MODEL or the first free model if needed.
  */
-function looksLikeOpenRouterModelId(id: string): boolean {
-  return id.includes('/') && id.length > 2 && !id.includes(' ')
-}
-
 export async function resolveAllowedChatModel(
   apiKey: string,
   explicitModel: string | undefined,
@@ -185,19 +188,19 @@ export async function resolveAllowedChatModel(
   } catch {
     const explicit =
       typeof explicitModel === 'string' ? explicitModel.trim() : ''
+    // Only allow known safe defaults when the catalog is unavailable — never
+    // accept arbitrary provider/model ids (that could bill paid models).
     if (
+      explicit.length === 0 ||
       explicit === DEFAULT_CHAT_MODEL ||
       explicit === FREE_MODELS_ROUTER_ID
     ) {
       return { ok: true, model: DEFAULT_CHAT_MODEL }
     }
-    if (explicit.length > 0 && looksLikeOpenRouterModelId(explicit)) {
-      return { ok: true, model: explicit }
-    }
     return {
       ok: false,
       error:
-        'Could not load the model list (check API key and network). Pick Free Models Router or enter a valid model id.',
+        'Could not load the model list (check API key and network). Pick Free Models Router or try again.',
       status: 503,
     }
   }

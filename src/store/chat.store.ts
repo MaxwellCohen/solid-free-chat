@@ -15,12 +15,20 @@ export type ChatUIMessage = UIMessage & {
   tokenUsage?: TokenUsageSnapshot
 }
 
+/** Reusable skill: instructions composed into the system prompt when attached. */
+export interface ChatSkill {
+  id: string
+  name: string
+  instructions: string
+  updatedAt: number
+}
+
 export interface ChatConversation {
   id: string
   title: string
   updatedAt: number
-  /** Per-chat instructions sent as a system message on each model request (server-injected). */
-  customSystemMessage: string
+  /** Ordered skill ids attached to this chat (live links into `skills`). */
+  skillIds: string[]
   /** Most recent usage reported by the API for this chat. */
   lastUsage?: TokenUsageSnapshot
   /** Sum of `totalTokens` from each completed run in this chat (approx. session usage). */
@@ -31,30 +39,26 @@ export interface ChatConversationWithMessages extends ChatConversation {
   messages: ChatUIMessage[]
 }
 
-/** Reusable system prompt templates (browser-local). */
-export interface SavedSystemPrompt {
-  id: string
-  name: string
-  text: string
-  updatedAt: number
-}
-
 export interface ChatAppState {
   conversationOrder: string[]
   conversationsById: Record<string, ChatConversation>
   messagesByConversationId: Record<string, ChatUIMessage[]>
   currentConversationId: string | null
   selectedModel: string
-  savedSystemPrompts: SavedSystemPrompt[]
+  skills: ChatSkill[]
 }
 
-type LegacyChatConversation = ChatConversationWithMessages
+type LegacyChatConversation = ChatConversationWithMessages & {
+  customSystemMessage?: string
+  messages?: unknown
+}
 
 type LegacyChatAppState = {
   conversations?: LegacyChatConversation[]
   currentConversationId?: string | null
   selectedModel?: string
   savedSystemPrompts?: unknown
+  skills?: unknown
 }
 
 type PersistedChatState = {
@@ -64,6 +68,7 @@ type PersistedChatState = {
   currentConversationId?: unknown
   selectedModel?: unknown
   savedSystemPrompts?: unknown
+  skills?: unknown
 }
 
 export const NEW_CHAT_TITLE = 'New chat'
@@ -74,7 +79,7 @@ const emptyState = (): ChatAppState => ({
   messagesByConversationId: {},
   currentConversationId: null,
   selectedModel: DEFAULT_CHAT_MODEL,
-  savedSystemPrompts: [],
+  skills: [],
 })
 
 export const chatStore = new Store<ChatAppState>(emptyState())
@@ -86,11 +91,11 @@ function newConversationId(): string {
   return `c-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
-function newSavedPromptId(): string {
+function newSkillId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID()
   }
-  return `sp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+  return `sk-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
 function newConversation(now = Date.now(), id = newConversationId()): ChatConversation {
@@ -98,7 +103,7 @@ function newConversation(now = Date.now(), id = newConversationId()): ChatConver
     id,
     title: NEW_CHAT_TITLE,
     updatedAt: now,
-    customSystemMessage: '',
+    skillIds: [],
   }
 }
 
@@ -132,20 +137,66 @@ export function normalizeTokenUsageSnapshot(
   }
 }
 
-export function normalizeSavedSystemPrompts(raw: unknown): SavedSystemPrompt[] {
+function normalizeSkillIds(
+  raw: unknown,
+  validIds: ReadonlySet<string>,
+): string[] {
   if (!Array.isArray(raw)) return []
-  return raw
+  const seen = new Set<string>()
+  const ids: string[] = []
+  for (const value of raw) {
+    if (typeof value !== 'string') continue
+    const id = value.trim()
+    if (!id || seen.has(id) || !validIds.has(id)) continue
+    seen.add(id)
+    ids.push(id)
+  }
+  return ids
+}
+
+/** Normalize skills from `skills` or migrate from legacy `savedSystemPrompts`. */
+export function normalizeSkills(
+  skillsRaw: unknown,
+  savedSystemPromptsRaw?: unknown,
+): ChatSkill[] {
+  if (Array.isArray(skillsRaw)) {
+    return skillsRaw
+      .filter((p): p is Record<string, unknown> => p != null && typeof p === 'object')
+      .map((p) => ({
+        id:
+          typeof p.id === 'string' && p.id.trim()
+            ? p.id.trim()
+            : newSkillId(),
+        name:
+          typeof p.name === 'string' && p.name.trim()
+            ? p.name.trim().slice(0, 120)
+            : 'Untitled',
+        instructions:
+          typeof p.instructions === 'string'
+            ? p.instructions
+            : typeof p.text === 'string'
+              ? p.text
+              : '',
+        updatedAt:
+          typeof p.updatedAt === 'number' && Number.isFinite(p.updatedAt)
+            ? p.updatedAt
+            : Date.now(),
+      }))
+  }
+
+  if (!Array.isArray(savedSystemPromptsRaw)) return []
+  return savedSystemPromptsRaw
     .filter((p): p is Record<string, unknown> => p != null && typeof p === 'object')
     .map((p) => ({
       id:
         typeof p.id === 'string' && p.id.trim()
           ? p.id.trim()
-          : newSavedPromptId(),
+          : newSkillId(),
       name:
         typeof p.name === 'string' && p.name.trim()
           ? p.name.trim().slice(0, 120)
           : 'Untitled',
-      text: typeof p.text === 'string' ? p.text : '',
+      instructions: typeof p.text === 'string' ? p.text : '',
       updatedAt:
         typeof p.updatedAt === 'number' && Number.isFinite(p.updatedAt)
           ? p.updatedAt
@@ -153,31 +204,33 @@ export function normalizeSavedSystemPrompts(raw: unknown): SavedSystemPrompt[] {
     }))
 }
 
-function normalizeMessage(raw: unknown): ChatUIMessage | null {
-  if (!raw || typeof raw !== 'object') return null
-  const message = raw as UIMessage & { tokenUsage?: unknown }
-  const tokenUsage = normalizeTokenUsageSnapshot(message.tokenUsage)
-  return {
-    ...message,
-    createdAt:
-      message.createdAt != null
-        ? new Date(message.createdAt as unknown as string | number)
-        : undefined,
-    ...(tokenUsage ? { tokenUsage } : {}),
-  } as ChatUIMessage
+function findOrCreateSkillForInstructions(
+  skills: ChatSkill[],
+  instructions: string,
+  name = 'Migrated from chat',
+): { skills: ChatSkill[]; skillId: string } {
+  const trimmed = instructions.trim()
+  const existing = skills.find((s) => s.instructions.trim() === trimmed)
+  if (existing) return { skills, skillId: existing.id }
+  const skill: ChatSkill = {
+    id: newSkillId(),
+    name,
+    instructions: trimmed,
+    updatedAt: Date.now(),
+  }
+  return { skills: [...skills, skill], skillId: skill.id }
 }
 
-function normalizeMessages(raw: unknown): ChatUIMessage[] {
-  if (!Array.isArray(raw)) return []
-  return raw
-    .map((message) => normalizeMessage(message))
-    .filter((message): message is ChatUIMessage => message != null)
+type ConversationNormalizeResult = {
+  conversation: ChatConversation
+  skills: ChatSkill[]
 }
 
 function normalizeConversationRecord(
   raw: unknown,
   fallbackId: string,
-): ChatConversation {
+  skills: ChatSkill[],
+): ConversationNormalizeResult {
   const now = Date.now()
   const source = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
   const id =
@@ -190,8 +243,6 @@ function normalizeConversationRecord(
     typeof source.updatedAt === 'number' && Number.isFinite(source.updatedAt)
       ? source.updatedAt
       : now
-  const customSystemMessage =
-    typeof source.customSystemMessage === 'string' ? source.customSystemMessage : ''
   const lastUsage = normalizeTokenUsageSnapshot(source.lastUsage)
   const sessionTotalTokens =
     typeof source.sessionTotalTokens === 'number' &&
@@ -199,13 +250,31 @@ function normalizeConversationRecord(
       ? source.sessionTotalTokens
       : undefined
 
+  let nextSkills = skills
+  const validIds = new Set(nextSkills.map((s) => s.id))
+  let skillIds = normalizeSkillIds(source.skillIds, validIds)
+
+  const legacySystem =
+    typeof source.customSystemMessage === 'string'
+      ? source.customSystemMessage.trim()
+      : ''
+
+  if (skillIds.length === 0 && legacySystem) {
+    const migrated = findOrCreateSkillForInstructions(nextSkills, legacySystem)
+    nextSkills = migrated.skills
+    skillIds = [migrated.skillId]
+  }
+
   return {
-    id,
-    title,
-    updatedAt,
-    customSystemMessage,
-    ...(lastUsage ? { lastUsage } : {}),
-    ...(sessionTotalTokens !== undefined ? { sessionTotalTokens } : {}),
+    skills: nextSkills,
+    conversation: {
+      id,
+      title,
+      updatedAt,
+      skillIds,
+      ...(lastUsage ? { lastUsage } : {}),
+      ...(sessionTotalTokens !== undefined ? { sessionTotalTokens } : {}),
+    },
   }
 }
 
@@ -231,6 +300,27 @@ function normalizeConversationOrder(
   return order
 }
 
+function normalizeMessage(raw: unknown): ChatUIMessage | null {
+  if (!raw || typeof raw !== 'object') return null
+  const message = raw as UIMessage & { tokenUsage?: unknown }
+  const tokenUsage = normalizeTokenUsageSnapshot(message.tokenUsage)
+  return {
+    ...message,
+    createdAt:
+      message.createdAt != null
+        ? new Date(message.createdAt as unknown as string | number)
+        : undefined,
+    ...(tokenUsage ? { tokenUsage } : {}),
+  } as ChatUIMessage
+}
+
+function normalizeMessages(raw: unknown): ChatUIMessage[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((message) => normalizeMessage(message))
+    .filter((message): message is ChatUIMessage => message != null)
+}
+
 function normalizePersistedChatState(raw: unknown): ChatAppState | null {
   if (!raw || typeof raw !== 'object') return null
   const source = raw as PersistedChatState
@@ -250,14 +340,16 @@ function normalizePersistedChatState(raw: unknown): ChatAppState | null {
       ? (source.messagesByConversationId as Record<string, unknown>)
       : {}
 
+  let skills = normalizeSkills(source.skills, source.savedSystemPrompts)
   const conversationsById: Record<string, ChatConversation> = {}
   const messagesByConversationId: Record<string, ChatUIMessage[]> = {}
 
   for (const [key, value] of Object.entries(rawConversationsById)) {
-    const conversation = normalizeConversationRecord(value, key)
-    conversationsById[conversation.id] = conversation
-    messagesByConversationId[conversation.id] = normalizeMessages(
-      rawMessagesByConversationId[conversation.id],
+    const result = normalizeConversationRecord(value, key, skills)
+    skills = result.skills
+    conversationsById[result.conversation.id] = result.conversation
+    messagesByConversationId[result.conversation.id] = normalizeMessages(
+      rawMessagesByConversationId[result.conversation.id],
     )
   }
 
@@ -280,7 +372,7 @@ function normalizePersistedChatState(raw: unknown): ChatAppState | null {
       typeof source.selectedModel === 'string' && source.selectedModel.trim()
         ? source.selectedModel
         : DEFAULT_CHAT_MODEL,
-    savedSystemPrompts: normalizeSavedSystemPrompts(source.savedSystemPrompts),
+    skills,
   }
 }
 
@@ -288,16 +380,20 @@ function normalizeLegacyChatState(raw: LegacyChatAppState): ChatAppState | null 
   const legacyConversations = Array.isArray(raw.conversations) ? raw.conversations : null
   if (!legacyConversations) return null
 
+  let skills = normalizeSkills(raw.skills, raw.savedSystemPrompts)
   const conversationsById: Record<string, ChatConversation> = {}
   const messagesByConversationId: Record<string, ChatUIMessage[]> = {}
   const conversationOrder: string[] = []
 
   for (const value of legacyConversations) {
-    const conversation = normalizeConversationRecord(value, newConversationId())
-    if (conversation.id in conversationsById) continue
-    conversationsById[conversation.id] = conversation
-    messagesByConversationId[conversation.id] = normalizeMessages(value.messages)
-    conversationOrder.push(conversation.id)
+    const result = normalizeConversationRecord(value, newConversationId(), skills)
+    skills = result.skills
+    if (result.conversation.id in conversationsById) continue
+    conversationsById[result.conversation.id] = result.conversation
+    messagesByConversationId[result.conversation.id] = normalizeMessages(
+      value.messages,
+    )
+    conversationOrder.push(result.conversation.id)
   }
 
   const currentConversationId =
@@ -315,7 +411,7 @@ function normalizeLegacyChatState(raw: LegacyChatAppState): ChatAppState | null 
       typeof raw.selectedModel === 'string' && raw.selectedModel.trim()
         ? raw.selectedModel
         : DEFAULT_CHAT_MODEL,
-    savedSystemPrompts: normalizeSavedSystemPrompts(raw.savedSystemPrompts),
+    skills,
   }
 }
 
@@ -428,17 +524,81 @@ export const chatActions = {
     chatStore.setState((s) => ({ ...s, selectedModel: model }))
   },
 
-  setConversationCustomSystemMessage(conversationId: string, value: string) {
+  addSkill(name: string, instructions: string) {
+    const trimmedName = name.trim()
+    const trimmedInstructions = instructions.trim()
+    if (!trimmedName || !trimmedInstructions) return undefined
+    const id = newSkillId()
+    chatStore.setState((s) => ({
+      ...s,
+      skills: [
+        {
+          id,
+          name: trimmedName.slice(0, 120),
+          instructions: trimmedInstructions,
+          updatedAt: Date.now(),
+        },
+        ...s.skills,
+      ],
+    }))
+    return id
+  },
+
+  updateSkill(
+    skillId: string,
+    patch: { name?: string; instructions?: string },
+  ) {
+    chatStore.setState((s) => {
+      const index = s.skills.findIndex((skill) => skill.id === skillId)
+      if (index < 0) return s
+      const current = s.skills[index]
+      const nextName =
+        patch.name !== undefined ? patch.name.trim().slice(0, 120) : current.name
+      const nextInstructions =
+        patch.instructions !== undefined
+          ? patch.instructions.trim()
+          : current.instructions
+      if (!nextName || !nextInstructions) return s
+      const skills = s.skills.slice()
+      skills[index] = {
+        ...current,
+        name: nextName,
+        instructions: nextInstructions,
+        updatedAt: Date.now(),
+      }
+      return { ...s, skills }
+    })
+  },
+
+  deleteSkill(skillId: string) {
+    chatStore.setState((s) => {
+      const conversationsById: Record<string, ChatConversation> = {}
+      for (const [id, conversation] of Object.entries(s.conversationsById)) {
+        conversationsById[id] = {
+          ...conversation,
+          skillIds: conversation.skillIds.filter((sid) => sid !== skillId),
+        }
+      }
+      return {
+        ...s,
+        skills: s.skills.filter((skill) => skill.id !== skillId),
+        conversationsById,
+      }
+    })
+  },
+
+  setConversationSkillIds(conversationId: string, skillIds: string[]) {
     chatStore.setState((s) => {
       const current = getConversation(s, conversationId)
       if (!current) return s
+      const validIds = new Set(s.skills.map((skill) => skill.id))
       return {
         ...s,
         conversationsById: {
           ...s.conversationsById,
           [conversationId]: {
             ...current,
-            customSystemMessage: value,
+            skillIds: normalizeSkillIds(skillIds, validIds),
             updatedAt: Date.now(),
           },
         },
@@ -446,30 +606,27 @@ export const chatActions = {
     })
   },
 
-  addSavedSystemPrompt(name: string, text: string) {
-    const trimmedName = name.trim()
-    const trimmedText = text.trim()
-    if (!trimmedName || !trimmedText) return
-    const id = newSavedPromptId()
-    chatStore.setState((s) => ({
-      ...s,
-      savedSystemPrompts: [
-        {
-          id,
-          name: trimmedName.slice(0, 120),
-          text: trimmedText,
-          updatedAt: Date.now(),
+  toggleConversationSkill(conversationId: string, skillId: string) {
+    chatStore.setState((s) => {
+      const current = getConversation(s, conversationId)
+      if (!current) return s
+      if (!s.skills.some((skill) => skill.id === skillId)) return s
+      const attached = current.skillIds.includes(skillId)
+      const skillIds = attached
+        ? current.skillIds.filter((id) => id !== skillId)
+        : [...current.skillIds, skillId]
+      return {
+        ...s,
+        conversationsById: {
+          ...s.conversationsById,
+          [conversationId]: {
+            ...current,
+            skillIds,
+            updatedAt: Date.now(),
+          },
         },
-        ...s.savedSystemPrompts,
-      ],
-    }))
-  },
-
-  deleteSavedSystemPrompt(promptId: string) {
-    chatStore.setState((s) => ({
-      ...s,
-      savedSystemPrompts: s.savedSystemPrompts.filter((p) => p.id !== promptId),
-    }))
+      }
+    })
   },
 
   deleteConversation(id: string) {
@@ -567,6 +724,18 @@ export const chatSelectors = {
     conversationId: string,
   ): ChatUIMessage[] {
     return getConversationMessages(state, conversationId)
+  },
+
+  attachedSkills(
+    state: ChatAppState,
+    conversationId: string,
+  ): ChatSkill[] {
+    const conversation = getConversation(state, conversationId)
+    if (!conversation) return []
+    const byId = new Map(state.skills.map((skill) => [skill.id, skill]))
+    return conversation.skillIds
+      .map((id) => byId.get(id))
+      .filter((skill): skill is ChatSkill => skill != null)
   },
 }
 

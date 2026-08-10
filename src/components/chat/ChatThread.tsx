@@ -14,6 +14,7 @@ import {
   modelSupportsDocumentInput,
   modelSupportsImageInput,
 } from '../../lib/chat-models'
+import { composeSystemPrompt } from '../../lib/compose-system-prompt'
 import {
   attachTokenUsageToLastAssistantMessage,
   chatActions,
@@ -148,11 +149,12 @@ function ChatThreadSession(props: {
   })
 
   const selectedModel = useChatStore((state) => state.selectedModel)
-  const customSystemMessage = useChatStore(
-    (state) => state.conversationsById[conversationId].customSystemMessage,
+  const skillIds = useChatStore(
+    (state) => state.conversationsById[conversationId]?.skillIds ?? [],
   )
+  const skills = useChatStore((state) => state.skills)
   const sessionTotalTokens = useChatStore(
-    (state) => state.conversationsById[conversationId].sessionTotalTokens,
+    (state) => state.conversationsById[conversationId]?.sessionTotalTokens,
   )
   const sessionTotalSuffix = createMemo(() => {
     const session = sessionTotalTokens()
@@ -219,7 +221,7 @@ function ChatThreadSession(props: {
           data: {
             ...data,
             model: selectedModel(),
-            customSystemMessage: customSystemMessage(),
+            systemPrompt: composeSystemPrompt(skillIds(), skills()),
             ...(trimmedKey ? { apiKey: trimmedKey } : {}),
           },
         },

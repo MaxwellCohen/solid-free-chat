@@ -86,20 +86,19 @@ export function toFreeTextChatOptions(
   return options
 }
 
-/** Ensures the Free Models Router is selectable if the user-models API omits it. */
+/** Puts Free Models Router first; adds it if the user-models API omits it. */
 export function ensureFreeModelsRouterInOptions(
   options: ChatModelOption[],
 ): ChatModelOption[] {
-  if (options.some((o) => o.id === FREE_MODELS_ROUTER_ID)) {
-    return options
-  }
+  const fromApi = options.find((o) => o.id === FREE_MODELS_ROUTER_ID)
+  const rest = options.filter((o) => o.id !== FREE_MODELS_ROUTER_ID)
   return [
-    {
+    fromApi ?? {
       id: FREE_MODELS_ROUTER_ID,
       name: 'Free Models Router',
       inputModalities: ['text'],
     },
-    ...options,
+    ...rest,
   ]
 }
 

@@ -6,7 +6,7 @@ export type {
   ChatAppState,
   ChatConversation,
   ChatConversationWithMessages,
-  SavedSystemPrompt,
+  ChatSkill,
   TokenUsageSnapshot,
 } from './chat.store'
 

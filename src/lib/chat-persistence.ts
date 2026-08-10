@@ -21,7 +21,7 @@ function toPersistedChatState(state: ChatAppState): ChatAppState {
     messagesByConversationId: state.messagesByConversationId,
     currentConversationId: state.currentConversationId,
     selectedModel: state.selectedModel,
-    savedSystemPrompts: state.savedSystemPrompts,
+    skills: state.skills,
   }
 }
 
