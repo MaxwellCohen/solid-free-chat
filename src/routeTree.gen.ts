@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
+import { Route as ShareRouteImport } from './routes/share'
 import { Route as ExampleChatRouteImport } from './routes/example.chat'
 
 const IndexRoute = IndexRouteImport.update({
@@ -23,6 +24,11 @@ const AboutRoute = AboutRouteImport.update({
   path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ShareRoute = ShareRouteImport.update({
+  id: '/share',
+  path: '/share',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ExampleChatRoute = ExampleChatRouteImport.update({
   id: '/example/chat',
   path: '/example/chat',
@@ -32,30 +38,34 @@ const ExampleChatRoute = ExampleChatRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/share': typeof ShareRoute
   '/example/chat': typeof ExampleChatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/share': typeof ShareRoute
   '/example/chat': typeof ExampleChatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/share': typeof ShareRoute
   '/example/chat': typeof ExampleChatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about' | '/example/chat'
+  fullPaths: '/' | '/about' | '/share' | '/example/chat'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about' | '/example/chat'
-  id: '__root__' | '/' | '/about' | '/example/chat'
+  to: '/' | '/about' | '/share' | '/example/chat'
+  id: '__root__' | '/' | '/about' | '/share' | '/example/chat'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
+  ShareRoute: typeof ShareRoute
   ExampleChatRoute: typeof ExampleChatRoute
 }
 
@@ -75,6 +85,13 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/share': {
+      id: '/share'
+      path: '/share'
+      fullPath: '/share'
+      preLoaderRoute: typeof ShareRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/example/chat': {
       id: '/example/chat'
       path: '/example/chat'
@@ -88,6 +105,7 @@ declare module '@tanstack/solid-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
+  ShareRoute: ShareRoute,
   ExampleChatRoute: ExampleChatRoute,
 }
 export const routeTree = rootRouteImport

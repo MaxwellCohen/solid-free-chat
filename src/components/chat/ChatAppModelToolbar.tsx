@@ -1,5 +1,5 @@
 import { For, Show } from 'solid-js'
-import { LoaderCircle, PanelLeft } from 'lucide-solid'
+import { LoaderCircle, PanelLeft, Share2 } from 'lucide-solid'
 import type { ChatModelOption } from '../../lib/chat-models'
 
 type ChatAppModelToolbarProps = {
@@ -13,12 +13,27 @@ type ChatAppModelToolbarProps = {
   modelListEmpty: () => boolean
   isStreaming: () => boolean
   onModelChange: (modelId: string) => void
+  shareDisabled: () => boolean
+  shareBusy: () => boolean
+  shareFeedback: () => string | null
+  onShare: () => void
 }
 
 export function ChatAppModelToolbar(props: ChatAppModelToolbarProps) {
   return (
     <header class="border-border flex shrink-0 flex-col gap-3 border-b px-3 py-3 sm:px-6">
       <ToolbarRow props={props} />
+      <Show when={props.shareFeedback()} keyed>
+        {(message) => (
+          <p
+            class="text-muted-foreground text-xs"
+            role="status"
+            aria-live="polite"
+          >
+            {message}
+          </p>
+        )}
+      </Show>
     </header>
   )
 }
@@ -28,9 +43,26 @@ function ToolbarRow(props: { props: ChatAppModelToolbarProps }) {
     <div class="flex min-w-0 flex-nowrap items-center gap-2 sm:gap-3">
       <SidebarToggleButton props={props.props} />
       <ModelPicker props={props.props} />
+      <ShareButton props={props.props} />
       <StreamingIndicator isStreaming={props.props.isStreaming} />
       <ModelStatusMessage props={props.props} />
     </div>
+  )
+}
+
+function ShareButton(props: { props: ChatAppModelToolbarProps }) {
+  return (
+    <button
+      type="button"
+      class="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium disabled:pointer-events-none disabled:opacity-40"
+      disabled={props.props.shareDisabled() || props.props.shareBusy()}
+      onClick={() => props.props.onShare()}
+      title="Copy read-only share link"
+      aria-label="Copy read-only share link"
+    >
+      <Share2 class="size-4 shrink-0" aria-hidden={true} />
+      <span class="hidden sm:inline">Share</span>
+    </button>
   )
 }
 

@@ -9,6 +9,7 @@ import {
 } from 'solid-js'
 import { isServer } from 'solid-js/web'
 import { loadChatState, startChatPersistence } from '../../lib/chat-persistence'
+import { buildShareLink } from '../../lib/chat-share'
 import type { ChatModelOption } from '../../lib/chat-models'
 import { DEFAULT_CHAT_MODEL } from '../../lib/chat-models'
 import { getFreeChatModels } from '../../server/openrouter-fns'
@@ -65,6 +66,14 @@ export default function ChatApp() {
     createSignal(false)
   /** Below `sm`: one panel for skills + conversation list. */
   const [mobileSidebarPanelOpen, setMobileSidebarPanelOpen] = createSignal(true)
+  const [shareBusy, setShareBusy] = createSignal(false)
+  const [shareFeedback, setShareFeedback] = createSignal<string | null>(null)
+
+  const currentMessageCount = useChatStore((state) => {
+    const id = state.currentConversationId
+    if (!id) return 0
+    return state.messagesByConversationId[id]?.length ?? 0
+  })
 
   createEffect(() => {
     const list = modelList()
@@ -260,6 +269,51 @@ export default function ChatApp() {
     return list !== undefined && list.length === 0
   })
 
+  createEffect(() => {
+    const message = shareFeedback()
+    if (!message) return
+    const timer = window.setTimeout(() => setShareFeedback(null), 6000)
+    onCleanup(() => window.clearTimeout(timer))
+  })
+
+  async function shareCurrentChat() {
+    const id = currentConversationId()
+    if (!id) {
+      setShareFeedback('Select a chat to share.')
+      return
+    }
+    const messages = chatStore.state.messagesByConversationId[id] ?? []
+    if (messages.length === 0) {
+      setShareFeedback('Nothing to share yet — send a message first.')
+      return
+    }
+    if (shareBusy()) return
+    setShareBusy(true)
+    try {
+      const title =
+        chatStore.state.conversationsById[id]?.title ?? 'Shared chat'
+      const result = await buildShareLink({
+        baseUrl: `${window.location.origin}/share`,
+        title,
+        model: selectedModel(),
+        messages,
+      })
+      await navigator.clipboard.writeText(result.url)
+      if (result.overLimit) {
+        const mb = (result.byteLength / (1024 * 1024)).toFixed(1)
+        setShareFeedback(
+          `Copied. Warning: this link is ${mb} MB (over 1 MB) and may fail in some apps or browsers.`,
+        )
+      } else {
+        setShareFeedback('Read-only link copied to clipboard.')
+      }
+    } catch {
+      setShareFeedback('Could not copy share link.')
+    } finally {
+      setShareBusy(false)
+    }
+  }
+
   return (
     <div class="flex h-full min-h-0 w-full max-w-[100vw] flex-col overflow-hidden sm:flex-row">
       <ChatAppSidebar
@@ -294,6 +348,10 @@ export default function ChatApp() {
           modelListEmpty={modelListEmpty}
           isStreaming={currentConversationLoading}
           onModelChange={(id) => actions.setSelectedModel(id)}
+          shareDisabled={() => currentMessageCount() === 0}
+          shareBusy={shareBusy}
+          shareFeedback={shareFeedback}
+          onShare={() => void shareCurrentChat()}
         />
 
         <Show when={currentConversationId()} keyed>
