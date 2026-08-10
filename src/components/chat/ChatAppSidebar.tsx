@@ -243,7 +243,7 @@ function ConversationListItem(props: {
           props.onSelectConversation(props.conversation.id)
         }}
       >
-        <span class="truncate">
+        <span class="block truncate">
           {props.conversation.title || NEW_CHAT_TITLE}
         </span>
       </button>
