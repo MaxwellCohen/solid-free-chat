@@ -1,4 +1,4 @@
-import { Show, createEffect } from 'solid-js'
+import { Show, onSettled } from 'solid-js'
 import { bindModalFocus } from '../../lib/modal-focus'
 
 export function ChatAppOpenRouterModal(props: {
@@ -28,9 +28,7 @@ function OpenRouterModalDialog(props: {
 }) {
   let dialogEl: HTMLDivElement | undefined
 
-  createEffect(() => {
-    bindModalFocus(dialogEl)
-  })
+  onSettled(() => bindModalFocus(dialogEl))
 
   return (
     <div

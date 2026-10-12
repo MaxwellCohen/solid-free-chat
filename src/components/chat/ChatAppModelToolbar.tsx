@@ -1,5 +1,5 @@
 import { For, Show } from 'solid-js'
-import { LoaderCircle, PanelLeft, Share2 } from 'lucide-solid'
+import { Keyboard, LoaderCircle, PanelLeft, Share2 } from '../icons'
 import type { ChatModelOption } from '../../lib/chat-models'
 
 type ChatAppModelToolbarProps = {
@@ -17,6 +17,7 @@ type ChatAppModelToolbarProps = {
   shareBusy: () => boolean
   shareFeedback: () => string | null
   onShare: () => void
+  onOpenShortcuts: () => void
 }
 
 export function ChatAppModelToolbar(props: ChatAppModelToolbarProps) {
@@ -44,9 +45,24 @@ function ToolbarRow(props: { props: ChatAppModelToolbarProps }) {
       <SidebarToggleButton props={props.props} />
       <ModelPicker props={props.props} />
       <ShareButton props={props.props} />
+      <ShortcutsButton onOpen={props.props.onOpenShortcuts} />
       <StreamingIndicator isStreaming={props.props.isStreaming} />
       <ModelStatusMessage props={props.props} />
     </div>
+  )
+}
+
+function ShortcutsButton(props: { onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      class="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex shrink-0 items-center justify-center rounded-lg p-2"
+      onClick={() => props.onOpen()}
+      title="Keyboard shortcuts"
+      aria-label="Keyboard shortcuts"
+    >
+      <Keyboard class="size-4 shrink-0" aria-hidden="true" />
+    </button>
   )
 }
 
@@ -60,7 +76,7 @@ function ShareButton(props: { props: ChatAppModelToolbarProps }) {
       title="Copy read-only share link"
       aria-label="Copy read-only share link"
     >
-      <Share2 class="size-4 shrink-0" aria-hidden={true} />
+      <Share2 class="size-4 shrink-0" aria-hidden="true" />
       <span class="hidden sm:inline">Share</span>
     </button>
   )
@@ -73,10 +89,10 @@ function SidebarToggleButton(props: { props: ChatAppModelToolbarProps }) {
         type="button"
         class="text-muted-foreground bg-muted/60 hover:bg-muted inline-flex shrink-0 items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm font-medium sm:hidden"
         onClick={props.props.onToggleSidebar}
-        aria-expanded={false}
+        aria-expanded="false"
         aria-controls="chat-sidebar"
       >
-        <PanelLeft class="size-4 shrink-0" aria-hidden={true} />
+        <PanelLeft class="size-4 shrink-0" aria-hidden="true" />
         Chats
       </button>
     </Show>
@@ -137,12 +153,14 @@ function StreamingIndicator(props: { isStreaming: () => boolean }) {
       title={props.isStreaming() ? 'Streaming response' : 'Idle'}
     >
       <LoaderCircle
-        class="size-4 transition-colors"
-        classList={{
-          'animate-spin text-primary': props.isStreaming(),
-          'text-muted-foreground/60': !props.isStreaming(),
-        }}
-        aria-hidden={true}
+        class={[
+          'size-4 transition-colors',
+          {
+            'animate-spin text-primary': props.isStreaming(),
+            'text-muted-foreground/60': !props.isStreaming(),
+          },
+        ]}
+        aria-hidden="true"
       />
     </span>
   )

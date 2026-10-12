@@ -1,8 +1,8 @@
-import { For, Show, onMount } from 'solid-js'
-import type { UIMessage } from '@tanstack/ai-solid'
-import { createVirtualizer } from '@tanstack/solid-virtual'
-import type { VirtualItem, Virtualizer } from '@tanstack/solid-virtual'
-import { RotateCw } from 'lucide-solid'
+import { For, Show, onSettled } from 'solid-js'
+import type { UIMessage } from '@tanstack/ai-client'
+import { createVirtualizer } from '../../lib/create-virtualizer'
+import type { VirtualItem, Virtualizer } from '../../lib/create-virtualizer'
+import { RotateCw } from '../icons'
 import type { ChatUIMessage } from '../../store/chat.store'
 import { formatReplyTokenLine, userMessageToResendParts } from './chat-thread-utils'
 import { MessageParts } from './ChatMessageParts'
@@ -38,7 +38,7 @@ export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
     overscan: 6,
   })
 
-  onMount(() => {
+  onSettled(() => {
     virtualizer.scrollToEnd()
   })
 
@@ -87,21 +87,25 @@ function VirtualChatMessage(props: {
             // Solid assigns refs before the node is connected; defer measurement.
             queueMicrotask(() => props.virtualizer.measureElement(el))
           }}
-          class="absolute top-0 left-0 flex w-full"
-          classList={{
-            'justify-end': msg().role === 'user',
-            'justify-start': msg().role !== 'user',
-          }}
+          class={[
+            'absolute top-0 left-0 flex w-full',
+            {
+              'justify-end': msg().role === 'user',
+              'justify-start': msg().role !== 'user',
+            },
+          ]}
           style={{
             transform: `translateY(${props.virtualItem.start}px)`,
           }}
         >
           <div
-            class="flex max-w-[min(100%,42rem)] flex-col gap-1"
-            classList={{
-              'items-end': msg().role === 'user',
-              'items-start': msg().role !== 'user',
-            }}
+            class={[
+              'flex max-w-[min(100%,42rem)] flex-col gap-1',
+              {
+                'items-end': msg().role === 'user',
+                'items-start': msg().role !== 'user',
+              },
+            ]}
           >
             <MessageBubble message={msg()} />
             <AssistantUsageLine
@@ -128,15 +132,17 @@ function VirtualChatMessage(props: {
 function MessageBubble(props: { message: ChatUIMessage }) {
   return (
     <div
-      class="rounded-2xl px-4 py-3 text-sm shadow-sm"
-      classList={{
-        'bg-[var(--primary)] text-[var(--primary-foreground)]':
-          props.message.role === 'user',
-        'border border-[var(--border)] bg-[var(--card)] text-[var(--card-foreground)]':
-          props.message.role === 'assistant',
-        'bg-[var(--muted)] text-[var(--muted-foreground)]':
-          props.message.role === 'system',
-      }}
+      class={[
+        'rounded-2xl px-4 py-3 text-sm shadow-sm',
+        {
+          'bg-[var(--primary)] text-[var(--primary-foreground)]':
+            props.message.role === 'user',
+          'border border-[var(--border)] bg-[var(--card)] text-[var(--card-foreground)]':
+            props.message.role === 'assistant',
+          'bg-[var(--muted)] text-[var(--muted-foreground)]':
+            props.message.role === 'system',
+        },
+      ]}
     >
       <MessageParts message={props.message} />
     </div>
@@ -190,7 +196,7 @@ function UserResendButton(props: {
         }
         onClick={() => void props.onResendUserMessage(props.message)}
       >
-        <RotateCw class="size-3 shrink-0" aria-hidden={true} />
+        <RotateCw class="size-3 shrink-0" aria-hidden="true" />
         {props.failedUserMessage()?.id === props.message.id ? 'Retry' : 'Resend'}
       </button>
     </Show>

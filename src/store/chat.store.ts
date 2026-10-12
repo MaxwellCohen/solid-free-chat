@@ -1,5 +1,5 @@
 import { Store } from '@tanstack/store'
-import type { UIMessage } from '@tanstack/ai-solid'
+import type { UIMessage } from '@tanstack/ai-client'
 import { DEFAULT_CHAT_MODEL } from '../lib/chat-models'
 
 /** Token counts from the provider for one completed model run (see RUN_FINISHED). */

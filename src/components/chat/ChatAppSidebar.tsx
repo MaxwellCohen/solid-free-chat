@@ -5,7 +5,7 @@ import {
   PanelLeft,
   PanelLeftClose,
   SquarePen,
-} from 'lucide-solid'
+} from '../icons'
 import type { ChatConversation } from '../../store/chat.hooks'
 import { NEW_CHAT_TITLE } from '../../store/chat.store'
 
@@ -31,13 +31,15 @@ export function ChatAppSidebar(props: ChatAppSidebarProps) {
   return (
     <aside
       id="chat-sidebar"
-      class="border-border flex shrink-0 flex-col border-b transition-[width] duration-200 ease-out sm:border-r sm:border-b-0"
-      classList={{
-        'flex w-full min-h-0 max-h-[min(55dvh,24rem)] flex-col overflow-x-hidden overflow-y-auto sm:max-h-none sm:overflow-hidden sm:w-64 md:w-72':
-          props.sidebarOpen(),
-        'hidden sm:flex sm:h-full sm:w-12 sm:min-w-12 sm:max-h-none sm:flex-col':
-          !props.sidebarOpen(),
-      }}
+      class={[
+        'border-border flex shrink-0 flex-col border-b transition-[width] duration-200 ease-out sm:border-r sm:border-b-0',
+        {
+          'flex w-full min-h-0 max-h-[min(55dvh,24rem)] flex-col overflow-x-hidden overflow-y-auto sm:max-h-none sm:overflow-hidden sm:w-64 md:w-72':
+            props.sidebarOpen(),
+          'hidden sm:flex sm:h-full sm:w-12 sm:min-w-12 sm:max-h-none sm:flex-col':
+            !props.sidebarOpen(),
+        },
+      ]}
     >
       <Show
         when={props.sidebarOpen()}
@@ -58,25 +60,27 @@ function CollapsedSidebarActions(props: { props: ChatAppSidebarProps }) {
         onClick={props.props.onToggleSidebar}
         title="Show chat list"
         aria-label="Show chat list"
-        aria-expanded={false}
+        aria-expanded="false"
         aria-controls="chat-sidebar"
       >
-        <PanelLeft class="size-5 shrink-0" aria-hidden={true} />
+        <PanelLeft class="size-5 shrink-0" aria-hidden="true" />
       </button>
       <button
         type="button"
-        class="text-muted-foreground hover:bg-muted hover:text-foreground relative rounded-lg p-2"
-        classList={{
-          'ring-primary/50 ring-2 ring-offset-2 ring-offset-background':
-            props.props.openRouterApiKeyApplied().trim().length > 0,
-        }}
+        class={[
+          'text-muted-foreground hover:bg-muted hover:text-foreground relative rounded-lg p-2',
+          {
+            'ring-primary/50 ring-2 ring-offset-2 ring-offset-background':
+              props.props.openRouterApiKeyApplied().trim().length > 0,
+          },
+        ]}
         onClick={props.props.onOpenOpenRouterModal}
         title="OpenRouter API key"
         aria-label="OpenRouter API key"
         aria-haspopup="dialog"
-        aria-expanded={props.props.openRouterApiKeyModalOpen()}
+        aria-expanded={props.props.openRouterApiKeyModalOpen() ? 'true' : 'false'}
       >
-        <KeyRound class="size-5 shrink-0" aria-hidden={true} />
+        <KeyRound class="size-5 shrink-0" aria-hidden="true" />
       </button>
     </div>
   )
@@ -100,10 +104,10 @@ function SidebarCollapseBar(props: { onToggleSidebar: () => void }) {
         onClick={props.onToggleSidebar}
         title="Hide chat list"
         aria-label="Hide chat list"
-        aria-expanded={true}
+        aria-expanded="true"
         aria-controls="chat-sidebar"
       >
-        <PanelLeftClose class="size-4 shrink-0" aria-hidden={true} />
+        <PanelLeftClose class="size-4 shrink-0" aria-hidden="true" />
       </button>
     </div>
   )
@@ -125,16 +129,18 @@ function MobileSidebarHeader(props: { props: ChatAppSidebarProps }) {
         type="button"
         class="hover:bg-muted/50 -mx-1 flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1 py-1 text-left"
         onClick={props.props.onToggleMobileSidebarPanel}
-        aria-expanded={props.props.mobileSidebarPanelOpen()}
+        aria-expanded={props.props.mobileSidebarPanelOpen() ? 'true' : 'false'}
         aria-controls="sidebar-panel-content"
         id="sidebar-panel-disclosure"
       >
         <ChevronRight
-          class="text-muted-foreground size-4 shrink-0 transition-transform"
-          classList={{
-            'rotate-90': props.props.mobileSidebarPanelOpen(),
-          }}
-          aria-hidden={true}
+          class={[
+            'text-muted-foreground size-4 shrink-0 transition-transform',
+            {
+              'rotate-90': props.props.mobileSidebarPanelOpen(),
+            },
+          ]}
+          aria-hidden="true"
         />
         <span class="text-muted-foreground truncate text-xs font-semibold tracking-wide uppercase">
           Chats & settings
@@ -155,10 +161,12 @@ function SidebarPanelContent(props: { props: ChatAppSidebarProps }) {
   return (
     <div
       id="sidebar-panel-content"
-      class="flex min-h-0 flex-1 flex-col"
-      classList={{
-        'max-sm:hidden': !props.props.mobileSidebarPanelOpen(),
-      }}
+      class={[
+        'flex min-h-0 flex-1 flex-col',
+        {
+          'max-sm:hidden': !props.props.mobileSidebarPanelOpen(),
+        },
+      ]}
     >
       <div class="flex min-h-0 flex-1 flex-col">
         <ConversationPane props={props.props} />
@@ -233,11 +241,13 @@ function ConversationListItem(props: {
     <li class="flex items-stretch gap-0.5">
       <button
         type="button"
-        class="hover:bg-muted min-w-0 flex-1 rounded-lg px-2 py-2 text-left text-sm"
-        classList={{
-          'bg-muted font-medium':
-            props.currentConversationId() === props.conversation.id,
-        }}
+        class={[
+          'hover:bg-muted min-w-0 flex-1 rounded-lg px-2 py-2 text-left text-sm',
+          {
+            'bg-muted font-medium':
+              props.currentConversationId() === props.conversation.id,
+          },
+        ]}
         onClick={() => {
           setConfirmingDelete(false)
           props.onSelectConversation(props.conversation.id)
@@ -297,9 +307,9 @@ function ApiKeyButton(props: { props: ChatAppSidebarProps }) {
       class="border-border text-muted-foreground hover:bg-muted hover:text-foreground inline-flex w-full items-center justify-center gap-2 rounded-lg border px-2 py-1.5 text-xs font-medium"
       onClick={props.props.onOpenOpenRouterModal}
       aria-haspopup="dialog"
-      aria-expanded={props.props.openRouterApiKeyModalOpen()}
+      aria-expanded={props.props.openRouterApiKeyModalOpen() ? 'true' : 'false'}
     >
-      <KeyRound class="size-3.5 shrink-0" aria-hidden={true} />
+      <KeyRound class="size-3.5 shrink-0" aria-hidden="true" />
       <span class="whitespace-nowrap">API key</span>
       <Show when={props.props.openRouterApiKeyApplied().trim().length > 0}>
         <span
@@ -323,7 +333,7 @@ function CurrentConversationSettings(props: { props: ChatAppSidebarProps }) {
         onClick={props.props.onOpenSkillsLibrary}
         aria-haspopup="dialog"
       >
-        <SquarePen class="size-3.5 shrink-0" aria-hidden={true} />
+        <SquarePen class="size-3.5 shrink-0" aria-hidden="true" />
         Manage skills
       </button>
     </>
@@ -336,7 +346,7 @@ function SkillsPreview(props: { props: ChatAppSidebarProps }) {
       <summary class="text-muted-foreground hover:bg-muted/40 flex cursor-pointer list-none items-start gap-2 px-2 py-1.5 text-[11px] leading-snug [&::-webkit-details-marker]:hidden">
         <ChevronRight
           class="text-muted-foreground mt-0.5 size-3.5 shrink-0 transition-transform group-open/sys:rotate-90"
-          aria-hidden={true}
+          aria-hidden="true"
         />
         <span class="min-w-0 flex-1">
           <span class="text-foreground font-semibold">Skills</span>

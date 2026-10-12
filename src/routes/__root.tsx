@@ -4,12 +4,10 @@ import {
   Scripts,
   createRootRouteWithContext,
 } from '@tanstack/solid-router'
-import { TanStackRouterDevtools } from '@tanstack/solid-router-devtools'
-
 import '@fontsource/inter/400.css'
 
-import { HydrationScript } from 'solid-js/web'
-import { Show, Suspense } from 'solid-js'
+import { HydrationScript } from '@solidjs/web'
+import { Loading } from 'solid-js'
 
 import Header from '../components/Header'
 import { ThemeProvider } from '../lib/theme-context'
@@ -20,13 +18,13 @@ import { THEME_INLINE_INIT_SCRIPT } from '../lib/theme-preference'
 import '../styles.css'
 import '../styles/markdown-highlight.css'
 
-const theme = createThemeController()
-
 export const Route = createRootRouteWithContext()({
   shellComponent: RootComponent,
 })
 
 function RootComponent() {
+  const theme = createThemeController()
+
   return (
     <html class={theme.htmlClass() || undefined} lang="en">
       <head>
@@ -35,15 +33,12 @@ function RootComponent() {
       </head>
       <body>
         <HeadContent />
-        <Suspense>
+        <Loading>
           <ThemeProvider value={theme}>
             <Header />
             <Outlet />
-            <Show when={import.meta.env.DEV}>
-              <TanStackRouterDevtools />
-            </Show>
           </ThemeProvider>
-        </Suspense>
+        </Loading>
         <Scripts />
       </body>
     </html>

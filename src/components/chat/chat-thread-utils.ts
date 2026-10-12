@@ -1,4 +1,4 @@
-import type { UIMessage } from '@tanstack/ai-solid'
+import type { UIMessage } from '@tanstack/ai-client'
 import type { ContentPart } from '@tanstack/ai'
 import type { TokenUsageSnapshot } from '../../store/chat.store'
 

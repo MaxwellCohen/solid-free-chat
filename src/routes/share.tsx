@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createSignal, onCleanup, onMount } from 'solid-js'
+import { For, Match, Show, Switch, createSignal, onSettled } from 'solid-js'
 import { Link, createFileRoute } from '@tanstack/solid-router'
 import type { ChatUIMessage } from '../store/chat.store'
 import {
@@ -23,13 +23,14 @@ type ShareViewState =
 function SharePage() {
   const [view, setView] = createSignal<ShareViewState>({ status: 'loading' })
 
-  onMount(() => {
+  onSettled(() => {
+    if (typeof window === 'undefined') return
     void loadFromHash()
     const onHashChange = () => {
       void loadFromHash()
     }
     window.addEventListener('hashchange', onHashChange)
-    onCleanup(() => window.removeEventListener('hashchange', onHashChange))
+    return () => window.removeEventListener('hashchange', onHashChange)
   })
 
   async function loadFromHash() {
@@ -135,22 +136,26 @@ function SharedChatView(props: {
 function SharedMessageBubble(props: { message: ChatUIMessage }) {
   return (
     <article
-      class="flex w-full"
-      classList={{
-        'justify-end': props.message.role === 'user',
-        'justify-start': props.message.role !== 'user',
-      }}
+      class={[
+        'flex w-full',
+        {
+          'justify-end': props.message.role === 'user',
+          'justify-start': props.message.role !== 'user',
+        },
+      ]}
     >
       <div
-        class="max-w-[min(100%,42rem)] rounded-2xl px-4 py-3 text-sm shadow-sm"
-        classList={{
-          'bg-[var(--primary)] text-[var(--primary-foreground)]':
-            props.message.role === 'user',
-          'border border-[var(--border)] bg-[var(--card)] text-[var(--card-foreground)]':
-            props.message.role === 'assistant',
-          'bg-[var(--muted)] text-[var(--muted-foreground)]':
-            props.message.role === 'system',
-        }}
+        class={[
+          'max-w-[min(100%,42rem)] rounded-2xl px-4 py-3 text-sm shadow-sm',
+          {
+            'bg-[var(--primary)] text-[var(--primary-foreground)]':
+              props.message.role === 'user',
+            'border border-[var(--border)] bg-[var(--card)] text-[var(--card-foreground)]':
+              props.message.role === 'assistant',
+            'bg-[var(--muted)] text-[var(--muted-foreground)]':
+              props.message.role === 'system',
+          },
+        ]}
       >
         <MessageParts message={props.message} />
       </div>

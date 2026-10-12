@@ -2,11 +2,13 @@ import {
   createEffect,
   createMemo,
   createSignal,
-  onCleanup,
+  onSettled,
   Show,
+  untrack,
 } from 'solid-js'
-import { stream, useChat } from '@tanstack/ai-solid'
-import type { UIMessage } from '@tanstack/ai-solid'
+import { stream } from '@tanstack/ai-client'
+import type { UIMessage } from '@tanstack/ai-client'
+import { useChat } from '../../lib/use-chat'
 import type { ContentPart, StreamChunk } from '@tanstack/ai'
 import { useServerFn } from '@tanstack/solid-start'
 import { streamOpenRouterChat } from '../../server/openrouter-fns'
@@ -52,6 +54,7 @@ export default function ChatThread(props: {
   /** Committed key from the client (after blur); optional server env only for local dev. */
   openRouterApiKey: string
   onLoadingChange: (isLoading: boolean) => void
+  onRegisterStop?: (stop: (() => void) | null) => void
 }) {
   return (
     <Show when={props.conversationId} keyed>
@@ -62,6 +65,7 @@ export default function ChatThread(props: {
           inputModalities={props.inputModalities}
           openRouterApiKey={props.openRouterApiKey}
           onLoadingChange={props.onLoadingChange}
+          onRegisterStop={props.onRegisterStop}
         />
       )}
     </Show>
@@ -75,10 +79,11 @@ function ChatThreadSession(props: {
   /** Committed key from the client (after blur); optional server env only for local dev. */
   openRouterApiKey: string
   onLoadingChange: (isLoading: boolean) => void
+  onRegisterStop?: (stop: (() => void) | null) => void
 }) {
-  // Capture once at session mount — props stay reactive in Solid.
-  const conversationId = props.conversationId
-  const initialMessages = props.initialMessages
+  // The parent remounts this session per conversation, so these are snapshots.
+  const conversationId = untrack(() => props.conversationId)
+  const initialMessages = untrack(() => props.initialMessages)
   const [draft, setDraft] = createSignal('')
   const [pendingImages, setPendingImages] = createSignal<PendingImage[]>([])
   const [pendingFiles, setPendingFiles] = createSignal<PendingFile[]>([])
@@ -167,10 +172,6 @@ function ChatThreadSession(props: {
   const chat = useChat({
     id: conversationId,
     initialMessages,
-    /** Merged into each stream request; keeps apiKey in sync when ChatClient is memoized by id. */
-    body: {
-      apiKey: props.openRouterApiKey.trim() || undefined,
-    },
     onChunk: (chunk: StreamChunk) => {
       if (chunk.type !== 'RUN_FINISHED') return
       const u = chunk.usage
@@ -255,14 +256,19 @@ function ChatThreadSession(props: {
     })
   }
 
-  createEffect(() => {
-    props.onLoadingChange(chat.isLoading())
-  })
+  createEffect(
+    () => ({ loading: chat.isLoading(), notify: props.onLoadingChange }),
+    ({ loading, notify }) => {
+      notify(loading)
+    },
+  )
 
-  createEffect(() => {
-    if (!chat.error()) return
-    scheduleCommitCurrentMessages()
-  })
+  createEffect(
+    () => chat.error(),
+    (error) => {
+      if (error) scheduleCommitCurrentMessages()
+    },
+  )
 
   const lastAssistantMessageIndex = createMemo(() => {
     const msgs = chat.messages()
@@ -300,20 +306,28 @@ function ChatThreadSession(props: {
     await sendPromise
   }
 
-  onCleanup(() => {
-    props.onLoadingChange(false)
-    if (imageAttachNoticeTimer != null) {
-      clearTimeout(imageAttachNoticeTimer)
-      imageAttachNoticeTimer = null
+  onSettled(() => {
+    const stop = () => {
+      chat.stop()
+      scheduleCommitCurrentMessages()
     }
-    if (imageButtonPulseTimer != null) {
-      clearTimeout(imageButtonPulseTimer)
-      imageButtonPulseTimer = null
+    props.onRegisterStop?.(stop)
+    return () => {
+      props.onRegisterStop?.(null)
+      props.onLoadingChange(false)
+      if (imageAttachNoticeTimer != null) {
+        clearTimeout(imageAttachNoticeTimer)
+        imageAttachNoticeTimer = null
+      }
+      if (imageButtonPulseTimer != null) {
+        clearTimeout(imageButtonPulseTimer)
+        imageButtonPulseTimer = null
+      }
+      for (const p of pendingImages()) {
+        URL.revokeObjectURL(p.previewUrl)
+      }
+      commitConversationMessages()
     }
-    for (const p of pendingImages()) {
-      URL.revokeObjectURL(p.previewUrl)
-    }
-    commitConversationMessages()
   })
 
   function removePendingImage(id: string) {

@@ -1,7 +1,5 @@
 import { Link } from '@tanstack/solid-router'
 
-import TanStackQueryHeaderUser from '../integrations/tanstack-query/header-user.tsx'
-
 import ThemeSwitcher from './ThemeSwitcher'
 
 export default function Header() {
@@ -15,7 +13,7 @@ export default function Header() {
           >
             <span
               class="bg-primary size-2 shrink-0 rounded-full"
-              aria-hidden={true}
+              aria-hidden="true"
             ></span>
             Solid Free Chat
           </Link>
@@ -47,7 +45,6 @@ export default function Header() {
 
         <div class="order-2 ml-auto flex shrink-0 items-center gap-2 sm:order-3 sm:ml-0">
           <ThemeSwitcher />
-          <TanStackQueryHeaderUser />
         </div>
       </nav>
     </header>

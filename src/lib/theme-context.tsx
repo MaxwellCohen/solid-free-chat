@@ -14,17 +14,9 @@ export const ThemeContext = createContext<ThemeContextValue>()
 export function ThemeProvider(
   props: ParentProps<{ value: ThemeContextValue }>,
 ) {
-  return (
-    <ThemeContext.Provider value={props.value}>
-      {props.children}
-    </ThemeContext.Provider>
-  )
+  return <ThemeContext value={props.value}>{props.children}</ThemeContext>
 }
 
 export function useTheme() {
-  const ctx = useContext(ThemeContext)
-  if (!ctx) {
-    throw new Error('useTheme must be used within ThemeProvider')
-  }
-  return ctx
+  return useContext(ThemeContext)
 }

@@ -4,7 +4,7 @@ import {
   FileText,
   Image as ImageIcon,
   X,
-} from 'lucide-solid'
+} from '../icons'
 import type { PendingFile, PendingImage } from './chat-thread-utils'
 
 type ChatThreadComposerProps = {
@@ -62,14 +62,16 @@ function AttachmentPickerRow(props: { props: ChatThreadComposerProps }) {
 function ImageAttachmentButton(props: { props: ChatThreadComposerProps }) {
   return (
     <div
-      class="border-border text-muted-foreground hover:bg-muted hover:text-foreground relative inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-[box-shadow,background-color,color] duration-300 disabled:opacity-50"
-      classList={{
-        'ring-primary/70 bg-primary/5 text-foreground ring-2':
-          props.props.imageButtonPulse(),
-        'pointer-events-none opacity-50': props.props.isLoading(),
-      }}
+      class={[
+        'border-border text-muted-foreground hover:bg-muted hover:text-foreground relative inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-[box-shadow,background-color,color] duration-300 disabled:opacity-50',
+        {
+          'ring-primary/70 bg-primary/5 text-foreground ring-2':
+            props.props.imageButtonPulse(),
+          'pointer-events-none opacity-50': props.props.isLoading(),
+        },
+      ]}
     >
-      <ImageIcon class="size-3.5 shrink-0" aria-hidden={true} />
+      <ImageIcon class="size-3.5 shrink-0" aria-hidden="true" />
       Image
       <Show when={props.props.pendingImages().length > 0}>
         <span class="bg-primary/15 text-primary rounded-full px-1.5 py-px text-[10px] font-semibold">
@@ -92,12 +94,14 @@ function ImageAttachmentButton(props: { props: ChatThreadComposerProps }) {
 function PdfAttachmentButton(props: { props: ChatThreadComposerProps }) {
   return (
     <div
-      class="border-border text-muted-foreground hover:bg-muted hover:text-foreground relative inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium disabled:opacity-50"
-      classList={{
-        'pointer-events-none opacity-50': props.props.isLoading(),
-      }}
+      class={[
+        'border-border text-muted-foreground hover:bg-muted hover:text-foreground relative inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium disabled:opacity-50',
+        {
+          'pointer-events-none opacity-50': props.props.isLoading(),
+        },
+      ]}
     >
-      <FileText class="size-3.5 shrink-0" aria-hidden={true} />
+      <FileText class="size-3.5 shrink-0" aria-hidden="true" />
       PDF
       <input
         id="chat-pdf-input"
@@ -140,7 +144,7 @@ function ComposerFeedback(props: { props: ChatThreadComposerProps }) {
           >
             <CheckCircle2
               class="text-primary mt-0.5 size-3.5 shrink-0"
-              aria-hidden={true}
+              aria-hidden="true"
             />
             <span>{msg}</span>
           </div>
@@ -196,7 +200,7 @@ function PendingImagePreview(props: {
         aria-label="Remove image"
         onClick={() => props.onRemove(props.image.id)}
       >
-        <X class="size-3" aria-hidden={true} />
+        <X class="size-3" aria-hidden="true" />
       </button>
     </li>
   )
@@ -208,7 +212,7 @@ function PendingFileChip(props: {
 }) {
   return (
     <li class="border-border bg-muted/50 text-muted-foreground relative inline-flex max-w-48 items-center gap-1 rounded-lg border px-2 py-1 text-xs">
-      <FileText class="size-3.5 shrink-0" aria-hidden={true} />
+      <FileText class="size-3.5 shrink-0" aria-hidden="true" />
       <span class="min-w-0 truncate">{props.file.name}</span>
       <button
         type="button"
@@ -216,7 +220,7 @@ function PendingFileChip(props: {
         aria-label="Remove file"
         onClick={() => props.onRemove(props.file.id)}
       >
-        <X class="size-3.5" aria-hidden={true} />
+        <X class="size-3.5" aria-hidden="true" />
       </button>
     </li>
   )
@@ -226,6 +230,7 @@ function ComposerInputRow(props: { props: ChatThreadComposerProps }) {
   return (
     <div class="flex gap-2">
       <textarea
+        data-chat-composer
         class="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring max-h-40 min-h-11 flex-1 resize-y rounded-xl border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-50"
         placeholder="Message…"
         rows={2}

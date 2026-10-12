@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createSignal } from 'solid-js'
+import { For, Show, createSignal, onSettled } from 'solid-js'
 import type { ChatSkill } from '../../store/chat.hooks'
 import { bindModalFocus } from '../../lib/modal-focus'
 
@@ -50,9 +50,7 @@ function SkillsModalDialog(props: {
   const [editName, setEditName] = createSignal('')
   const [editInstructions, setEditInstructions] = createSignal('')
 
-  createEffect(() => {
-    bindModalFocus(dialogEl)
-  })
+  onSettled(() => bindModalFocus(dialogEl))
 
   function startEdit(skill: ChatSkill) {
     setEditingId(skill.id)
@@ -186,7 +184,7 @@ function SkillsModalDialog(props: {
                               type="text"
                               class="border-input bg-background rounded-lg border px-2 py-1.5 text-sm"
                               value={editName()}
-                              maxLength={120}
+                              maxlength={120}
                               onInput={(e) => setEditName(e.currentTarget.value)}
                             />
                           </label>
@@ -238,7 +236,7 @@ function SkillsModalDialog(props: {
                 class="border-input bg-background placeholder:text-muted-foreground rounded-lg border px-2 py-1.5 text-sm"
                 placeholder="e.g. Concise replies"
                 value={newName()}
-                maxLength={120}
+                maxlength={120}
                 onInput={(e) => setNewName(e.currentTarget.value)}
               />
             </label>

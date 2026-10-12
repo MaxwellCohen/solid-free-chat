@@ -1,5 +1,3 @@
-import { onCleanup } from 'solid-js'
-
 const FOCUSABLE_SELECTOR = [
   'a[href]',
   'button:not([disabled])',
@@ -16,11 +14,11 @@ function focusableElements(container: HTMLElement): HTMLElement[] {
 }
 
 /**
- * Call from a `createEffect` while a dialog is mounted. Focuses the first
+ * Call from `onSettled` while a dialog is mounted. Focuses the first
  * focusable control, traps Tab inside the dialog, and restores focus on cleanup.
  */
-export function bindModalFocus(dialog: HTMLElement | undefined): void {
-  if (!dialog) return
+export function bindModalFocus(dialog: HTMLElement | undefined): () => void {
+  if (!dialog) return () => {}
 
   const previouslyFocused =
     document.activeElement instanceof HTMLElement
@@ -61,8 +59,8 @@ export function bindModalFocus(dialog: HTMLElement | undefined): void {
 
   dialog.addEventListener('keydown', onKeyDown)
 
-  onCleanup(() => {
+  return () => {
     dialog.removeEventListener('keydown', onKeyDown)
     previouslyFocused?.focus()
-  })
+  }
 }

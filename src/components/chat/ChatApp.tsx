@@ -2,16 +2,15 @@ import {
   Show,
   createEffect,
   createMemo,
-  createResource,
   createSignal,
-  onCleanup,
-  onMount,
+  onSettled,
 } from 'solid-js'
-import { isServer } from 'solid-js/web'
+import { isServer } from '@solidjs/web'
 import { loadChatState, startChatPersistence } from '../../lib/chat-persistence'
 import { buildShareLink } from '../../lib/chat-share'
 import type { ChatModelOption } from '../../lib/chat-models'
 import { DEFAULT_CHAT_MODEL } from '../../lib/chat-models'
+import { findMatchingShortcut } from '../../lib/keyboard-shortcuts'
 import { getFreeChatModels } from '../../server/openrouter-fns'
 import { useChatActions, useChatStore } from '../../store/chat.hooks'
 import { chatSelectors, chatStore } from '../../store/chat.store'
@@ -19,10 +18,10 @@ import ChatThread from './ChatThread'
 import {
   OPENROUTER_API_KEY_LS_KEY,
   SIDEBAR_OPEN_LS_KEY,
-  SKIP_MODEL_LIST_SSR,
 } from './chat-app-constants'
 import { ChatAppModelToolbar } from './ChatAppModelToolbar'
 import { ChatAppOpenRouterModal } from './ChatAppOpenRouterModal'
+import { ChatAppShortcutsModal } from './ChatAppShortcutsModal'
 import { ChatAppSidebar } from './ChatAppSidebar'
 import { ChatAppSkillsModal } from './ChatAppSkillsModal'
 
@@ -43,31 +42,21 @@ export default function ChatApp() {
   const [openRouterApiKeyDraft, setOpenRouterApiKeyDraft] = createSignal('')
   /** Last committed value (blur): sent to server fns for OpenRouter; optional `.env` fallback for local dev only. */
   const [openRouterApiKeyApplied, setOpenRouterApiKeyApplied] = createSignal('')
-  const [modelList] = createResource(
-    () => (isServer ? SKIP_MODEL_LIST_SSR : openRouterApiKeyApplied()),
-    async (applied) => {
-      if (applied === SKIP_MODEL_LIST_SSR) {
-        return []
-      }
-      const t = applied.trim()
-      return getFreeChatModels({
-        data: { apiKey: t || undefined },
-        ...(t
-          ? { headers: { Authorization: `Bearer ${t}` } }
-          : {}),
-      })
-    },
-  )
+  const [modelList, setModelList] = createSignal<ChatModelOption[] | undefined>()
+  const [modelListLoading, setModelListLoading] = createSignal(true)
+  const [modelListError, setModelListError] = createSignal<unknown>()
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
   const [currentConversationLoading, setCurrentConversationLoading] =
     createSignal(false)
   const [skillsLibraryOpen, setSkillsLibraryOpen] = createSignal(false)
   const [openRouterApiKeyModalOpen, setOpenRouterApiKeyModalOpen] =
     createSignal(false)
+  const [shortcutsHelpOpen, setShortcutsHelpOpen] = createSignal(false)
   /** Below `sm`: one panel for skills + conversation list. */
   const [mobileSidebarPanelOpen, setMobileSidebarPanelOpen] = createSignal(true)
   const [shareBusy, setShareBusy] = createSignal(false)
   const [shareFeedback, setShareFeedback] = createSignal<string | null>(null)
+  let stopStreaming: (() => void) | null = null
 
   const currentMessageCount = useChatStore((state) => {
     const id = state.currentConversationId
@@ -75,16 +64,52 @@ export default function ChatApp() {
     return state.messagesByConversationId[id]?.length ?? 0
   })
 
-  createEffect(() => {
-    const list = modelList()
-    if (!list?.length) return
-    const ids = new Set(list.map((m) => m.id))
-    if (!ids.has(selectedModel())) {
-      actions.setSelectedModel(list[0].id)
-    }
-  })
+  createEffect(
+    () => (isServer ? null : openRouterApiKeyApplied()),
+    (applied) => {
+      if (applied == null || isServer) return
+      let cancelled = false
+      setModelListLoading(true)
+      setModelListError(undefined)
+      void (async () => {
+        try {
+          const trimmed = applied.trim()
+          const list = await getFreeChatModels({
+            data: { apiKey: trimmed || undefined },
+            ...(trimmed
+              ? { headers: { Authorization: `Bearer ${trimmed}` } }
+              : {}),
+          })
+          if (cancelled) return
+          setModelList(list)
+        } catch (error) {
+          if (cancelled) return
+          setModelListError(error)
+        } finally {
+          if (!cancelled) setModelListLoading(false)
+        }
+      })()
+      return () => {
+        cancelled = true
+      }
+    },
+  )
 
-  onMount(() => {
+  createEffect(
+    () => {
+      const list = modelList()
+      const selected = selectedModel()
+      if (!list?.length) return null
+      if (list.some((model) => model.id === selected)) return null
+      return list[0].id
+    },
+    (nextId) => {
+      if (nextId) actions.setSelectedModel(nextId)
+    },
+  )
+
+  onSettled(() => {
+    if (typeof window === 'undefined') return
     try {
       if (localStorage.getItem(SIDEBAR_OPEN_LS_KEY) === '1') {
         setSidebarOpen(true)
@@ -107,7 +132,7 @@ export default function ChatApp() {
     }
     actions.ensureDefaultConversation()
     const stopPersist = startChatPersistence()
-    onCleanup(stopPersist)
+    return stopPersist
   })
 
   /** Minimal list when the server could not load models — user can still pick the free router. */
@@ -121,8 +146,8 @@ export default function ChatApp() {
 
   /** Options from API, plus the current selection if missing (so `<select>` always has a matching `<option>`). */
   const selectOptions = createMemo(() => {
-    if (modelList.loading) return []
-    if (modelList.error) {
+    if (modelListLoading()) return []
+    if (modelListError()) {
       const id = selectedModel()
       const fb = modelListErrorFallback()
       if (!fb.some((o) => o.id === id)) {
@@ -157,7 +182,7 @@ export default function ChatApp() {
   })
 
   const selectDisabled = () => {
-    if (modelList.loading) return true
+    if (modelListLoading()) return true
     return selectOptions().length === 0
   }
 
@@ -244,37 +269,86 @@ export default function ChatApp() {
     collapseSidebarIfNarrow()
   }
 
-  createEffect(() => {
-    if (!skillsLibraryOpen()) return
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSkillsLibraryOpen(false)
-    }
-    window.addEventListener('keydown', onKeyDown)
-    onCleanup(() => window.removeEventListener('keydown', onKeyDown))
-  })
+  function focusChatComposer() {
+    const el = document.querySelector<HTMLTextAreaElement>(
+      '[data-chat-composer]',
+    )
+    el?.focus()
+  }
 
-  createEffect(() => {
-    if (!openRouterApiKeyModalOpen()) return
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeOpenRouterApiKeyModal()
+  function handleChatShortcut(event: KeyboardEvent) {
+    if (event.isComposing) return
+    const match = findMatchingShortcut(event)
+    if (!match) return
+
+    if (match.id === 'stopGeneration') {
+      if (shortcutsHelpOpen()) {
+        event.preventDefault()
+        setShortcutsHelpOpen(false)
+        return
+      }
+      if (skillsLibraryOpen()) {
+        event.preventDefault()
+        setSkillsLibraryOpen(false)
+        return
+      }
+      if (openRouterApiKeyModalOpen()) {
+        event.preventDefault()
+        closeOpenRouterApiKeyModal()
+        return
+      }
+      if (currentConversationLoading()) {
+        event.preventDefault()
+        stopStreaming?.()
+      }
+      return
     }
-    window.addEventListener('keydown', onKeyDown)
-    onCleanup(() => window.removeEventListener('keydown', onKeyDown))
+
+    // Mod+ shortcuts always run (standard chat-app pattern).
+    event.preventDefault()
+    switch (match.id) {
+      case 'newChat':
+        createConversationFromSidebar()
+        break
+      case 'toggleSidebar':
+        toggleSidebar()
+        break
+      case 'focusComposer':
+        focusChatComposer()
+        break
+      case 'shareChat':
+        void shareCurrentChat()
+        break
+      case 'openSkills':
+        setSkillsLibraryOpen(true)
+        break
+      case 'showHelp':
+        setShortcutsHelpOpen(true)
+        break
+    }
+  }
+
+  onSettled(() => {
+    if (typeof window === 'undefined') return
+    window.addEventListener('keydown', handleChatShortcut)
+    return () => window.removeEventListener('keydown', handleChatShortcut)
   })
 
   const modelListEmpty = createMemo(() => {
-    if (modelList.loading) return false
-    if (modelList.error) return false
+    if (modelListLoading()) return false
+    if (modelListError()) return false
     const list = modelList()
     return list !== undefined && list.length === 0
   })
 
-  createEffect(() => {
-    const message = shareFeedback()
-    if (!message) return
-    const timer = window.setTimeout(() => setShareFeedback(null), 6000)
-    onCleanup(() => window.clearTimeout(timer))
-  })
+  createEffect(
+    () => shareFeedback(),
+    (message) => {
+      if (!message) return
+      const timer = window.setTimeout(() => setShareFeedback(null), 6000)
+      return () => window.clearTimeout(timer)
+    },
+  )
 
   async function shareCurrentChat() {
     const id = currentConversationId()
@@ -343,8 +417,8 @@ export default function ChatApp() {
           selectedModel={selectedModel}
           selectDisabled={selectDisabled}
           selectOptions={selectOptions}
-          modelListLoading={() => modelList.loading}
-          modelListError={() => modelList.error}
+          modelListLoading={modelListLoading}
+          modelListError={modelListError}
           modelListEmpty={modelListEmpty}
           isStreaming={currentConversationLoading}
           onModelChange={(id) => actions.setSelectedModel(id)}
@@ -352,6 +426,7 @@ export default function ChatApp() {
           shareBusy={shareBusy}
           shareFeedback={shareFeedback}
           onShare={() => void shareCurrentChat()}
+          onOpenShortcuts={() => setShortcutsHelpOpen(true)}
         />
 
         <Show when={currentConversationId()} keyed>
@@ -367,6 +442,9 @@ export default function ChatApp() {
                   inputModalities={selectedModelMeta()?.inputModalities}
                   openRouterApiKey={openRouterApiKeyApplied()}
                   onLoadingChange={setCurrentConversationLoading}
+                  onRegisterStop={(stop) => {
+                    stopStreaming = stop
+                  }}
                 />
               </div>
             )
@@ -403,6 +481,11 @@ export default function ChatApp() {
           }
           onDeleteSkill={(skillId) => actions.deleteSkill(skillId)}
           onClose={() => setSkillsLibraryOpen(false)}
+        />
+
+        <ChatAppShortcutsModal
+          open={shortcutsHelpOpen}
+          onClose={() => setShortcutsHelpOpen(false)}
         />
       </section>
     </div>

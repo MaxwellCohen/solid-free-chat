@@ -1,9 +1,14 @@
 import { setupRouterSsrQueryIntegration } from '@tanstack/solid-router-ssr-query'
 import { createRouter as createTanStackRouter } from '@tanstack/solid-router'
 import * as Sentry from '@sentry/browser'
+import { enableRichArguments } from '@solidjs/web/server-functions/rich-args'
 import { routeTree } from './routeTree.gen'
 
 import { getContext } from './integrations/tanstack-query/provider'
+
+// Chat messages carry `Date`s (`createdAt`) and optional `undefined` fields,
+// which the default JSON-only server function encoding rejects.
+enableRichArguments()
 
 function initSentry() {
   const dsn = import.meta.env.VITE_SENTRY_DSN

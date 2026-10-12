@@ -1,4 +1,4 @@
-import type { UIMessage } from '@tanstack/ai-solid'
+import type { UIMessage } from '@tanstack/ai-client'
 import type { ChatUIMessage } from '../store/chat.store'
 
 /** Soft cap on the encoded hash body (`#` + payload). Warn when exceeded; still allow copy. */
@@ -303,13 +303,22 @@ function normalizeSharedPart(raw: unknown): SharedMessagePart | null {
   return null
 }
 
+function blobBytes(input: Uint8Array): ArrayBuffer {
+  return input.buffer.slice(
+    input.byteOffset,
+    input.byteOffset + input.byteLength,
+  ) as ArrayBuffer
+}
+
 async function gzipBytes(input: Uint8Array): Promise<Uint8Array> {
-  const stream = new Blob([input]).stream().pipeThrough(new CompressionStream('gzip'))
+  const stream = new Blob([blobBytes(input)])
+    .stream()
+    .pipeThrough(new CompressionStream('gzip'))
   return new Uint8Array(await new Response(stream).arrayBuffer())
 }
 
 async function gunzipBytes(input: Uint8Array): Promise<Uint8Array> {
-  const stream = new Blob([input])
+  const stream = new Blob([blobBytes(input)])
     .stream()
     .pipeThrough(new DecompressionStream('gzip'))
   return new Uint8Array(await new Response(stream).arrayBuffer())

@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, onMount } from 'solid-js'
+import { createEffect, createMemo, createSignal, onSettled } from 'solid-js'
 import type { Accessor } from 'solid-js'
 
 import type { ThemeContextValue } from './theme-context'
@@ -33,7 +33,8 @@ export function createThemeController(): ThemeContextValue & {
     writeStoredPreference(pref)
   }
 
-  onMount(() => {
+  onSettled(() => {
+    if (typeof window === 'undefined') return
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
     const onChange = (e: MediaQueryListEvent) => setSystemDark(e.matches)
     mq.addEventListener('change', onChange)
@@ -55,10 +56,13 @@ export function createThemeController(): ThemeContextValue & {
     }
   })
 
-  createEffect(() => {
-    const dark = effective() === 'dark'
-    document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
-  })
+  createEffect(
+    () => effective() === 'dark',
+    (dark) => {
+      if (typeof document === 'undefined') return
+      document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+    },
+  )
 
   return {
     preference,
