@@ -5,6 +5,7 @@ import {
   DEFAULT_ENABLED_TOOL_IDS,
   isKnownToolId,
 } from '../lib/harness/tools'
+import type { HarnessSkillsApi } from '../lib/harness/tools'
 
 /** Token counts from the provider for one completed model run (see RUN_FINISHED). */
 export interface TokenUsageSnapshot {
@@ -800,4 +801,38 @@ function deriveTitleFromMessages(messages: UIMessage[]): string | null {
     }
   }
   return null
+}
+
+/** Skill operations for harness tools, scoped to one conversation's attachments. */
+export function createConversationSkillsApi(conversationId: string): HarnessSkillsApi {
+  const attachedIds = () =>
+    chatStore.state.conversationsById[conversationId]?.skillIds ?? []
+  const exists = (skillId: string) =>
+    chatStore.state.skills.some((skill) => skill.id === skillId)
+  return {
+    list: () => {
+      const attached = new Set(attachedIds())
+      return chatStore.state.skills.map((skill) => ({
+        id: skill.id,
+        name: skill.name,
+        instructions: skill.instructions,
+        attached: attached.has(skill.id),
+      }))
+    },
+    create: (name, instructions) => chatActions.addSkill(name, instructions),
+    update: (skillId, patch) => {
+      if (!exists(skillId)) return false
+      const before = chatStore.state.skills.find((skill) => skill.id === skillId)
+      chatActions.updateSkill(skillId, patch)
+      return chatStore.state.skills.find((skill) => skill.id === skillId) !== before
+    },
+    setAttached: (skillId, attached) => {
+      if (!exists(skillId)) return false
+      if (!(conversationId in chatStore.state.conversationsById)) return false
+      if (attachedIds().includes(skillId) !== attached) {
+        chatActions.toggleConversationSkill(conversationId, skillId)
+      }
+      return true
+    },
+  }
 }

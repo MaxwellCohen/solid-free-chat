@@ -20,6 +20,7 @@ import { composeSystemPrompt } from '../../lib/compose-system-prompt'
 import {
   attachTokenUsageToLastAssistantMessage,
   chatActions,
+  createConversationSkillsApi,
 } from '../../store/chat.store'
 import type { ChatUIMessage, TokenUsageSnapshot } from '../../store/chat.store'
 import { useChatStore } from '../../store/chat.hooks'
@@ -205,7 +206,11 @@ function ChatThreadSession(props: {
         model: selectedModel(),
         messages,
         systemPrompt: composeSystemPrompt(skillIds(), skills()),
-        tools: props.supportsTools ? createEnabledTools(enabledToolIds()) : [],
+        tools: props.supportsTools
+          ? createEnabledTools(enabledToolIds(), {
+              skills: createConversationSkillsApi(conversationId),
+            })
+          : [],
         abortSignal,
       }),
     ),
