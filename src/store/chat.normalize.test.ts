@@ -122,9 +122,9 @@ describe('normalizeChatAppState', () => {
     expect(
       normalizeChatAppState({
         ...base,
-        enabledToolIds: ['run_python', 'removed_tool', 'run_python'],
+        enabledToolIds: ['run_javascript', 'removed_tool', 'run_javascript'],
       })!.enabledToolIds,
-    ).toEqual(['run_python'])
+    ).toEqual(['run_javascript'])
     expect(
       normalizeChatAppState({ ...base, enabledToolIds: [] })!.enabledToolIds,
     ).toEqual([])

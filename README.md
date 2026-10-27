@@ -11,7 +11,6 @@ A [SolidStart](https://start.solidjs.com/) browser-based AI harness for [OpenRou
 - **TanStack Query** for data loading on the client
 - **TanStack Markdown** + **TanStack Highlight** for message markdown and syntax-highlighted code blocks
 - **Sentry** — browser SDK (optional `VITE_SENTRY_DSN`)
-- **Pyodide** (loaded on demand from jsDelivr) for the Python tool
 
 ## Prerequisites
 
@@ -93,7 +92,7 @@ Browser                                              Worker (dumb proxy)
 │                  │                         │◀──────│  (streams back)     │
 │                  ▼                         │       └─────────────────────┘
 │            tools execute locally           │
-│  (sandboxed iframe → Web Worker / Pyodide) │
+│      (sandboxed iframe → Web Worker)       │
 └────────────────────────────────────────────┘
 ```
 
@@ -103,9 +102,9 @@ The proxy only forwards `v1/*` paths, the `Authorization` header (falling back t
 
 | Tool | Default | What it does |
 | --- | --- | --- |
+| `list_skills`, `create_skill`, `update_skill`, `set_skill_attached` | on | Lets the model manage your skill library and this chat's attached skills (takes effect next message) |
 | `get_current_datetime` | on | Local date, time, timezone, locale |
 | `run_javascript` | on | Runs JS in an isolated Web Worker (bare expressions or async function bodies; 15s timeout) |
-| `run_python` | off | Python via Pyodide with numpy/pandas/etc. auto-loaded; state persists per session (~10 MB first load; 60s timeout) |
 
 Code tools run inside a `sandbox="allow-scripts"` iframe (opaque origin), so they cannot read the app's localStorage, API key, or DOM. To add a tool, define it with `toolDefinition(...)` in `src/lib/harness/tools.ts` and append a descriptor to `HARNESS_TOOLS`; because `chat()` runs in the browser, `.server(execute)` tools execute locally.
 

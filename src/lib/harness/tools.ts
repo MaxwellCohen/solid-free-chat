@@ -88,16 +88,6 @@ const runJavaScriptTool = toolDefinition({
   inputSchema: codeInputSchema('JavaScript function body to execute.'),
 })
 
-const runPythonTool = toolDefinition({
-  name: 'run_python',
-  description:
-    'Execute Python 3 in the browser via Pyodide (WebAssembly). Prints are captured and the value of the last ' +
-    'expression is returned. Variables and imports persist between calls in this session. Packages bundled ' +
-    'with Pyodide (numpy, pandas, sympy, scipy, matplotlib, etc.) load automatically on import. No network ' +
-    'sockets or filesystem access to the user. The first call may take a few seconds to load. Times out after 60 seconds.',
-  inputSchema: codeInputSchema('Python source code to execute.'),
-})
-
 const SKILL_TIMING_NOTE =
   'Attached skills are added to the system prompt starting with the next user message.'
 
@@ -250,20 +240,7 @@ export const HARNESS_TOOLS: readonly HarnessToolDescriptor[] = [
       runJavaScriptTool.server(async (input) => {
         const { code } = input as { code: string }
         return sandboxResultToToolOutput(
-          await runInSandbox('javascript', code, { timeoutMs: 15_000 }),
-        )
-      }),
-  },
-  {
-    id: 'run_python',
-    label: 'Python (Pyodide)',
-    summary: 'Runs Python with numpy/pandas/sympy in WebAssembly. ~10 MB first load.',
-    enabledByDefault: false,
-    create: () =>
-      runPythonTool.server(async (input) => {
-        const { code } = input as { code: string }
-        return sandboxResultToToolOutput(
-          await runInSandbox('python', code, { timeoutMs: 60_000 }),
+          await runInSandbox(code, { timeoutMs: 15_000 }),
         )
       }),
   },

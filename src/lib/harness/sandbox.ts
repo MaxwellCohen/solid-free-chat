@@ -3,27 +3,19 @@
  *
  * Code runs in a Web Worker spawned inside a `sandbox="allow-scripts"` iframe
  * (opaque origin), so it cannot read the app's localStorage, cookies, API key,
- * or DOM. Each run has a hard timeout enforced by terminating the worker.
- *
- * - `javascript`: fresh worker per run.
- * - `python`: one long-lived Pyodide worker so variables/imports persist across
- *   calls; it is recreated after a timeout.
+ * or DOM. Each run gets a fresh worker and a hard timeout enforced by
+ * terminating it.
  */
-
-export type SandboxLanguage = 'javascript' | 'python'
 
 export type SandboxResult = {
   ok: boolean
-  /** Captured console / stdout / stderr lines. */
+  /** Captured console lines. */
   output: string
-  /** Stringified return value (JS) or last expression (Python). */
+  /** Stringified return value. */
   result?: string
   error?: string
   timedOut?: boolean
 }
-
-export const PYODIDE_VERSION = '0.29.5'
-const PYODIDE_INDEX_URL = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`
 
 const JS_WORKER_SOURCE = String.raw`
 const lines = []
@@ -59,94 +51,35 @@ self.onmessage = async (event) => {
 }
 `
 
-const PYTHON_WORKER_SOURCE = String.raw`
-importScripts(${JSON.stringify(`${PYODIDE_INDEX_URL}pyodide.js`)})
-const ready = loadPyodide({ indexURL: ${JSON.stringify(PYODIDE_INDEX_URL)} })
-self.onmessage = async (event) => {
-  const lines = []
-  let pyodide
-  try {
-    pyodide = await ready
-  } catch (err) {
-    self.postMessage({ ok: false, output: '', error: 'Failed to load Pyodide: ' + String(err) })
-    return
-  }
-  pyodide.setStdout({ batched: (s) => lines.push(s) })
-  pyodide.setStderr({ batched: (s) => lines.push('[stderr] ' + s) })
-  try {
-    await pyodide.loadPackagesFromImports(event.data.code, { messageCallback: () => {} })
-    let value = await pyodide.runPythonAsync(event.data.code)
-    let result
-    if (value !== undefined && value !== null) {
-      result = String(value)
-      if (typeof value.destroy === 'function') value.destroy()
-    }
-    self.postMessage({ ok: true, output: lines.join('\n'), result })
-  } catch (err) {
-    self.postMessage({ ok: false, output: lines.join('\n'), error: String(err && err.message || err) })
-  }
-}
-`
-
 /** Runs inside the sandboxed iframe; brokers runs between the app and workers. */
 const SANDBOX_HOST_SOURCE = String.raw`
-const sources = { javascript: ${JSON.stringify(JS_WORKER_SOURCE)}, python: ${JSON.stringify(PYTHON_WORKER_SOURCE)} }
-const urls = {}
-let pythonWorker = null
+const workerUrl = URL.createObjectURL(new Blob([${JSON.stringify(JS_WORKER_SOURCE)}], { type: 'text/javascript' }))
 
-function workerUrl(language) {
-  urls[language] ??= URL.createObjectURL(new Blob([sources[language]], { type: 'text/javascript' }))
-  return urls[language]
-}
-
-function acquire(language) {
-  if (language === 'python') {
-    pythonWorker ??= new Worker(workerUrl('python'))
-    return pythonWorker
-  }
-  return new Worker(workerUrl('javascript'))
-}
-
-function release(language, worker, kill) {
-  if (language === 'python' && !kill) return
-  worker.terminate()
-  if (language === 'python') pythonWorker = null
-}
-
-// Python runs are serialized so concurrent calls never share stdout capture.
-let pythonQueue = Promise.resolve()
-
-function run({ id, language, code, timeoutMs }) {
-  const exec = () => new Promise((resolve) => {
+function run({ id, code, timeoutMs }) {
+  return new Promise((resolve) => {
     let worker
     try {
-      worker = acquire(language)
+      worker = new Worker(workerUrl)
     } catch (err) {
       resolve({ id, ok: false, output: '', error: 'Could not start sandbox worker: ' + String(err) })
       return
     }
     const timer = setTimeout(() => {
-      worker.onmessage = null
-      release(language, worker, true)
-      resolve({ id, ok: false, output: '', timedOut: true, error: 'Timed out after ' + timeoutMs + 'ms' + (language === 'python' ? ' (Python state was reset)' : '') })
+      worker.terminate()
+      resolve({ id, ok: false, output: '', timedOut: true, error: 'Timed out after ' + timeoutMs + 'ms' })
     }, timeoutMs)
     worker.onmessage = (event) => {
       clearTimeout(timer)
-      worker.onmessage = null
-      release(language, worker, false)
+      worker.terminate()
       resolve({ id, ...event.data })
     }
     worker.onerror = (event) => {
       clearTimeout(timer)
-      release(language, worker, true)
+      worker.terminate()
       resolve({ id, ok: false, output: '', error: event.message || 'Worker error' })
     }
     worker.postMessage({ code })
   })
-  if (language !== 'python') return exec()
-  const next = pythonQueue.then(exec)
-  pythonQueue = next.catch(() => {})
-  return next
 }
 
 window.addEventListener('message', async (event) => {
@@ -199,7 +132,6 @@ function ensureFrame(): Promise<HTMLIFrameElement> {
 }
 
 export async function runInSandbox(
-  language: SandboxLanguage,
   code: string,
   options: { timeoutMs: number; signal?: AbortSignal },
 ): Promise<SandboxResult> {
@@ -229,13 +161,13 @@ export async function runInSandbox(
       resolve(result)
     })
     el.contentWindow?.postMessage(
-      { type: 'run', id, language, code, timeoutMs: options.timeoutMs },
+      { type: 'run', id, code, timeoutMs: options.timeoutMs },
       '*',
     )
   })
 }
 
-/** Tear down the sandbox (drops Python state). */
+/** Tear down the sandbox iframe. */
 export function resetSandbox() {
   for (const done of pending.values()) {
     done({ ok: false, output: '', error: 'Sandbox was reset.' })
