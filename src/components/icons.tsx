@@ -4,6 +4,7 @@ import type { JSX } from '@solidjs/web'
 
 import checkCircle2 from 'lucide/dist/esm/icons/circle-check.mjs'
 import chevronRight from 'lucide/dist/esm/icons/chevron-right.mjs'
+import circleAlert from 'lucide/dist/esm/icons/circle-alert.mjs'
 import fileText from 'lucide/dist/esm/icons/file-text.mjs'
 import image from 'lucide/dist/esm/icons/image.mjs'
 import keyRound from 'lucide/dist/esm/icons/key-round.mjs'
@@ -17,6 +18,7 @@ import rotateCw from 'lucide/dist/esm/icons/rotate-cw.mjs'
 import share2 from 'lucide/dist/esm/icons/share-2.mjs'
 import squarePen from 'lucide/dist/esm/icons/square-pen.mjs'
 import sun from 'lucide/dist/esm/icons/sun.mjs'
+import wrench from 'lucide/dist/esm/icons/wrench.mjs'
 import x from 'lucide/dist/esm/icons/x.mjs'
 
 type IconNode = ReadonlyArray<readonly [string, Record<string, string>]>
@@ -53,6 +55,7 @@ function createIcon(icon: IconNode) {
 
 export const CheckCircle2 = createIcon(checkCircle2)
 export const ChevronRight = createIcon(chevronRight)
+export const CircleAlert = createIcon(circleAlert)
 export const Computer = createIcon(monitor)
 export const FileText = createIcon(fileText)
 export const Image = createIcon(image)
@@ -66,4 +69,5 @@ export const RotateCw = createIcon(rotateCw)
 export const Share2 = createIcon(share2)
 export const SquarePen = createIcon(squarePen)
 export const Sun = createIcon(sun)
+export const Wrench = createIcon(wrench)
 export const X = createIcon(x)

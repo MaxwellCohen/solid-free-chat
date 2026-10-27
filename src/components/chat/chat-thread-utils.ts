@@ -66,15 +66,6 @@ export function isImageFile(file: File): boolean {
   return file.type.startsWith('image/') || IMAGE_EXT_RE.test(file.name)
 }
 
-export function isAsyncIterable<T>(value: unknown): value is AsyncIterable<T> {
-  if (value == null || typeof value !== 'object') return false
-  return (
-    typeof (value as { [Symbol.asyncIterator]?: unknown })[
-      Symbol.asyncIterator
-    ] === 'function'
-  )
-}
-
 export type PendingImage = {
   id: string
   mimeType: string

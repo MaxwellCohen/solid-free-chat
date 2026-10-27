@@ -22,6 +22,7 @@ function toPersistedChatState(state: ChatAppState): ChatAppState {
     currentConversationId: state.currentConversationId,
     selectedModel: state.selectedModel,
     skills: state.skills,
+    enabledToolIds: state.enabledToolIds,
   }
 }
 

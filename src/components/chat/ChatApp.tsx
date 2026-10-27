@@ -9,9 +9,10 @@ import { isServer } from '@solidjs/web'
 import { loadChatState, startChatPersistence } from '../../lib/chat-persistence'
 import { buildShareLink } from '../../lib/chat-share'
 import type { ChatModelOption } from '../../lib/chat-models'
-import { DEFAULT_CHAT_MODEL } from '../../lib/chat-models'
+import { DEFAULT_CHAT_MODEL, modelSupportsTools } from '../../lib/chat-models'
 import { findMatchingShortcut } from '../../lib/keyboard-shortcuts'
-import { getFreeChatModels } from '../../server/openrouter-fns'
+import { HARNESS_TOOLS } from '../../lib/harness/tools'
+import { getFreeTextChatModelOptionsCached } from '../../lib/openrouter-models'
 import { useChatActions, useChatStore } from '../../store/chat.hooks'
 import { chatSelectors, chatStore } from '../../store/chat.store'
 import ChatThread from './ChatThread'
@@ -38,6 +39,7 @@ export default function ChatApp() {
     return state.conversationsById[id]?.skillIds ?? []
   })
   const selectedModel = useChatStore((state) => state.selectedModel)
+  const enabledToolIds = useChatStore((state) => state.enabledToolIds)
   /** Input value while typing (does not trigger model refetch). */
   const [openRouterApiKeyDraft, setOpenRouterApiKeyDraft] = createSignal('')
   /** Last committed value (blur): sent to server fns for OpenRouter; optional `.env` fallback for local dev only. */
@@ -73,13 +75,7 @@ export default function ChatApp() {
       setModelListError(undefined)
       void (async () => {
         try {
-          const trimmed = applied.trim()
-          const list = await getFreeChatModels({
-            data: { apiKey: trimmed || undefined },
-            ...(trimmed
-              ? { headers: { Authorization: `Bearer ${trimmed}` } }
-              : {}),
-          })
+          const list = await getFreeTextChatModelOptionsCached(applied.trim())
           if (cancelled) return
           setModelList(list)
         } catch (error) {
@@ -427,6 +423,10 @@ export default function ChatApp() {
           shareFeedback={shareFeedback}
           onShare={() => void shareCurrentChat()}
           onOpenShortcuts={() => setShortcutsHelpOpen(true)}
+          tools={HARNESS_TOOLS}
+          enabledToolIds={enabledToolIds}
+          toolsSupported={() => modelSupportsTools(selectedModelMeta())}
+          onToggleTool={(toolId) => actions.toggleTool(toolId)}
         />
 
         <Show when={currentConversationId()} keyed>
@@ -440,6 +440,7 @@ export default function ChatApp() {
                   conversationId={id}
                   initialMessages={initialMessages}
                   inputModalities={selectedModelMeta()?.inputModalities}
+                  supportsTools={modelSupportsTools(selectedModelMeta())}
                   openRouterApiKey={openRouterApiKeyApplied()}
                   onLoadingChange={setCurrentConversationLoading}
                   onRegisterStop={(stop) => {

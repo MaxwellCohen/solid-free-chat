@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as ShareRouteImport } from './routes/share'
 import { Route as ExampleChatRouteImport } from './routes/example.chat'
+import { Route as ApiOpenrouterSplatRouteImport } from './routes/api/openrouter/$'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -34,18 +35,25 @@ const ExampleChatRoute = ExampleChatRouteImport.update({
   path: '/example/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiOpenrouterSplatRoute = ApiOpenrouterSplatRouteImport.update({
+  id: '/api/openrouter/$',
+  path: '/api/openrouter/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/share': typeof ShareRoute
   '/example/chat': typeof ExampleChatRoute
+  '/api/openrouter/$': typeof ApiOpenrouterSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/share': typeof ShareRoute
   '/example/chat': typeof ExampleChatRoute
+  '/api/openrouter/$': typeof ApiOpenrouterSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,20 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/share': typeof ShareRoute
   '/example/chat': typeof ExampleChatRoute
+  '/api/openrouter/$': typeof ApiOpenrouterSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about' | '/share' | '/example/chat'
+  fullPaths: '/' | '/about' | '/share' | '/example/chat' | '/api/openrouter/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about' | '/share' | '/example/chat'
-  id: '__root__' | '/' | '/about' | '/share' | '/example/chat'
+  to: '/' | '/about' | '/share' | '/example/chat' | '/api/openrouter/$'
+  id:
+    | '__root__'
+    | '/'
+    | '/about'
+    | '/share'
+    | '/example/chat'
+    | '/api/openrouter/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +82,7 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   ShareRoute: typeof ShareRoute
   ExampleChatRoute: typeof ExampleChatRoute
+  ApiOpenrouterSplatRoute: typeof ApiOpenrouterSplatRoute
 }
 
 declare module '@tanstack/solid-router' {
@@ -99,6 +115,13 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof ExampleChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/openrouter/$': {
+      id: '/api/openrouter/$'
+      path: '/api/openrouter/$'
+      fullPath: '/api/openrouter/$'
+      preLoaderRoute: typeof ApiOpenrouterSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -107,6 +130,7 @@ const rootRouteChildren: RootRouteChildren = {
   AboutRoute: AboutRoute,
   ShareRoute: ShareRoute,
   ExampleChatRoute: ExampleChatRoute,
+  ApiOpenrouterSplatRoute: ApiOpenrouterSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
