@@ -146,7 +146,7 @@ function SharedMessageBubble(props: { message: ChatUIMessage }) {
     >
       <div
         class={[
-          'max-w-[min(100%,42rem)] rounded-2xl px-4 py-3 text-sm shadow-sm',
+          'max-w-[min(100%,42rem)] min-w-0 rounded-2xl px-3 py-2.5 text-sm [overflow-wrap:anywhere] shadow-sm sm:px-4 sm:py-3',
           {
             'bg-[var(--primary)] text-[var(--primary-foreground)]':
               props.message.role === 'user',

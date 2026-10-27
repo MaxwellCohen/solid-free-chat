@@ -27,7 +27,7 @@ type ChatAppModelToolbarProps = {
 
 export function ChatAppModelToolbar(props: ChatAppModelToolbarProps) {
   return (
-    <header class="border-border flex shrink-0 flex-col gap-3 border-b px-3 py-3 sm:px-6">
+    <header class="border-border flex shrink-0 flex-col gap-2 border-b px-3 py-2 sm:gap-3 sm:px-6 sm:py-3">
       <ToolbarRow props={props} />
       <Show when={props.shareFeedback()} keyed>
         {(message) => (
@@ -46,7 +46,7 @@ export function ChatAppModelToolbar(props: ChatAppModelToolbarProps) {
 
 function ToolbarRow(props: { props: ChatAppModelToolbarProps }) {
   return (
-    <div class="flex min-w-0 flex-nowrap items-center gap-2 sm:gap-3">
+    <div class="flex min-w-0 flex-wrap items-center gap-2 sm:flex-nowrap sm:gap-3">
       <SidebarToggleButton props={props.props} />
       <ModelPicker props={props.props} />
       <ToolsMenu props={props.props} />
@@ -129,7 +129,7 @@ function ShortcutsButton(props: { onOpen: () => void }) {
   return (
     <button
       type="button"
-      class="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex shrink-0 items-center justify-center rounded-lg p-2"
+      class="text-muted-foreground hover:bg-muted hover:text-foreground hidden shrink-0 items-center justify-center rounded-lg p-2 sm:inline-flex"
       onClick={() => props.onOpen()}
       title="Keyboard shortcuts"
       aria-label="Keyboard shortcuts"
@@ -160,13 +160,14 @@ function SidebarToggleButton(props: { props: ChatAppModelToolbarProps }) {
     <Show when={!props.props.sidebarOpen()}>
       <button
         type="button"
-        class="text-muted-foreground bg-muted/60 hover:bg-muted inline-flex shrink-0 items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm font-medium sm:hidden"
+        class="text-muted-foreground bg-muted/60 hover:bg-muted inline-flex shrink-0 items-center gap-2 rounded-lg p-2 text-sm font-medium sm:hidden"
         onClick={props.props.onToggleSidebar}
+        title="Show chat list"
+        aria-label="Show chat list"
         aria-expanded="false"
         aria-controls="chat-sidebar"
       >
         <PanelLeft class="size-4 shrink-0" aria-hidden="true" />
-        Chats
       </button>
     </Show>
   )
@@ -175,7 +176,7 @@ function SidebarToggleButton(props: { props: ChatAppModelToolbarProps }) {
 function ModelPicker(props: { props: ChatAppModelToolbarProps }) {
   return (
     <label class="text-muted-foreground flex min-w-0 flex-1 items-center gap-2 text-sm">
-      <span class="shrink-0 whitespace-nowrap">Model</span>
+      <span class="shrink-0 whitespace-nowrap max-sm:sr-only">Model</span>
       <select
         class="border-input bg-background min-w-0 flex-1 rounded-lg border px-2 py-1.5 text-sm"
         value={props.props.selectedModel()}
@@ -244,13 +245,13 @@ function ModelStatusMessage(props: { props: ChatAppModelToolbarProps }) {
     <>
       <Show when={props.props.modelListError()} keyed>
         {(err) => (
-          <span class="text-destructive min-w-0 truncate text-xs">
+          <span class="text-destructive min-w-0 truncate text-xs max-sm:basis-full">
             {err instanceof Error ? err.message : String(err)}
           </span>
         )}
       </Show>
       <Show when={props.props.modelListEmpty()}>
-        <span class="text-muted-foreground min-w-0 truncate text-xs">
+        <span class="text-muted-foreground min-w-0 truncate text-xs max-sm:basis-full">
           No free text models returned for your API key.
         </span>
       </Show>

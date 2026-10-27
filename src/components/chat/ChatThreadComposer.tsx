@@ -31,7 +31,7 @@ type ChatThreadComposerProps = {
 export function ChatThreadComposer(props: ChatThreadComposerProps) {
   return (
     <form
-      class="border-t border-border bg-card shrink-0 p-3 sm:p-4"
+      class="border-t border-border bg-card shrink-0 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4"
       onSubmit={props.onSubmit}
     >
       <div class="mx-auto flex max-w-3xl flex-col gap-2">

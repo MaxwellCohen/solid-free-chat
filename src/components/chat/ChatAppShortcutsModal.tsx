@@ -40,7 +40,7 @@ function ShortcutsModalDialog(props: { onClose: () => void }) {
         aria-modal="true"
         aria-labelledby="keyboard-shortcuts-modal-title"
         tabindex="-1"
-        class="border-border bg-card text-card-foreground relative z-10 flex max-h-[min(85dvh,32rem)] w-full max-w-md flex-col gap-4 overflow-y-auto rounded-t-xl border p-4 shadow-lg sm:rounded-xl"
+        class="border-border bg-card text-card-foreground relative z-10 flex max-h-[min(85dvh,32rem)] w-full max-w-md flex-col gap-4 overflow-y-auto rounded-t-xl border p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-lg sm:rounded-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div class="flex items-start justify-between gap-3">

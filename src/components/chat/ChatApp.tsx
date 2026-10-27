@@ -26,6 +26,12 @@ import { ChatAppShortcutsModal } from './ChatAppShortcutsModal'
 import { ChatAppSidebar } from './ChatAppSidebar'
 import { ChatAppSkillsModal } from './ChatAppSkillsModal'
 
+/** Matches Tailwind's `max-sm` breakpoint, where the sidebar is an overlay drawer. */
+function isNarrowViewport() {
+  if (typeof window === 'undefined') return false
+  return window.matchMedia('(max-width: 639.98px)').matches
+}
+
 export default function ChatApp() {
   const actions = useChatActions()
   const currentConversationId = useChatStore((state) => state.currentConversationId)
@@ -54,8 +60,6 @@ export default function ChatApp() {
   const [openRouterApiKeyModalOpen, setOpenRouterApiKeyModalOpen] =
     createSignal(false)
   const [shortcutsHelpOpen, setShortcutsHelpOpen] = createSignal(false)
-  /** Below `sm`: one panel for skills + conversation list. */
-  const [mobileSidebarPanelOpen, setMobileSidebarPanelOpen] = createSignal(true)
   const [shareBusy, setShareBusy] = createSignal(false)
   const [shareFeedback, setShareFeedback] = createSignal<string | null>(null)
   let stopStreaming: (() => void) | null = null
@@ -107,7 +111,11 @@ export default function ChatApp() {
   onSettled(() => {
     if (typeof window === 'undefined') return
     try {
-      if (localStorage.getItem(SIDEBAR_OPEN_LS_KEY) === '1') {
+      // Narrow screens start with the drawer closed so the chat is visible.
+      if (
+        localStorage.getItem(SIDEBAR_OPEN_LS_KEY) === '1' &&
+        !isNarrowViewport()
+      ) {
         setSidebarOpen(true)
       }
     } catch {
@@ -243,8 +251,7 @@ export default function ChatApp() {
   }
 
   function collapseSidebarIfNarrow() {
-    if (typeof window === 'undefined') return
-    if (!window.matchMedia('(max-width: 639.98px)').matches) return
+    if (!isNarrowViewport()) return
     setSidebarOpen(false)
     try {
       localStorage.setItem(SIDEBAR_OPEN_LS_KEY, '0')
@@ -296,6 +303,11 @@ export default function ChatApp() {
       if (currentConversationLoading()) {
         event.preventDefault()
         stopStreaming?.()
+        return
+      }
+      if (sidebarOpen() && isNarrowViewport()) {
+        event.preventDefault()
+        collapseSidebarIfNarrow()
       }
       return
     }
@@ -397,10 +409,6 @@ export default function ChatApp() {
         openRouterApiKeyApplied={openRouterApiKeyApplied}
         openRouterApiKeyModalOpen={openRouterApiKeyModalOpen}
         onOpenOpenRouterModal={openOpenRouterApiKeyModal}
-        mobileSidebarPanelOpen={mobileSidebarPanelOpen}
-        onToggleMobileSidebarPanel={() =>
-          setMobileSidebarPanelOpen((open) => !open)
-        }
         skillsPreview={skillsPreview}
         attachedSkillNames={attachedSkillNames}
         onOpenSkillsLibrary={() => setSkillsLibraryOpen(true)}

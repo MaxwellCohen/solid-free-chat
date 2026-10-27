@@ -101,7 +101,7 @@ function SkillsModalDialog(props: {
         aria-modal="true"
         aria-labelledby="skills-modal-title"
         tabindex="-1"
-        class="border-border bg-card text-card-foreground relative z-10 flex max-h-[min(90dvh,40rem)] w-full max-w-lg flex-col gap-4 rounded-t-xl border p-4 shadow-lg sm:rounded-xl"
+        class="border-border bg-card text-card-foreground relative z-10 flex max-h-[min(90dvh,40rem)] w-full max-w-lg flex-col gap-4 rounded-t-xl border p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-lg sm:rounded-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div class="flex items-start justify-between gap-3">

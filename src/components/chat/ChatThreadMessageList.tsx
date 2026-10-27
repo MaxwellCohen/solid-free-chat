@@ -100,7 +100,7 @@ function VirtualChatMessage(props: {
         >
           <div
             class={[
-              'flex max-w-[min(100%,42rem)] flex-col gap-1',
+              'flex min-w-0 max-w-[min(100%,42rem)] flex-col gap-1',
               {
                 'items-end': msg().role === 'user',
                 'items-start': msg().role !== 'user',
@@ -133,7 +133,7 @@ function MessageBubble(props: { message: ChatUIMessage }) {
   return (
     <div
       class={[
-        'rounded-2xl px-4 py-3 text-sm shadow-sm',
+        'max-w-full min-w-0 rounded-2xl px-3 py-2.5 text-sm [overflow-wrap:anywhere] shadow-sm sm:px-4 sm:py-3',
         {
           'bg-[var(--primary)] text-[var(--primary-foreground)]':
             props.message.role === 'user',
