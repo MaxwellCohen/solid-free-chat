@@ -1,6 +1,11 @@
 import { Store } from '@tanstack/store'
 import type { UIMessage } from '@tanstack/ai-client'
 import { DEFAULT_CHAT_MODEL } from '../lib/chat-models'
+import {
+  DEFAULT_ENABLED_TOOL_IDS,
+  isKnownToolId,
+} from '../lib/harness/tools'
+import type { HarnessSkillsApi } from '../lib/harness/tools'
 
 /** Token counts from the provider for one completed model run (see RUN_FINISHED). */
 export interface TokenUsageSnapshot {
@@ -46,6 +51,8 @@ export interface ChatAppState {
   currentConversationId: string | null
   selectedModel: string
   skills: ChatSkill[]
+  /** Browser-local harness tools offered to the model (see `lib/harness/tools`). */
+  enabledToolIds: string[]
 }
 
 type LegacyChatConversation = ChatConversationWithMessages & {
@@ -69,6 +76,7 @@ type PersistedChatState = {
   selectedModel?: unknown
   savedSystemPrompts?: unknown
   skills?: unknown
+  enabledToolIds?: unknown
 }
 
 export const NEW_CHAT_TITLE = 'New chat'
@@ -80,6 +88,7 @@ const emptyState = (): ChatAppState => ({
   currentConversationId: null,
   selectedModel: DEFAULT_CHAT_MODEL,
   skills: [],
+  enabledToolIds: [...DEFAULT_ENABLED_TOOL_IDS],
 })
 
 export const chatStore = new Store<ChatAppState>(emptyState())
@@ -373,7 +382,17 @@ function normalizePersistedChatState(raw: unknown): ChatAppState | null {
         ? source.selectedModel
         : DEFAULT_CHAT_MODEL,
     skills,
+    enabledToolIds: normalizeEnabledToolIds(source.enabledToolIds),
   }
+}
+
+/** Missing (older saves) → defaults; unknown ids are dropped. */
+function normalizeEnabledToolIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [...DEFAULT_ENABLED_TOOL_IDS]
+  const ids = raw.filter(
+    (id): id is string => typeof id === 'string' && isKnownToolId(id),
+  )
+  return [...new Set(ids)]
 }
 
 function normalizeLegacyChatState(raw: LegacyChatAppState): ChatAppState | null {
@@ -412,6 +431,7 @@ function normalizeLegacyChatState(raw: LegacyChatAppState): ChatAppState | null 
         ? raw.selectedModel
         : DEFAULT_CHAT_MODEL,
     skills,
+    enabledToolIds: [...DEFAULT_ENABLED_TOOL_IDS],
   }
 }
 
@@ -522,6 +542,16 @@ export const chatActions = {
 
   setSelectedModel(model: string) {
     chatStore.setState((s) => ({ ...s, selectedModel: model }))
+  },
+
+  toggleTool(toolId: string) {
+    if (!isKnownToolId(toolId)) return
+    chatStore.setState((s) => ({
+      ...s,
+      enabledToolIds: s.enabledToolIds.includes(toolId)
+        ? s.enabledToolIds.filter((id) => id !== toolId)
+        : [...s.enabledToolIds, toolId],
+    }))
   },
 
   addSkill(name: string, instructions: string) {
@@ -771,4 +801,38 @@ function deriveTitleFromMessages(messages: UIMessage[]): string | null {
     }
   }
   return null
+}
+
+/** Skill operations for harness tools, scoped to one conversation's attachments. */
+export function createConversationSkillsApi(conversationId: string): HarnessSkillsApi {
+  const attachedIds = () =>
+    chatStore.state.conversationsById[conversationId]?.skillIds ?? []
+  const exists = (skillId: string) =>
+    chatStore.state.skills.some((skill) => skill.id === skillId)
+  return {
+    list: () => {
+      const attached = new Set(attachedIds())
+      return chatStore.state.skills.map((skill) => ({
+        id: skill.id,
+        name: skill.name,
+        instructions: skill.instructions,
+        attached: attached.has(skill.id),
+      }))
+    },
+    create: (name, instructions) => chatActions.addSkill(name, instructions),
+    update: (skillId, patch) => {
+      if (!exists(skillId)) return false
+      const before = chatStore.state.skills.find((skill) => skill.id === skillId)
+      chatActions.updateSkill(skillId, patch)
+      return chatStore.state.skills.find((skill) => skill.id === skillId) !== before
+    },
+    setAttached: (skillId, attached) => {
+      if (!exists(skillId)) return false
+      if (!(conversationId in chatStore.state.conversationsById)) return false
+      if (attachedIds().includes(skillId) !== attached) {
+        chatActions.toggleConversationSkill(conversationId, skillId)
+      }
+      return true
+    },
+  }
 }

@@ -1,6 +1,7 @@
 import { For, Show } from 'solid-js'
-import { Keyboard, LoaderCircle, PanelLeft, Share2 } from '../icons'
+import { Keyboard, LoaderCircle, PanelLeft, Share2, Wrench } from '../icons'
 import type { ChatModelOption } from '../../lib/chat-models'
+import type { HarnessToolDescriptor } from '../../lib/harness/tools'
 
 type ChatAppModelToolbarProps = {
   sidebarOpen: () => boolean
@@ -18,6 +19,10 @@ type ChatAppModelToolbarProps = {
   shareFeedback: () => string | null
   onShare: () => void
   onOpenShortcuts: () => void
+  tools: readonly HarnessToolDescriptor[]
+  enabledToolIds: () => string[]
+  toolsSupported: () => boolean
+  onToggleTool: (toolId: string) => void
 }
 
 export function ChatAppModelToolbar(props: ChatAppModelToolbarProps) {
@@ -44,11 +49,79 @@ function ToolbarRow(props: { props: ChatAppModelToolbarProps }) {
     <div class="flex min-w-0 flex-nowrap items-center gap-2 sm:gap-3">
       <SidebarToggleButton props={props.props} />
       <ModelPicker props={props.props} />
+      <ToolsMenu props={props.props} />
       <ShareButton props={props.props} />
       <ShortcutsButton onOpen={props.props.onOpenShortcuts} />
       <StreamingIndicator isStreaming={props.props.isStreaming} />
       <ModelStatusMessage props={props.props} />
     </div>
+  )
+}
+
+function ToolsMenu(props: { props: ChatAppModelToolbarProps }) {
+  let details: HTMLDetailsElement | undefined
+  const enabledCount = () => props.props.enabledToolIds().length
+  const isEnabled = (id: string) => props.props.enabledToolIds().includes(id)
+
+  return (
+    <details
+      ref={details}
+      class="relative shrink-0"
+      onFocusOut={(e) => {
+        const next = e.relatedTarget as Node | null
+        if (details && (!next || !details.contains(next))) details.open = false
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && details?.open) {
+          e.stopPropagation()
+          details.open = false
+          details.querySelector('summary')?.focus()
+        }
+      }}
+    >
+      <summary
+        class="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex cursor-pointer list-none items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
+        title="Browser tools available to the model"
+        aria-label={`Tools (${enabledCount()} enabled)`}
+      >
+        <Wrench class="size-4 shrink-0" aria-hidden="true" />
+        <span class="hidden sm:inline">Tools</span>
+        <Show when={enabledCount() > 0}>
+          <span class="bg-muted text-foreground rounded px-1.5 text-xs tabular-nums">
+            {enabledCount()}
+          </span>
+        </Show>
+      </summary>
+      <div class="border-border bg-background absolute right-0 z-20 mt-2 w-72 rounded-xl border p-2 shadow-lg">
+        <p class="text-muted-foreground px-2 pt-1 pb-2 text-xs">
+          Tools run locally in your browser.
+        </p>
+        <Show when={!props.props.toolsSupported()}>
+          <p class="text-destructive px-2 pb-2 text-xs">
+            The selected model does not support tool calling, so tools are
+            disabled for it.
+          </p>
+        </Show>
+        <For each={props.props.tools}>
+          {(tool) => (
+            <label class="hover:bg-muted/60 flex cursor-pointer items-start gap-2.5 rounded-lg px-2 py-2">
+              <input
+                type="checkbox"
+                class="mt-0.5"
+                checked={isEnabled(tool.id)}
+                onChange={() => props.props.onToggleTool(tool.id)}
+              />
+              <span class="min-w-0">
+                <span class="block text-sm font-medium">{tool.label}</span>
+                <span class="text-muted-foreground block text-xs">
+                  {tool.summary}
+                </span>
+              </span>
+            </label>
+          )}
+        </For>
+      </div>
+    </details>
   )
 }
 

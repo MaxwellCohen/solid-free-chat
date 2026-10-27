@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_CHAT_MODEL } from '../lib/chat-models'
+import { DEFAULT_ENABLED_TOOL_IDS } from '../lib/harness/tools'
 import { normalizeChatAppState } from './chat.store'
 
 describe('normalizeChatAppState', () => {
@@ -103,5 +104,29 @@ describe('normalizeChatAppState', () => {
     expect(state).not.toBeNull()
     expect(state!.conversationsById.c3.skillIds).toEqual([])
     expect(state!.selectedModel).toBe(DEFAULT_CHAT_MODEL)
+  })
+
+  it('defaults enabled tools for older saves and drops unknown tool ids', () => {
+    const base = {
+      conversationOrder: [],
+      conversationsById: {},
+      messagesByConversationId: {},
+      currentConversationId: null,
+      selectedModel: DEFAULT_CHAT_MODEL,
+      skills: [],
+    }
+
+    expect(normalizeChatAppState(base)!.enabledToolIds).toEqual(
+      DEFAULT_ENABLED_TOOL_IDS,
+    )
+    expect(
+      normalizeChatAppState({
+        ...base,
+        enabledToolIds: ['run_javascript', 'removed_tool', 'run_javascript'],
+      })!.enabledToolIds,
+    ).toEqual(['run_javascript'])
+    expect(
+      normalizeChatAppState({ ...base, enabledToolIds: [] })!.enabledToolIds,
+    ).toEqual([])
   })
 })

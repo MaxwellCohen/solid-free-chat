@@ -10,8 +10,8 @@ import { stream } from '@tanstack/ai-client'
 import type { UIMessage } from '@tanstack/ai-client'
 import { useChat } from '../../lib/use-chat'
 import type { ContentPart, StreamChunk } from '@tanstack/ai'
-import { useServerFn } from '@tanstack/solid-start'
-import { streamOpenRouterChat } from '../../server/openrouter-fns'
+import { runAgent } from '../../lib/harness/run-agent'
+import { createEnabledTools } from '../../lib/harness/tools'
 import {
   modelSupportsDocumentInput,
   modelSupportsImageInput,
@@ -20,6 +20,7 @@ import { composeSystemPrompt } from '../../lib/compose-system-prompt'
 import {
   attachTokenUsageToLastAssistantMessage,
   chatActions,
+  createConversationSkillsApi,
 } from '../../store/chat.store'
 import type { ChatUIMessage, TokenUsageSnapshot } from '../../store/chat.store'
 import { useChatStore } from '../../store/chat.hooks'
@@ -30,7 +31,6 @@ import {
   MAX_IMAGE_BYTES,
   MAX_PDF_BYTES,
   formatTokenCount,
-  isAsyncIterable,
   isImageFile,
   isPdfFile,
   parseDataUrl,
@@ -39,19 +39,13 @@ import {
   userMessageToResendParts,
 } from './chat-thread-utils'
 
-type StreamFactory = Parameters<typeof stream>[0]
-type ServerStreamChunk =
-  Awaited<
-    ReturnType<StreamFactory>[typeof Symbol.asyncIterator]
-  > extends AsyncIterator<infer T>
-    ? T
-    : never
-
 export default function ChatThread(props: {
   conversationId: string
   initialMessages: ChatUIMessage[]
   inputModalities?: string[]
-  /** Committed key from the client (after blur); optional server env only for local dev. */
+  /** Whether the selected model accepts tool definitions. */
+  supportsTools: boolean
+  /** Committed key from the client (after blur); optional proxy env only for local dev. */
   openRouterApiKey: string
   onLoadingChange: (isLoading: boolean) => void
   onRegisterStop?: (stop: (() => void) | null) => void
@@ -63,6 +57,7 @@ export default function ChatThread(props: {
           conversationId={conversationId}
           initialMessages={props.initialMessages}
           inputModalities={props.inputModalities}
+          supportsTools={props.supportsTools}
           openRouterApiKey={props.openRouterApiKey}
           onLoadingChange={props.onLoadingChange}
           onRegisterStop={props.onRegisterStop}
@@ -76,7 +71,8 @@ function ChatThreadSession(props: {
   conversationId: string
   initialMessages: ChatUIMessage[]
   inputModalities?: string[]
-  /** Committed key from the client (after blur); optional server env only for local dev. */
+  supportsTools: boolean
+  /** Committed key from the client (after blur); optional proxy env only for local dev. */
   openRouterApiKey: string
   onLoadingChange: (isLoading: boolean) => void
   onRegisterStop?: (stop: (() => void) | null) => void
@@ -158,6 +154,7 @@ function ChatThreadSession(props: {
     (state) => state.conversationsById[conversationId]?.skillIds ?? [],
   )
   const skills = useChatStore((state) => state.skills)
+  const enabledToolIds = useChatStore((state) => state.enabledToolIds)
   const sessionTotalTokens = useChatStore(
     (state) => state.conversationsById[conversationId]?.sessionTotalTokens,
   )
@@ -166,8 +163,6 @@ function ChatThreadSession(props: {
     if (typeof session !== 'number' || session <= 0) return ''
     return ` · This chat: ~${formatTokenCount(session)} tokens total`
   })
-
-  const streamChat = useServerFn(streamOpenRouterChat)
 
   const chat = useChat({
     id: conversationId,
@@ -205,42 +200,20 @@ function ChatThreadSession(props: {
         chat.setMessages(next as UIMessage[])
       })
     },
-    connection: stream(async function* (messages, data) {
-      const fromBody =
-        data &&
-        typeof data === 'object' &&
-        'apiKey' in data &&
-        typeof (data as { apiKey?: unknown }).apiKey === 'string'
-          ? (data as { apiKey: string }).apiKey.trim()
-          : ''
-      const trimmedKey =
-        fromBody || props.openRouterApiKey.trim() || undefined
-      const chunks = await streamChat({
-        data: {
-          messages,
-          ...(trimmedKey ? { apiKey: trimmedKey } : {}),
-          data: {
-            ...data,
-            model: selectedModel(),
-            systemPrompt: composeSystemPrompt(skillIds(), skills()),
-            ...(trimmedKey ? { apiKey: trimmedKey } : {}),
-          },
-        },
-        ...(trimmedKey
-          ? {
-              headers: {
-                Authorization: `Bearer ${trimmedKey}`,
-              },
-            }
-          : {}),
-      })
-      if (!isAsyncIterable<ServerStreamChunk>(chunks)) {
-        throw new Error(
-          'streamOpenRouterChat did not return an iterable stream. Check the server function and API key.',
-        )
-      }
-      yield* chunks
-    }),
+    connection: stream((messages, _data, abortSignal) =>
+      runAgent({
+        apiKey: props.openRouterApiKey.trim(),
+        model: selectedModel(),
+        messages,
+        systemPrompt: composeSystemPrompt(skillIds(), skills()),
+        tools: props.supportsTools
+          ? createEnabledTools(enabledToolIds(), {
+              skills: createConversationSkillsApi(conversationId),
+            })
+          : [],
+        abortSignal,
+      }),
+    ),
     onFinish: () => {
       commitConversationMessages()
     },

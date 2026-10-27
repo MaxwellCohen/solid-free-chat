@@ -19,6 +19,8 @@ export interface OpenRouterUserModelRow {
   name: string
   pricing: OpenRouterModelPricing
   architecture: OpenRouterModelArchitecture
+  /** OpenRouter request params the model accepts (e.g. `tools`). */
+  supported_parameters?: string[]
 }
 
 export interface ChatModelOption {
@@ -26,6 +28,8 @@ export interface ChatModelOption {
   name: string
   /** From OpenRouter `architecture.input_modalities`; controls upload UI. */
   inputModalities?: string[]
+  /** From OpenRouter `supported_parameters`; `undefined` when unknown. */
+  supportsTools?: boolean
 }
 
 function coercePricingScalar(v: unknown): number | null {
@@ -79,6 +83,9 @@ export function toFreeTextChatOptions(
     id: m.id,
     name: m.name,
     inputModalities: m.architecture.input_modalities,
+    supportsTools: m.supported_parameters
+      ? m.supported_parameters.includes('tools')
+      : undefined,
   }))
   options.sort((a, b) =>
     a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
@@ -116,4 +123,10 @@ export function modelSupportsDocumentInput(
 ): boolean {
   if (inputModalities === undefined) return true
   return inputModalities.includes('document')
+}
+
+export function modelSupportsTools(model: ChatModelOption | undefined): boolean {
+  // Unknown metadata: let OpenRouter decide (the Free Models Router picks a
+  // tool-capable model when tools are sent).
+  return model?.supportsTools !== false
 }
