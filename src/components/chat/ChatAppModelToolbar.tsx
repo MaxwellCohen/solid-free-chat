@@ -60,8 +60,11 @@ function ToolbarRow(props: { props: ChatAppModelToolbarProps }) {
 
 function ToolsMenu(props: { props: ChatAppModelToolbarProps }) {
   let details: HTMLDetailsElement | undefined
-  const enabledCount = () => props.props.enabledToolIds().length
-  const isEnabled = (id: string) => props.props.enabledToolIds().includes(id)
+  // Tolerate a missing accessor (e.g. a stale parent after a hot reload) so the
+  // toolbar degrades to "no tools enabled" instead of crashing the page.
+  const enabledToolIds = () => props.props.enabledToolIds?.() ?? []
+  const enabledCount = () => enabledToolIds().length
+  const isEnabled = (id: string) => enabledToolIds().includes(id)
 
   return (
     <details
