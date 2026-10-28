@@ -13,13 +13,16 @@ import { DEFAULT_CHAT_MODEL, modelSupportsTools } from '../../lib/chat-models'
 import { findMatchingShortcut } from '../../lib/keyboard-shortcuts'
 import { HARNESS_TOOLS } from '../../lib/harness/tools'
 import { getFreeTextChatModelOptionsCached } from '../../lib/openrouter-models'
+import { loadStoredApiKey, storeApiKey } from '../../lib/openrouter-key-storage'
+import {
+  completeOpenRouterLogin,
+  startOpenRouterLogin,
+  takeOpenRouterCallbackCode,
+} from '../../lib/openrouter-oauth'
 import { useChatActions, useChatStore } from '../../store/chat.hooks'
 import { chatSelectors, chatStore } from '../../store/chat.store'
 import ChatThread from './ChatThread'
-import {
-  OPENROUTER_API_KEY_LS_KEY,
-  SIDEBAR_OPEN_LS_KEY,
-} from './chat-app-constants'
+import { SIDEBAR_OPEN_LS_KEY } from './chat-app-constants'
 import { ChatAppModelToolbar } from './ChatAppModelToolbar'
 import { ChatAppOpenRouterModal } from './ChatAppOpenRouterModal'
 import { ChatAppShortcutsModal } from './ChatAppShortcutsModal'
@@ -48,8 +51,15 @@ export default function ChatApp() {
   const enabledToolIds = useChatStore((state) => state.enabledToolIds)
   /** Input value while typing (does not trigger model refetch). */
   const [openRouterApiKeyDraft, setOpenRouterApiKeyDraft] = createSignal('')
-  /** Last committed value (blur): sent to server fns for OpenRouter; optional `.env` fallback for local dev only. */
+  /** Last saved value; sent only to openrouter.ai, never to this app's server. */
   const [openRouterApiKeyApplied, setOpenRouterApiKeyApplied] = createSignal('')
+  /** Persist the key in localStorage (vs. this tab's sessionStorage). */
+  const [rememberApiKey, setRememberApiKey] = createSignal(false)
+  const [rememberApiKeyDraft, setRememberApiKeyDraft] = createSignal(false)
+  const [openRouterSignInBusy, setOpenRouterSignInBusy] = createSignal(false)
+  const [openRouterSignInError, setOpenRouterSignInError] = createSignal<
+    string | null
+  >(null)
   const [modelList, setModelList] = createSignal<ChatModelOption[] | undefined>()
   const [modelListLoading, setModelListLoading] = createSignal(true)
   const [modelListError, setModelListError] = createSignal<unknown>()
@@ -121,15 +131,13 @@ export default function ChatApp() {
     } catch {
       /* ignore */
     }
-    try {
-      const stored = localStorage.getItem(OPENROUTER_API_KEY_LS_KEY)
-      if (stored) {
-        setOpenRouterApiKeyDraft(stored)
-        setOpenRouterApiKeyApplied(stored)
-      }
-    } catch {
-      /* ignore */
-    }
+    const stored = loadStoredApiKey()
+    setOpenRouterApiKeyDraft(stored.key)
+    setOpenRouterApiKeyApplied(stored.key)
+    setRememberApiKey(stored.remember)
+    setRememberApiKeyDraft(stored.remember)
+    const oauthCode = takeOpenRouterCallbackCode()
+    if (oauthCode) void finishOpenRouterSignIn(oauthCode)
     const saved = loadChatState()
     if (saved) {
       actions.hydrate(saved)
@@ -190,31 +198,57 @@ export default function ChatApp() {
     return selectOptions().length === 0
   }
 
-  function persistOpenRouterApiKey(raw: string) {
+  function persistOpenRouterApiKey(raw: string, remember: boolean) {
     const v = raw.trim()
     setOpenRouterApiKeyDraft(v)
     setOpenRouterApiKeyApplied(v)
-    try {
-      if (v) localStorage.setItem(OPENROUTER_API_KEY_LS_KEY, v)
-      else localStorage.removeItem(OPENROUTER_API_KEY_LS_KEY)
-    } catch {
-      /* ignore quota / private mode */
-    }
+    setRememberApiKey(remember)
+    setRememberApiKeyDraft(remember)
+    storeApiKey({ key: v, remember })
   }
 
   function openOpenRouterApiKeyModal() {
     setOpenRouterApiKeyDraft(openRouterApiKeyApplied())
+    setRememberApiKeyDraft(rememberApiKey())
+    setOpenRouterSignInError(null)
     setOpenRouterApiKeyModalOpen(true)
   }
 
   function closeOpenRouterApiKeyModal() {
     setOpenRouterApiKeyDraft(openRouterApiKeyApplied())
+    setRememberApiKeyDraft(rememberApiKey())
     setOpenRouterApiKeyModalOpen(false)
   }
 
   function saveOpenRouterApiKeyFromModal() {
-    persistOpenRouterApiKey(openRouterApiKeyDraft())
+    persistOpenRouterApiKey(openRouterApiKeyDraft(), rememberApiKeyDraft())
     setOpenRouterApiKeyModalOpen(false)
+  }
+
+  function signInWithOpenRouter() {
+    setOpenRouterSignInBusy(true)
+    setOpenRouterSignInError(null)
+    startOpenRouterLogin(rememberApiKeyDraft()).catch((error: unknown) => {
+      setOpenRouterSignInBusy(false)
+      setOpenRouterSignInError(
+        error instanceof Error ? error.message : 'Could not start sign-in.',
+      )
+    })
+  }
+
+  async function finishOpenRouterSignIn(code: string) {
+    setOpenRouterSignInBusy(true)
+    try {
+      const { key, remember } = await completeOpenRouterLogin(code)
+      persistOpenRouterApiKey(key, remember)
+    } catch (error) {
+      setOpenRouterSignInError(
+        error instanceof Error ? error.message : 'OpenRouter sign-in failed.',
+      )
+      setOpenRouterApiKeyModalOpen(true)
+    } finally {
+      setOpenRouterSignInBusy(false)
+    }
   }
 
   const selectedModelMeta = createMemo((): ChatModelOption | undefined => {
@@ -464,6 +498,11 @@ export default function ChatApp() {
           open={openRouterApiKeyModalOpen}
           draft={openRouterApiKeyDraft}
           onDraftInput={setOpenRouterApiKeyDraft}
+          remember={rememberApiKeyDraft}
+          onRememberChange={setRememberApiKeyDraft}
+          signInBusy={openRouterSignInBusy}
+          signInError={openRouterSignInError}
+          onSignIn={signInWithOpenRouter}
           onClose={closeOpenRouterApiKeyModal}
           onSave={saveOpenRouterApiKeyFromModal}
         />

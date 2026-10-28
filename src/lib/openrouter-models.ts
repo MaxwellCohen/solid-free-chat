@@ -3,7 +3,7 @@ import {
   ensureFreeModelsRouterInOptions,
   toFreeTextChatOptions,
 } from './chat-models'
-import { openRouterProxyUrl } from './openrouter-proxy'
+import { openRouterApiUrl } from './openrouter-api'
 
 function formatOpenRouterErrorBody(json: unknown, fallback: string): string {
   if (!json || typeof json !== 'object') return fallback
@@ -83,7 +83,7 @@ function parseModelsDataArray(json: unknown): OpenRouterUserModelRow[] {
  * UI can still list free models. Chat requests still require a valid API key.
  */
 async function fetchPublicFreeTextModelOptions(): Promise<ChatModelOption[]> {
-  const res = await fetch(openRouterProxyUrl('/models'), {
+  const res = await fetch(openRouterApiUrl('/models'), {
     headers: { Accept: 'application/json' },
   })
   const json: unknown = await res.json().catch(() => null)
@@ -98,8 +98,9 @@ async function fetchPublicFreeTextModelOptions(): Promise<ChatModelOption[]> {
 async function fetchFreeTextModelOptions(
   apiKey: string,
 ): Promise<ChatModelOption[]> {
-  const res = await fetch(openRouterProxyUrl('/models/user'), {
-    headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+  if (!apiKey) return fetchPublicFreeTextModelOptions()
+  const res = await fetch(openRouterApiUrl('/models/user'), {
+    headers: { Authorization: `Bearer ${apiKey}` },
   })
 
   const json: unknown = await res.json().catch(() => null)

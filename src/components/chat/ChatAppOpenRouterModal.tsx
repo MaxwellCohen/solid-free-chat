@@ -5,17 +5,17 @@ export function ChatAppOpenRouterModal(props: {
   open: () => boolean
   draft: () => string
   onDraftInput: (value: string) => void
+  remember: () => boolean
+  onRememberChange: (value: boolean) => void
+  signInBusy: () => boolean
+  signInError: () => string | null
+  onSignIn: () => void
   onClose: () => void
   onSave: () => void
 }) {
   return (
     <Show when={props.open()}>
-      <OpenRouterModalDialog
-        draft={props.draft}
-        onDraftInput={props.onDraftInput}
-        onClose={props.onClose}
-        onSave={props.onSave}
-      />
+      <OpenRouterModalDialog {...props} />
     </Show>
   )
 }
@@ -23,6 +23,11 @@ export function ChatAppOpenRouterModal(props: {
 function OpenRouterModalDialog(props: {
   draft: () => string
   onDraftInput: (value: string) => void
+  remember: () => boolean
+  onRememberChange: (value: boolean) => void
+  signInBusy: () => boolean
+  signInError: () => string | null
+  onSignIn: () => void
   onClose: () => void
   onSave: () => void
 }) {
@@ -67,26 +72,39 @@ function OpenRouterModalDialog(props: {
             Cancel
           </button>
         </div>
+        <button
+          type="button"
+          class="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-3 py-2 text-sm font-medium disabled:opacity-60"
+          disabled={props.signInBusy()}
+          onClick={props.onSignIn}
+        >
+          {props.signInBusy() ? 'Connecting to OpenRouter…' : 'Sign in with OpenRouter'}
+        </button>
+        <Show when={props.signInError()}>
+          {(message) => (
+            <p role="alert" class="text-destructive text-xs">
+              {message()}
+            </p>
+          )}
+        </Show>
         <p class="text-muted-foreground text-xs">
-          Get a key at{' '}
+          Creates a key in your OpenRouter account just for this app — set a
+          spending limit or revoke it any time at{' '}
           <a
-            href="https://openrouter.ai/keys"
+            href="https://openrouter.ai/settings/keys"
             target="_blank"
             rel="noopener noreferrer"
             class="text-primary underline-offset-2 hover:underline"
           >
-            openrouter.ai/keys
+            openrouter.ai/settings/keys
           </a>
-          . Stored in this browser only and sent with each request so the
-          server can call OpenRouter on your behalf. For local dev you can
-          leave it empty if{' '}
-          <code class="bg-muted rounded px-1 py-px text-[10px]">
-            OPENROUTER_API_KEY
-          </code>{' '}
-          is set in{' '}
-          <code class="bg-muted rounded px-1 py-px text-[10px]">.env.local</code>
           .
         </p>
+        <div class="text-muted-foreground flex items-center gap-2 text-xs">
+          <span class="bg-border h-px flex-1" />
+          or paste a key
+          <span class="bg-border h-px flex-1" />
+        </div>
         <label class="text-muted-foreground flex flex-col gap-1.5 text-xs">
           <span class="font-medium">Secret key</span>
           <input
@@ -101,6 +119,24 @@ function OpenRouterModalDialog(props: {
             onInput={(e) => props.onDraftInput(e.currentTarget.value)}
           />
         </label>
+        <label class="text-muted-foreground flex items-start gap-2 text-xs">
+          <input
+            type="checkbox"
+            class="mt-0.5"
+            checked={props.remember()}
+            onChange={(e) => props.onRememberChange(e.currentTarget.checked)}
+          />
+          <span>
+            Remember on this device. Otherwise the key is kept only for this
+            tab and forgotten when you close it.
+          </span>
+        </label>
+        <p class="border-border bg-muted/40 text-muted-foreground rounded-lg border p-2 text-xs">
+          Your key never touches this app's server: the browser sends it
+          straight to <code class="text-[10px]">openrouter.ai</code>. To check,
+          open DevTools → Network — requests carrying it go only to
+          openrouter.ai.
+        </p>
         <div class="flex flex-wrap justify-end gap-2 border-t border-border pt-2">
           <button
             type="button"

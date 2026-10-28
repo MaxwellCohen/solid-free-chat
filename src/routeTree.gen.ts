@@ -11,9 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
+import { Route as HarnessSandboxRouteImport } from './routes/harness-sandbox'
 import { Route as ShareRouteImport } from './routes/share'
 import { Route as ExampleChatRouteImport } from './routes/example.chat'
-import { Route as ApiOpenrouterSplatRouteImport } from './routes/api/openrouter/$'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -23,6 +23,11 @@ const IndexRoute = IndexRouteImport.update({
 const AboutRoute = AboutRouteImport.update({
   id: '/about',
   path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HarnessSandboxRoute = HarnessSandboxRouteImport.update({
+  id: '/harness-sandbox',
+  path: '/harness-sandbox',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ShareRoute = ShareRouteImport.update({
@@ -35,54 +40,49 @@ const ExampleChatRoute = ExampleChatRouteImport.update({
   path: '/example/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiOpenrouterSplatRoute = ApiOpenrouterSplatRouteImport.update({
-  id: '/api/openrouter/$',
-  path: '/api/openrouter/$',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/harness-sandbox': typeof HarnessSandboxRoute
   '/share': typeof ShareRoute
   '/example/chat': typeof ExampleChatRoute
-  '/api/openrouter/$': typeof ApiOpenrouterSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/harness-sandbox': typeof HarnessSandboxRoute
   '/share': typeof ShareRoute
   '/example/chat': typeof ExampleChatRoute
-  '/api/openrouter/$': typeof ApiOpenrouterSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/harness-sandbox': typeof HarnessSandboxRoute
   '/share': typeof ShareRoute
   '/example/chat': typeof ExampleChatRoute
-  '/api/openrouter/$': typeof ApiOpenrouterSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about' | '/share' | '/example/chat' | '/api/openrouter/$'
+  fullPaths: '/' | '/about' | '/harness-sandbox' | '/share' | '/example/chat'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about' | '/share' | '/example/chat' | '/api/openrouter/$'
+  to: '/' | '/about' | '/harness-sandbox' | '/share' | '/example/chat'
   id:
     | '__root__'
     | '/'
     | '/about'
+    | '/harness-sandbox'
     | '/share'
     | '/example/chat'
-    | '/api/openrouter/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
+  HarnessSandboxRoute: typeof HarnessSandboxRoute
   ShareRoute: typeof ShareRoute
   ExampleChatRoute: typeof ExampleChatRoute
-  ApiOpenrouterSplatRoute: typeof ApiOpenrouterSplatRoute
 }
 
 declare module '@tanstack/solid-router' {
@@ -101,6 +101,13 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/harness-sandbox': {
+      id: '/harness-sandbox'
+      path: '/harness-sandbox'
+      fullPath: '/harness-sandbox'
+      preLoaderRoute: typeof HarnessSandboxRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/share': {
       id: '/share'
       path: '/share'
@@ -115,22 +122,15 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof ExampleChatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/openrouter/$': {
-      id: '/api/openrouter/$'
-      path: '/api/openrouter/$'
-      fullPath: '/api/openrouter/$'
-      preLoaderRoute: typeof ApiOpenrouterSplatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
+  HarnessSandboxRoute: HarnessSandboxRoute,
   ShareRoute: ShareRoute,
   ExampleChatRoute: ExampleChatRoute,
-  ApiOpenrouterSplatRoute: ApiOpenrouterSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -4,7 +4,7 @@ import {
   createOpenRouterResponsesText,
   createOpenRouterText,
 } from '@tanstack/ai-openrouter'
-import { openRouterProxyBaseUrl } from '../openrouter-proxy'
+import { OPENROUTER_API_BASE_URL, OPENROUTER_APP_TITLE } from '../openrouter-api'
 
 /** Upper bound on model ↔ tool round trips per user turn. */
 export const MAX_AGENT_ITERATIONS = 12
@@ -39,11 +39,16 @@ function messagesIncludeDocumentParts(messages: unknown[]): boolean {
 }
 
 /**
- * Runs the full agent loop in the browser: model calls go through the
- * same-origin OpenRouter proxy, and tools execute locally.
+ * Runs the full agent loop in the browser: model calls go straight to
+ * OpenRouter (the key never touches this app's server), and tools execute
+ * locally.
  */
 export function runAgent(options: RunAgentOptions): AsyncIterable<StreamChunk> {
-  const adapterConfig = { serverURL: openRouterProxyBaseUrl() }
+  const adapterConfig = {
+    serverURL: OPENROUTER_API_BASE_URL,
+    httpReferer: location.origin,
+    appTitle: OPENROUTER_APP_TITLE,
+  }
   const adapter = messagesIncludeDocumentParts(options.messages)
     ? createOpenRouterResponsesText(
         options.model as never,

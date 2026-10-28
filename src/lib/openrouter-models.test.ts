@@ -22,25 +22,29 @@ describe('getFreeTextChatModelOptionsCached', () => {
     vi.restoreAllMocks()
   })
 
-  it('fetches through the same-origin proxy and keeps only free models', async () => {
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
-      modelsResponse([
-        { ...freeTextModel, supported_parameters: ['tools', 'temperature'] },
-        {
-          ...freeTextModel,
-          id: 'vendor/paid-model',
-          name: 'Paid Model',
-          pricing: { prompt: '0.001', completion: '0.002' },
-        },
-      ]),
+  it('calls OpenRouter directly and keeps only free models', async () => {
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        modelsResponse([
+          { ...freeTextModel, supported_parameters: ['tools', 'temperature'] },
+          {
+            ...freeTextModel,
+            id: 'vendor/paid-model',
+            name: 'Paid Model',
+            pricing: { prompt: '0.001', completion: '0.002' },
+          },
+        ]),
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    const options = await getFreeTextChatModelOptionsCached('sk-proxy-test')
+    const options = await getFreeTextChatModelOptionsCached('sk-direct-test')
 
-    expect(String(fetchMock.mock.calls[0][0])).toContain(
-      '/api/openrouter/v1/models/user',
+    expect(String(fetchMock.mock.calls[0][0])).toBe(
+      'https://openrouter.ai/api/v1/models/user',
     )
+    expect(fetchMock.mock.calls[0][1]?.headers).toEqual({
+      Authorization: 'Bearer sk-direct-test',
+    })
     expect(options.map((o) => o.id)).toEqual([
       FREE_MODELS_ROUTER_ID,
       'vendor/free-model',
@@ -80,6 +84,21 @@ describe('getFreeTextChatModelOptionsCached', () => {
     )
 
     const options = await getFreeTextChatModelOptionsCached('sk-bad')
+    expect(options.map((o) => o.id)).toContain('vendor/free-model')
+  })
+
+  it('uses the public catalog without sending a key when none is set', async () => {
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        modelsResponse([freeTextModel]),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const options = await getFreeTextChatModelOptionsCached('')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(String(fetchMock.mock.calls[0][0])).toBe(
+      'https://openrouter.ai/api/v1/models',
+    )
     expect(options.map((o) => o.id)).toContain('vendor/free-model')
   })
 })

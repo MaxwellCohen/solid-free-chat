@@ -1,6 +1,6 @@
 # Solid Free Chat
 
-A [SolidStart](https://start.solidjs.com/) browser-based AI harness for [OpenRouter](https://openrouter.ai/) models. The agent loop, tools, and conversations all live in the browser; the backend is a dumb pass-through proxy to OpenRouter. You enter your API key in the app; the proxy forwards it and never stores it.
+A [SolidStart](https://start.solidjs.com/) browser-based AI harness for [OpenRouter](https://openrouter.ai/) models. The agent loop, tools, and conversations all live in the browser, which talks to OpenRouter directly. Bring your own key: sign in with OpenRouter or paste a key — either way it **never reaches this app's server** (see [Key privacy](#key-privacy)).
 
 ## Tech stack
 
@@ -32,20 +32,7 @@ npm install
 cp .env.example .env.local
 ```
 
-3. (Optional, local dev) If you prefer not to paste a key in the UI, set it in `.env.local` (value only — no `Bearer ` prefix, no quotes):
-
-```env
-OPENROUTER_API_KEY=your_openrouter_api_key
-```
-
-Optional [OpenRouter attribution](https://openrouter.ai/docs) headers:
-
-```env
-OPENROUTER_HTTP_REFERER=https://your-app.com
-OPENROUTER_APP_TITLE=Solid Free Chat
-```
-
-Optional Sentry error collection:
+3. (Optional) Sentry error collection:
 
 ```env
 VITE_SENTRY_DSN=https://…@….ingest.sentry.io/…
@@ -74,7 +61,7 @@ The app serves at `http://localhost:3000`.
 
 ## Features
 
-- Streaming replies via OpenRouter; you supply the API key in the app (forwarded by the proxy)
+- Streaming replies via OpenRouter, called straight from the browser with your own key (OAuth sign-in or pasted)
 - **Browser tools** the model can call, toggled from the toolbar's **Tools** menu (only offered to models that support tool calling)
 - Free-model discovery for your key, with a model picker and safe fallbacks for stale selections
 - Reusable **skills** (named instruction snippets) you can attach per chat; composed with a baseline system message on each reply
@@ -86,17 +73,29 @@ The app serves at `http://localhost:3000`.
 ## Architecture
 
 ```
-Browser                                              Worker (dumb proxy)
-┌────────────────────────────────────────────┐       ┌─────────────────────┐
-│ ChatClient ─▶ runAgent → chat() agent loop │──────▶│ /api/openrouter/v1/*│──▶ openrouter.ai
-│                  │                         │◀──────│  (streams back)     │
-│                  ▼                         │       └─────────────────────┘
-│            tools execute locally           │
+Browser                                             Worker
+┌────────────────────────────────────────────┐      ┌──────────────────────┐
+│ ChatClient ─▶ runAgent → chat() agent loop │─────────────────────────────▶ openrouter.ai
+│                  │                         │      │ SSR + static assets  │
+│                  ▼                         │      │ (never sees the key) │
+│            tools execute locally           │      └──────────────────────┘
 │      (sandboxed iframe → Web Worker)       │
 └────────────────────────────────────────────┘
 ```
 
-The proxy only forwards `v1/*` paths, the `Authorization` header (falling back to `OPENROUTER_API_KEY` when absent), and the optional attribution headers. Everything else — model selection, system prompts, tool calls, persistence — is client-side.
+Everything — model selection, system prompts, tool calls, persistence, and every OpenRouter request — is client-side.
+
+## Key privacy
+
+The app is bring-your-own-key, and the server is never in the key's path:
+
+- **Direct calls.** The browser calls `https://openrouter.ai/api/v1` itself (CORS). There is no proxy and no server-side key fallback. You can verify in DevTools → Network: requests with an `Authorization` header go only to `openrouter.ai`.
+- **Sign in with OpenRouter (OAuth PKCE).** `src/lib/openrouter-oauth.ts` redirects to `openrouter.ai/auth`, and the returned one-time code is exchanged for a key by the browser using a verifier that never leaves the tab. The key is scoped to this app in your OpenRouter account, so you can cap its spend or revoke it there. Pasting a key still works.
+- **Storage.** By default the key lives in `sessionStorage` (this tab only). "Remember on this device" moves it to `localStorage`.
+- **Content-Security-Policy.** `src/lib/content-security-policy.ts` limits `connect-src` to this origin, OpenRouter, and the Sentry ingest host, so injected script can't quietly `fetch` the key elsewhere. The code sandbox is served from its own page (`/harness-sandbox`) in an opaque-origin iframe so it keeps open network access without being able to read the key.
+- **Sentry.** `src/router.tsx` strips request headers and redacts `sk-or-…` keys, bearer tokens, and OAuth `code` params from events, breadcrumbs, and transactions.
+
+Limits: whatever JavaScript this site serves can read the key while you use it — that's inherent to any in-browser BYOK app. The code is open source so you can audit it, and an OAuth key with a spending limit keeps the damage small if anything goes wrong.
 
 ## Tools
 
