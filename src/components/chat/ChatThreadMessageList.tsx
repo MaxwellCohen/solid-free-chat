@@ -1,4 +1,5 @@
 import { For, Show, onSettled } from 'solid-js'
+import type { Accessor } from 'solid-js'
 import type { UIMessage } from '@tanstack/ai-client'
 import { createVirtualizer } from '../../lib/create-virtualizer'
 import type { VirtualItem, Virtualizer } from '../../lib/create-virtualizer'
@@ -53,7 +54,9 @@ export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
         class="relative w-full"
         style={{ height: `${virtualizer.getTotalSize()}px` }}
       >
-        <For each={virtualizer.getVirtualItems()}>
+        {/* Key by item key: the virtualizer re-creates item objects on every measure,
+            and remounting would reset open <details> (e.g. Reasoning). */}
+        <For each={virtualizer.getVirtualItems()} keyed={(item) => item.key}>
           {(virtualItem) => (
             <VirtualChatMessage
               virtualItem={virtualItem}
@@ -69,19 +72,19 @@ export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
 }
 
 function VirtualChatMessage(props: {
-  virtualItem: VirtualItem
+  virtualItem: Accessor<VirtualItem>
   virtualizer: Virtualizer<HTMLDivElement, Element>
   listProps: ChatThreadMessageListProps
 }) {
   // Read from the live messages list so streaming updates stay reactive
   // even though virtual items themselves do not change identity.
-  const message = () => props.listProps.messages()[props.virtualItem.index]
+  const message = () => props.listProps.messages()[props.virtualItem().index]
 
   return (
     <Show when={message()}>
       {(msg) => (
         <article
-          data-index={props.virtualItem.index}
+          data-index={props.virtualItem().index}
           data-message-id={msg().id}
           ref={(el) => {
             // Solid assigns refs before the node is connected; defer measurement.
@@ -95,7 +98,7 @@ function VirtualChatMessage(props: {
             },
           ]}
           style={{
-            transform: `translateY(${props.virtualItem.start}px)`,
+            transform: `translateY(${props.virtualItem().start}px)`,
           }}
         >
           <div
@@ -111,7 +114,7 @@ function VirtualChatMessage(props: {
             <AssistantUsageLine
               message={msg()}
               isLastAssistantMessage={
-                props.virtualItem.index ===
+                props.virtualItem().index ===
                 props.listProps.lastAssistantMessageIndex()
               }
               sessionTotalSuffix={props.listProps.sessionTotalSuffix}
