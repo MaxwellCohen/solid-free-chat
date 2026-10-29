@@ -1,6 +1,54 @@
 import { Link } from '@tanstack/solid-router'
 
+import { Show, createSignal, onSettled } from 'solid-js'
+
+import { Download } from './icons'
 import ThemeSwitcher from './ThemeSwitcher'
+
+type InstallPromptEvent = Event & {
+  prompt: () => Promise<void>
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
+}
+
+function InstallButton() {
+  const [promptEvent, setPromptEvent] = createSignal<InstallPromptEvent | null>(
+    null,
+  )
+
+  onSettled(() => {
+    const onPrompt = (e: Event) => {
+      e.preventDefault()
+      setPromptEvent(e as InstallPromptEvent)
+    }
+    const onInstalled = () => setPromptEvent(null)
+    addEventListener('beforeinstallprompt', onPrompt)
+    addEventListener('appinstalled', onInstalled)
+    return () => {
+      removeEventListener('beforeinstallprompt', onPrompt)
+      removeEventListener('appinstalled', onInstalled)
+    }
+  })
+
+  const install = async () => {
+    const e = promptEvent()
+    if (!e) return
+    setPromptEvent(null)
+    await e.prompt()
+  }
+
+  return (
+    <Show when={promptEvent()}>
+      <button
+        type="button"
+        class="border-border bg-muted/50 text-foreground hover:bg-muted inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm font-medium transition-colors"
+        onClick={install}
+      >
+        <Download class="size-4" aria-hidden="true" />
+        <span class="max-[419px]:sr-only">Install</span>
+      </button>
+    </Show>
+  )
+}
 
 export default function Header() {
   return (
@@ -44,6 +92,7 @@ export default function Header() {
         </div>
 
         <div class="flex shrink-0 items-center gap-2">
+          <InstallButton />
           <ThemeSwitcher />
         </div>
       </nav>

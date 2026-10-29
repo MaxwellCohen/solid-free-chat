@@ -5,6 +5,7 @@ import type { JSX } from '@solidjs/web'
 import checkCircle2 from 'lucide/dist/esm/icons/circle-check.mjs'
 import chevronRight from 'lucide/dist/esm/icons/chevron-right.mjs'
 import circleAlert from 'lucide/dist/esm/icons/circle-alert.mjs'
+import download from 'lucide/dist/esm/icons/download.mjs'
 import fileText from 'lucide/dist/esm/icons/file-text.mjs'
 import image from 'lucide/dist/esm/icons/image.mjs'
 import keyRound from 'lucide/dist/esm/icons/key-round.mjs'
@@ -57,6 +58,7 @@ export const CheckCircle2 = createIcon(checkCircle2)
 export const ChevronRight = createIcon(chevronRight)
 export const CircleAlert = createIcon(circleAlert)
 export const Computer = createIcon(monitor)
+export const Download = createIcon(download)
 export const FileText = createIcon(fileText)
 export const Image = createIcon(image)
 export const KeyRound = createIcon(keyRound)
