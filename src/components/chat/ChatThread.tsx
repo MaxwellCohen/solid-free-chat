@@ -20,6 +20,7 @@ import { composeSystemPrompt } from '../../lib/compose-system-prompt'
 import {
   attachTokenUsageToLastAssistantMessage,
   chatActions,
+  createChatHistoryApi,
   createConversationSkillsApi,
 } from '../../store/chat.store'
 import type { ChatUIMessage, TokenUsageSnapshot } from '../../store/chat.store'
@@ -209,6 +210,7 @@ function ChatThreadSession(props: {
         tools: props.supportsTools
           ? createEnabledTools(enabledToolIds(), {
               skills: createConversationSkillsApi(conversationId),
+              history: createChatHistoryApi(conversationId),
             })
           : [],
         abortSignal,

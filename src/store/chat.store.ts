@@ -5,7 +5,7 @@ import {
   DEFAULT_ENABLED_TOOL_IDS,
   isKnownToolId,
 } from '../lib/harness/tools'
-import type { HarnessSkillsApi } from '../lib/harness/tools'
+import type { HarnessChatHistoryApi, HarnessSkillsApi } from '../lib/harness/tools'
 
 /** Token counts from the provider for one completed model run (see RUN_FINISHED). */
 export interface TokenUsageSnapshot {
@@ -834,5 +834,21 @@ export function createConversationSkillsApi(conversationId: string): HarnessSkil
       }
       return true
     },
+  }
+}
+
+/** Read-only access to every saved chat except `conversationId`, for the history tools. */
+export function createChatHistoryApi(conversationId: string): HarnessChatHistoryApi {
+  return {
+    list: () =>
+      chatSelectors
+        .conversationList(chatStore.state)
+        .filter((conversation) => conversation.id !== conversationId)
+        .map((conversation) => ({
+          id: conversation.id,
+          title: conversation.title,
+          updatedAt: conversation.updatedAt,
+          messages: getConversationMessages(chatStore.state, conversation.id),
+        })),
   }
 }

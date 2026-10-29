@@ -20,6 +20,9 @@ import { contentSecurityPolicy } from '../lib/content-security-policy'
 import '../styles.css'
 import '../styles/markdown-highlight.css'
 
+// Dev skips the service worker so its caches never shadow Vite HMR.
+const SERVICE_WORKER_REGISTER_SCRIPT = `if("serviceWorker"in navigator)addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){})})`
+
 export const Route = createRootRouteWithContext()({
   head: () => ({
     meta: [
@@ -29,6 +32,12 @@ export const Route = createRootRouteWithContext()({
         content: 'width=device-width, initial-scale=1, viewport-fit=cover',
       },
       { title: 'Solid Free Chat' },
+      { name: 'theme-color', content: '#18181b' },
+      // iOS "Add to Home Screen": launch full-screen with its own name.
+      { name: 'mobile-web-app-capable', content: 'yes' },
+      { name: 'apple-mobile-web-app-capable', content: 'yes' },
+      { name: 'apple-mobile-web-app-title', content: 'Free Chat' },
+      { name: 'apple-mobile-web-app-status-bar-style', content: 'default' },
     ],
     links: [
       { rel: 'icon', href: '/favicon.ico', sizes: '48x48' },
@@ -75,6 +84,9 @@ function RootComponent() {
         />
         <script innerHTML={THEME_INLINE_INIT_SCRIPT} />
         <HydrationScript />
+        {import.meta.env.PROD && (
+          <script innerHTML={SERVICE_WORKER_REGISTER_SCRIPT} />
+        )}
       </head>
       <body>
         <HeadContent />

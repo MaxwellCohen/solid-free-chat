@@ -1,8 +1,12 @@
-import { For, Match, Show, Switch, createMemo } from 'solid-js'
+import { For, Match, Show, Switch, createEffect, createMemo } from 'solid-js'
 import type { Accessor } from 'solid-js'
 import type { UIMessage } from '@tanstack/ai-client'
 import { CircleAlert, FileText, LoaderCircle, Wrench } from '../icons'
 import { renderMarkdownToHtml } from '../../lib/markdown'
+import { validateChartSpec } from '../../lib/visuals/chart'
+import type { ChartSpec } from '../../lib/visuals/chart'
+import { enhanceMermaidBlocks } from '../../lib/visuals/mermaid'
+import { ChartView, DiagramView } from './ChatVisuals'
 
 type MessagePart = UIMessage['parts'][number]
 
@@ -69,13 +73,20 @@ function TextPart(props: {
   const html = createMemo(() =>
     props.role() === 'assistant' ? renderMarkdownToHtml(props.content()) : '',
   )
+  let container: HTMLDivElement | undefined
+
+  // Draw ```mermaid fences once the markdown HTML is in the DOM.
+  createEffect(html, (markup) => {
+    if (!container || !markup.includes('data-lang="mermaid"')) return
+    return enhanceMermaidBlocks(container)
+  })
 
   return (
     <Show
       when={props.role() === 'assistant'}
       fallback={<p class="whitespace-pre-wrap">{props.content()}</p>}
     >
-      <div class="chat-md" innerHTML={html()} />
+      <div ref={(el) => (container = el)} class="chat-md" innerHTML={html()} />
     </Show>
   )
 }
@@ -214,7 +225,37 @@ function ToolCallPart(props: { part: Accessor<MessagePart> }) {
     )
   })
   const running = createMemo(() => output() === undefined && !failed())
+  const visual = createMemo(() => {
+    const part = call()
+    const out = output()
+    if (!part || failed() || !isHarnessToolOutput(out) || out.ok !== true) return null
+    return toolVisual(part.name, part.input ?? parseMaybeJson(part.arguments))
+  })
 
+  return (
+    <>
+      <Show when={visual()} keyed>
+        {(v) =>
+          v.kind === 'diagram' ? (
+            <DiagramView code={v.code} title={v.title} />
+          ) : (
+            <ChartView spec={v.spec} />
+          )
+        }
+      </Show>
+      <ToolCallDetails call={call} input={input} output={output} running={running} failed={failed} />
+    </>
+  )
+}
+
+function ToolCallDetails(props: {
+  call: Accessor<Extract<MessagePart, { type: 'tool-call' }> | null>
+  input: Accessor<string>
+  output: Accessor<unknown>
+  running: Accessor<boolean>
+  failed: Accessor<boolean>
+}) {
+  const { call, input, output, running, failed } = props
   return (
     <details class="group border-border mt-2 overflow-hidden rounded-lg border first:mt-0">
       <summary class="text-muted-foreground hover:bg-muted/40 flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs font-medium select-none [&::-webkit-details-marker]:hidden">
@@ -244,6 +285,25 @@ function ToolCallPart(props: { part: Accessor<MessagePart> }) {
       </div>
     </details>
   )
+}
+
+type ToolVisual =
+  | { kind: 'diagram'; code: string; title?: string }
+  | { kind: 'chart'; spec: ChartSpec }
+
+/** Inline visual for tools that draw something (`render_diagram`, `render_chart`). */
+function toolVisual(name: string, args: unknown): ToolVisual | null {
+  if (!args || typeof args !== 'object') return null
+  if (name === 'render_diagram') {
+    const { code, title } = args as { code?: unknown; title?: unknown }
+    if (typeof code !== 'string') return null
+    return { kind: 'diagram', code, title: typeof title === 'string' ? title : undefined }
+  }
+  if (name === 'render_chart') {
+    const checked = validateChartSpec(args)
+    return checked.ok ? { kind: 'chart', spec: checked.spec } : null
+  }
+  return null
 }
 
 function ToolOutputView(props: { value: unknown }) {

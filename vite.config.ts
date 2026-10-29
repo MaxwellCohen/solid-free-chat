@@ -1,3 +1,5 @@
+import { execSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import { cloudflare } from '@cloudflare/vite-plugin'
 import { devtools } from '@tanstack/devtools-vite'
@@ -23,6 +25,34 @@ function stripRemovedSolidImports() {
   }
 }
 
+function gitCommitHash(): string {
+  try {
+    return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim()
+  } catch {
+    return `build-${Date.now()}`
+  }
+}
+
+// Emits `/sw.js` with its cache version set to the current commit, so each
+// deploy drops the previous build's caches.
+function serviceWorker() {
+  return {
+    name: 'service-worker',
+    apply: 'build' as const,
+    generateBundle(this: {
+      environment: { name: string }
+      emitFile: (file: { type: 'asset'; fileName: string; source: string }) => void
+    }) {
+      if (this.environment.name !== 'client') return
+      const source = readFileSync('src/sw.js', 'utf8').replace(
+        '__SW_VERSION__',
+        gitCommitHash(),
+      )
+      this.emitFile({ type: 'asset', fileName: 'sw.js', source })
+    },
+  }
+}
+
 export default defineConfig({
   optimizeDeps: {
     // Must share the unbundled `@solidjs/web/server-functions/client` instance
@@ -31,6 +61,7 @@ export default defineConfig({
   },
   plugins: [
     stripRemovedSolidImports(),
+    serviceWorker(),
     cloudflare({ viteEnvironment: { name: 'ssr' } }),
     devtools(),
     // this is the plugin that enables path aliases

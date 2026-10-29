@@ -197,4 +197,26 @@ code {
   .chat-md :where(th, td) {
     @apply border-border border px-2 py-1 text-left;
   }
+  /* Pele (Mermaid) diagrams: fit the bubble, scroll when wider, follow the app theme. */
+  .chat-diagram {
+    @apply my-2 overflow-x-auto;
+    --pele-bg: transparent;
+    --pele-fg: var(--foreground);
+    --pele-muted: var(--muted-foreground);
+    --pele-line: var(--muted-foreground);
+    --pele-surface: var(--muted);
+    --pele-surface-alt: var(--secondary);
+    --pele-border: var(--border);
+    --pele-accent: #3b82f6;
+    --pele-font: inherit;
+  }
+  .chat-diagram :where(svg) {
+    @apply mx-auto h-auto max-w-full;
+  }
+  /* TanStack Charts: axes/text use currentColor; match the tooltip to the theme. */
+  .chat-chart {
+    --ts-chart-tooltip-background: var(--popover);
+    --ts-chart-tooltip-color: var(--popover-foreground);
+    --ts-chart-tooltip-border: 1px solid var(--border);
+  }
 }

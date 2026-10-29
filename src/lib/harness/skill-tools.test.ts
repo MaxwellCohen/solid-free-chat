@@ -6,6 +6,7 @@ import { createEnabledTools } from './tools'
 function skillTools(conversationId: string) {
   const tools = createEnabledTools(['skills'], {
     skills: createConversationSkillsApi(conversationId),
+    history: { list: () => [] },
   })
   const byName = new Map(tools.map((tool) => [tool.name, tool]))
   return (name: string, input: unknown = {}) => {
@@ -27,6 +28,7 @@ describe('skill tools', () => {
   it('exposes list, create, update, and attach tools under one menu entry', () => {
     const names = createEnabledTools(['skills'], {
       skills: createConversationSkillsApi(conversationId),
+      history: { list: () => [] },
     }).map((tool) => tool.name)
     expect(names).toEqual([
       'list_skills',
