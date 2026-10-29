@@ -1,11 +1,19 @@
 import { For, Show } from 'solid-js'
-import { Keyboard, LoaderCircle, PanelLeft, Share2, Wrench } from '../icons'
+import {
+  Keyboard,
+  LoaderCircle,
+  PanelLeft,
+  Share2,
+  SquarePen,
+  Wrench,
+} from '../icons'
 import type { ChatModelOption } from '../../lib/chat-models'
 import type { HarnessToolDescriptor } from '../../lib/harness/tools'
 
 type ChatAppModelToolbarProps = {
   sidebarOpen: () => boolean
   onToggleSidebar: () => void
+  onNewChat: () => void
   selectedModel: () => string
   selectDisabled: () => boolean
   selectOptions: () => ChatModelOption[]
@@ -48,6 +56,7 @@ function ToolbarRow(props: { props: ChatAppModelToolbarProps }) {
   return (
     <div class="flex min-w-0 flex-wrap items-center gap-2 sm:flex-nowrap sm:gap-3">
       <SidebarToggleButton props={props.props} />
+      <NewChatButton onNewChat={props.props.onNewChat} />
       <ModelPicker props={props.props} />
       <ToolsMenu props={props.props} />
       <ShareButton props={props.props} />
@@ -173,6 +182,20 @@ function SidebarToggleButton(props: { props: ChatAppModelToolbarProps }) {
         <PanelLeft class="size-4 shrink-0" aria-hidden="true" />
       </button>
     </Show>
+  )
+}
+
+function NewChatButton(props: { onNewChat: () => void }) {
+  return (
+    <button
+      type="button"
+      class="text-muted-foreground bg-muted/60 hover:bg-muted inline-flex shrink-0 items-center gap-2 rounded-lg p-2 text-sm font-medium sm:hidden"
+      onClick={() => props.onNewChat()}
+      title="New chat"
+      aria-label="New chat"
+    >
+      <SquarePen class="size-4 shrink-0" aria-hidden="true" />
+    </button>
   )
 }
 

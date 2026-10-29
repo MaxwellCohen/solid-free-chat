@@ -452,6 +452,7 @@ export default function ChatApp() {
         <ChatAppModelToolbar
           sidebarOpen={sidebarOpen}
           onToggleSidebar={toggleSidebar}
+          onNewChat={createConversationFromSidebar}
           selectedModel={selectedModel}
           selectDisabled={selectDisabled}
           selectOptions={selectOptions}
