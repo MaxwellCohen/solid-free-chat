@@ -38,6 +38,7 @@
     "clsx": "^2.1.1",
     "d3-shape": "^3.2.0",
     "lucide": "^1.55.0",
+    "nitro": "^3.0.261029-rc",
     "pele": "^1.12.0",
     "solid-js": "2.0.0-rc.8",
     "tailwind-merge": "^3.6.0",
@@ -46,7 +47,6 @@
     "vite-tsconfig-paths": "^6.1.1"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.48.0",
     "@solidjs/babel-plugin": "2.0.0-rc.8",
     "@solidjs/compiler": "2.0.0-rc.8",
     "@solidjs/vite-plugin": "3.0.0-next.40",

@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
-import { cloudflare } from '@cloudflare/vite-plugin'
+import { nitro } from 'nitro/vite'
 import { devtools } from '@tanstack/devtools-vite'
 import viteTsConfigPaths from 'vite-tsconfig-paths'
 import tailwindcss from '@tailwindcss/vite'
@@ -62,7 +62,6 @@ export default defineConfig({
   plugins: [
     stripRemovedSolidImports(),
     serviceWorker(),
-    cloudflare({ viteEnvironment: { name: 'ssr' } }),
     devtools(),
     // this is the plugin that enables path aliases
     viteTsConfigPaths({
@@ -70,6 +69,15 @@ export default defineConfig({
     }),
     tailwindcss(),
     tanstackStart(),
+    nitro({
+      preset: 'cloudflare_module',
+      compatibilityDate: '2026-04-08',
+      minify: true,
+      sourcemap: false,
+      // Cloudflare compresses static assets at the edge.
+      compressPublicAssets: false,
+      cloudflare: { deployConfig: true, nodeCompat: true },
+    }),
     solidPlugin({ ssr: true }),
   ],
 })
