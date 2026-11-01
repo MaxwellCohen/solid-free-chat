@@ -310,21 +310,21 @@ function blobBytes(input: Uint8Array): ArrayBuffer {
   ) as ArrayBuffer
 }
 
-async function gzipBytes(input: Uint8Array): Promise<Uint8Array> {
+export async function gzipBytes(input: Uint8Array): Promise<Uint8Array> {
   const stream = new Blob([blobBytes(input)])
     .stream()
     .pipeThrough(new CompressionStream('gzip'))
   return new Uint8Array(await new Response(stream).arrayBuffer())
 }
 
-async function gunzipBytes(input: Uint8Array): Promise<Uint8Array> {
+export async function gunzipBytes(input: Uint8Array): Promise<Uint8Array> {
   const stream = new Blob([blobBytes(input)])
     .stream()
     .pipeThrough(new DecompressionStream('gzip'))
   return new Uint8Array(await new Response(stream).arrayBuffer())
 }
 
-function bytesToBase64Url(bytes: Uint8Array): string {
+export function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = ''
   const chunk = 0x8000
   for (let i = 0; i < bytes.length; i += chunk) {
@@ -333,7 +333,7 @@ function bytesToBase64Url(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
-function base64UrlToBytes(value: string): Uint8Array {
+export function base64UrlToBytes(value: string): Uint8Array {
   const padded = value.replace(/-/g, '+').replace(/_/g, '/')
   const padLen = (4 - (padded.length % 4)) % 4
   const base64 = padded + '='.repeat(padLen)
