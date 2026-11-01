@@ -26,7 +26,7 @@ export function contentSecurityPolicy(): string {
   return [
     "default-src 'self'",
     // Inline theme bootstrap + SSR hydration scripts.
-    "script-src 'self' 'unsafe-inline'",
+    "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
     "style-src 'self' 'unsafe-inline'",
     // Model-returned markdown may embed remote images.
     "img-src 'self' data: blob: https:",
