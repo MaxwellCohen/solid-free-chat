@@ -80,6 +80,16 @@ export default function Header() {
             Chat
           </Link>
           <Link
+            to="/review"
+            class="text-muted-foreground hover:text-foreground rounded-md px-2.5 py-1.5 no-underline transition-colors"
+            activeProps={{
+              class:
+                'text-foreground bg-muted rounded-md px-2.5 py-1.5 no-underline transition-colors',
+            }}
+          >
+            Review
+          </Link>
+          <Link
             to="/about"
             class="text-muted-foreground hover:text-foreground rounded-md px-2.5 py-1.5 no-underline transition-colors"
             activeProps={{

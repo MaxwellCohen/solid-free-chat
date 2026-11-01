@@ -31,6 +31,8 @@ function scrubSecrets<T>(value: T): T | null {
 }
 
 function initSentry() {
+  // The browser SDK can't run in the server runtime (workerd).
+  if (typeof document === 'undefined') return
   const dsn = import.meta.env.VITE_SENTRY_DSN
   if (typeof dsn !== 'string' || !dsn.trim()) return
   Sentry.init({
