@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as HarnessSandboxRouteImport } from './routes/harness-sandbox'
+import { Route as ReviewRouteImport } from './routes/review'
 import { Route as ShareRouteImport } from './routes/share'
 import { Route as ApiFreeModelsRouteImport } from './routes/api.free-models'
 import { Route as ExampleChatRouteImport } from './routes/example.chat'
@@ -29,6 +30,11 @@ const AboutRoute = AboutRouteImport.update({
 const HarnessSandboxRoute = HarnessSandboxRouteImport.update({
   id: '/harness-sandbox',
   path: '/harness-sandbox',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReviewRoute = ReviewRouteImport.update({
+  id: '/review',
+  path: '/review',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ShareRoute = ShareRouteImport.update({
@@ -51,6 +57,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/harness-sandbox': typeof HarnessSandboxRoute
+  '/review': typeof ReviewRoute
   '/share': typeof ShareRoute
   '/api/free-models': typeof ApiFreeModelsRoute
   '/example/chat': typeof ExampleChatRoute
@@ -59,6 +66,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/harness-sandbox': typeof HarnessSandboxRoute
+  '/review': typeof ReviewRoute
   '/share': typeof ShareRoute
   '/api/free-models': typeof ApiFreeModelsRoute
   '/example/chat': typeof ExampleChatRoute
@@ -68,6 +76,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/harness-sandbox': typeof HarnessSandboxRoute
+  '/review': typeof ReviewRoute
   '/share': typeof ShareRoute
   '/api/free-models': typeof ApiFreeModelsRoute
   '/example/chat': typeof ExampleChatRoute
@@ -78,6 +87,7 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/harness-sandbox'
+    | '/review'
     | '/share'
     | '/api/free-models'
     | '/example/chat'
@@ -86,6 +96,7 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/harness-sandbox'
+    | '/review'
     | '/share'
     | '/api/free-models'
     | '/example/chat'
@@ -94,6 +105,7 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/harness-sandbox'
+    | '/review'
     | '/share'
     | '/api/free-models'
     | '/example/chat'
@@ -103,6 +115,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
   HarnessSandboxRoute: typeof HarnessSandboxRoute
+  ReviewRoute: typeof ReviewRoute
   ShareRoute: typeof ShareRoute
   ApiFreeModelsRoute: typeof ApiFreeModelsRoute
   ExampleChatRoute: typeof ExampleChatRoute
@@ -129,6 +142,13 @@ declare module '@tanstack/solid-router' {
       path: '/harness-sandbox'
       fullPath: '/harness-sandbox'
       preLoaderRoute: typeof HarnessSandboxRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/review': {
+      id: '/review'
+      path: '/review'
+      fullPath: '/review'
+      preLoaderRoute: typeof ReviewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/share': {
@@ -159,6 +179,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   HarnessSandboxRoute: HarnessSandboxRoute,
+  ReviewRoute: ReviewRoute,
   ShareRoute: ShareRoute,
   ApiFreeModelsRoute: ApiFreeModelsRoute,
   ExampleChatRoute: ExampleChatRoute,

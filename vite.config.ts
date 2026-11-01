@@ -54,6 +54,11 @@ function serviceWorker() {
 }
 
 export default defineConfig({
+  ssr: {
+    // One shared Solid instance between the router/start packages and the app,
+    // or `lazy()` can't see the manifest `renderToStream` sets.
+    noExternal: ['solid-js', '@solidjs/web'],
+  },
   optimizeDeps: {
     // Must share the unbundled `@solidjs/web/server-functions/client` instance
     // that `@tanstack/solid-start` configures, or `enableRichArguments()` is lost.
