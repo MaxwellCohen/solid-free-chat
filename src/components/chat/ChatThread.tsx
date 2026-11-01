@@ -10,6 +10,7 @@ import { stream } from '@tanstack/ai-client'
 import type { UIMessage } from '@tanstack/ai-client'
 import { useChat } from '../../lib/use-chat'
 import type { ContentPart, StreamChunk } from '@tanstack/ai'
+import { getProvider } from '../../lib/providers'
 import { runAgent } from '../../lib/harness/run-agent'
 import { createEnabledTools } from '../../lib/harness/tools'
 import {
@@ -152,7 +153,9 @@ function ChatThreadSession(props: {
     if (imageCount > 0 || fileCount > 0) {
       const parts: string[] = []
       if (imageCount > 0) {
-        parts.push(imageCount === 1 ? '1 image ready' : `${imageCount} images ready`)
+        parts.push(
+          imageCount === 1 ? '1 image ready' : `${imageCount} images ready`,
+        )
       }
       if (fileCount > 0) {
         parts.push(fileCount === 1 ? '1 PDF ready' : `${fileCount} PDFs ready`)
@@ -253,7 +256,9 @@ function ChatThreadSession(props: {
     },
   })
 
-  function commitConversationMessages(messages = chat.messages() as ChatUIMessage[]) {
+  function commitConversationMessages(
+    messages = chat.messages() as ChatUIMessage[],
+  ) {
     chatActions.setConversationMessages(conversationId, messages)
   }
 
@@ -296,7 +301,10 @@ function ChatThreadSession(props: {
     return null
   })
 
-  async function resendUserMessage(message: UIMessage, editedParts?: ContentPart[]) {
+  async function resendUserMessage(
+    message: UIMessage,
+    editedParts?: ContentPart[],
+  ) {
     if (message.role !== 'user' || chat.isLoading()) return
     const parts = editedParts ?? userMessageToResendParts(message)
     if (!parts || parts.length === 0) return
@@ -319,9 +327,16 @@ function ChatThreadSession(props: {
   }
 
   function branchFromMessage(message: UIMessage) {
-    const upTo = messagesBefore(chat.messages() as ChatUIMessage[], message.id, true)
+    const upTo = messagesBefore(
+      chat.messages() as ChatUIMessage[],
+      message.id,
+      true,
+    )
     if (!upTo) return
-    chatActions.setConversationMessages(conversationId, chat.messages() as ChatUIMessage[])
+    chatActions.setConversationMessages(
+      conversationId,
+      chat.messages() as ChatUIMessage[],
+    )
     chatActions.branchConversation(conversationId, upTo)
   }
 
@@ -520,7 +535,8 @@ function ChatThreadSession(props: {
           class="border-border bg-muted text-foreground border-b px-3 py-1.5 text-xs"
           role="alert"
         >
-          Spending warning: this chat has cost {formatCost(sessionTotalCost() ?? 0)}, over your{' '}
+          Spending warning: this chat has cost{' '}
+          {formatCost(sessionTotalCost() ?? 0)}, over your{' '}
           {formatCost(costThreshold() ?? 0)} limit.
         </p>
       </Show>
@@ -535,6 +551,7 @@ function ChatThreadSession(props: {
         failedUserMessage={failedUserMessage}
         error={() => chat.error()}
         onReconnectOpenRouter={props.onReconnectOpenRouter}
+        providerName={getProvider(props.providerId).name}
       />
       <label class="text-muted-foreground flex items-center justify-end gap-1.5 px-3 pt-1 text-xs">
         Warn above $

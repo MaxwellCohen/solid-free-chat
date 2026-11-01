@@ -4,11 +4,15 @@ import { classifyChatError, formatRetryAfter } from './chat-error'
 describe('classifyChatError', () => {
   it('detects auth errors by status property and message', () => {
     for (const status of [401, 403]) {
-      const info = classifyChatError(Object.assign(new Error('nope'), { status }))
+      const info = classifyChatError(
+        Object.assign(new Error('nope'), { status }),
+      )
       expect(info.kind).toBe('auth')
       expect(info.needsReconnect).toBe(true)
     }
-    expect(classifyChatError(new Error('Request failed (401)')).kind).toBe('auth')
+    expect(classifyChatError(new Error('Request failed (401)')).kind).toBe(
+      'auth',
+    )
   })
 
   it('reads status from nested cause/response', () => {
@@ -17,15 +21,21 @@ describe('classifyChatError', () => {
   })
 
   it('detects credits', () => {
-    expect(classifyChatError(Object.assign(new Error('x'), { statusCode: 402 })).kind).toBe(
+    expect(
+      classifyChatError(Object.assign(new Error('x'), { statusCode: 402 }))
+        .kind,
+    ).toBe('credits')
+    expect(classifyChatError(new Error('Insufficient credits')).kind).toBe(
       'credits',
     )
-    expect(classifyChatError(new Error('Insufficient credits')).kind).toBe('credits')
   })
 
   it('detects rate limit with retry-after header (plain object and Headers)', () => {
     const a = classifyChatError(
-      Object.assign(new Error('x'), { status: 429, headers: { 'retry-after': '30' } }),
+      Object.assign(new Error('x'), {
+        status: 429,
+        headers: { 'retry-after': '30' },
+      }),
     )
     expect(a).toMatchObject({ kind: 'rate-limit', retryAfterSeconds: 30 })
     const b = classifyChatError(
@@ -39,23 +49,26 @@ describe('classifyChatError', () => {
   })
 
   it('parses retry-after from message and handles missing value', () => {
-    expect(classifyChatError(new Error('Rate limit exceeded, retry after 12')).retryAfterSeconds).toBe(
-      12,
-    )
+    expect(
+      classifyChatError(new Error('Rate limit exceeded, retry after 12'))
+        .retryAfterSeconds,
+    ).toBe(12)
     const none = classifyChatError(new Error('429 too many requests'))
     expect(none.kind).toBe('rate-limit')
     expect(none.retryAfterSeconds).toBeUndefined()
   })
 
   it('detects network failures', () => {
-    expect(classifyChatError(new TypeError('Failed to fetch')).kind).toBe('network')
+    expect(classifyChatError(new TypeError('Failed to fetch')).kind).toBe(
+      'network',
+    )
     expect(classifyChatError(new Error('Load failed')).kind).toBe('network')
   })
 
   it('flags mid-stream failures only when a partial reply exists', () => {
-    expect(classifyChatError(new Error('boom'), { hasPartialResponse: true }).kind).toBe(
-      'stream',
-    )
+    expect(
+      classifyChatError(new Error('boom'), { hasPartialResponse: true }).kind,
+    ).toBe('stream')
     const unknown = classifyChatError(new Error('boom'))
     expect(unknown.kind).toBe('unknown')
     expect(unknown.detail).toBe('boom')
@@ -71,5 +84,18 @@ describe('formatRetryAfter', () => {
   it('formats seconds and minutes', () => {
     expect(formatRetryAfter(5)).toBe('5s')
     expect(formatRetryAfter(61)).toBe('2m')
+  })
+})
+
+describe('classifyChatError provider name', () => {
+  it('uses the given provider in auth and network messages', () => {
+    expect(
+      classifyChatError({ status: 401 }, { providerName: 'Groq' }).title,
+    ).toBe('Groq key rejected')
+    expect(
+      classifyChatError(new TypeError('Failed to fetch'), {
+        providerName: 'Groq',
+      }).detail,
+    ).toContain('Groq')
   })
 })
