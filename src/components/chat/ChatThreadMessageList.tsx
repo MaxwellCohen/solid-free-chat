@@ -1,11 +1,17 @@
-import { For, Show, onSettled } from 'solid-js'
+import { For, Show, createEffect, createSignal, onSettled } from 'solid-js'
 import type { Accessor } from 'solid-js'
 import type { UIMessage } from '@tanstack/ai-client'
+import type { ContentPart } from '@tanstack/ai'
 import { createVirtualizer } from '../../lib/create-virtualizer'
 import type { VirtualItem, Virtualizer } from '../../lib/create-virtualizer'
-import { RotateCw } from '../icons'
+import { Check, Copy, GitBranch, Pencil, RotateCw } from '../icons'
 import type { ChatUIMessage } from '../../store/chat.store'
-import { formatReplyTokenLine, userMessageToResendParts } from './chat-thread-utils'
+import {
+  formatReplyTokenLine,
+  messageToPlainText,
+  userMessageToResendParts,
+  withEditedText,
+} from './chat-thread-utils'
 import { MessageParts } from './ChatMessageParts'
 
 const MESSAGE_GAP_PX = 16
@@ -17,7 +23,9 @@ type ChatThreadMessageListProps = {
   isLoading: () => boolean
   lastAssistantMessageIndex: () => number
   sessionTotalSuffix: () => string
-  onResendUserMessage: (message: UIMessage) => void
+  onResendUserMessage: (message: UIMessage, editedParts?: ContentPart[]) => void
+  onRegenerateMessage: (message: UIMessage) => void
+  onBranchMessage: (message: UIMessage) => void
   failedUserMessage: () => UIMessage | null
   error: () => Error | undefined
 }
@@ -33,7 +41,7 @@ export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
     estimateSize: () => ESTIMATED_MESSAGE_HEIGHT_PX,
     getItemKey: (index) => props.messages()[index]?.id ?? index,
     anchorTo: 'end',
-    followOnAppend: true,
+    followOnAppend: false,
     scrollEndThreshold: SCROLL_END_THRESHOLD_PX,
     gap: MESSAGE_GAP_PX,
     overscan: 6,
@@ -42,6 +50,32 @@ export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
   onSettled(() => {
     virtualizer.scrollToEnd()
   })
+
+  // When the user sends a message, pin it to the top so the reply fills the view.
+  let prevCount = props.messages().length
+  createEffect(
+    () => props.messages().length,
+    (count) => {
+      const last = props.messages()[count - 1]
+      if (count > prevCount && last?.role === 'user') {
+        requestAnimationFrame(() =>
+          virtualizer.scrollToIndex(count - 1, { align: 'start' }),
+        )
+      }
+      prevCount = count
+    },
+  )
+
+  // Trailing space so the last user message can scroll to the top before the reply grows.
+  const trailingSpace = () => {
+    const total = virtualizer.getTotalSize()
+    const count = props.messages().length
+    let i = count - 1
+    while (i >= 0 && props.messages()[i]?.role !== 'user') i--
+    const start = virtualizer.measurementsCache[i]?.start
+    if (start === undefined || !scrollContainerRef) return 0
+    return Math.max(0, scrollContainerRef.clientHeight - 32 - (total - start))
+  }
 
   return (
     <div
@@ -52,7 +86,7 @@ export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
     >
       <div
         class="relative w-full"
-        style={{ height: `${virtualizer.getTotalSize()}px` }}
+        style={{ height: `${virtualizer.getTotalSize() + trailingSpace()}px` }}
       >
         {/* Key by item key: the virtualizer re-creates item objects on every measure,
             and remounting would reset open <details> (e.g. Reasoning). */}
@@ -79,6 +113,7 @@ function VirtualChatMessage(props: {
   // Read from the live messages list so streaming updates stay reactive
   // even though virtual items themselves do not change identity.
   const message = () => props.listProps.messages()[props.virtualItem().index]
+  const [editing, setEditing] = createSignal(false)
 
   return (
     <Show when={message()}>
@@ -110,7 +145,25 @@ function VirtualChatMessage(props: {
               },
             ]}
           >
-            <MessageBubble message={msg()} />
+            <Show
+              when={editing()}
+              fallback={<MessageBubble message={msg()} />}
+            >
+              <EditMessageForm
+                message={msg()}
+                onCancel={() => setEditing(false)}
+                onSave={(text) => {
+                  setEditing(false)
+                  const parts = userMessageToResendParts(msg())
+                  if (parts) {
+                    void props.listProps.onResendUserMessage(
+                      msg(),
+                      withEditedText(parts, text),
+                    )
+                  }
+                }}
+              />
+            </Show>
             <AssistantUsageLine
               message={msg()}
               isLastAssistantMessage={
@@ -118,6 +171,13 @@ function VirtualChatMessage(props: {
                 props.listProps.lastAssistantMessageIndex()
               }
               sessionTotalSuffix={props.listProps.sessionTotalSuffix}
+            />
+            <MessageActions
+              message={msg()}
+              isLoading={props.listProps.isLoading}
+              onEdit={() => setEditing(true)}
+              onRegenerate={props.listProps.onRegenerateMessage}
+              onBranch={props.listProps.onBranchMessage}
             />
             <UserResendButton
               message={msg()}
@@ -179,7 +239,7 @@ function UserResendButton(props: {
   message: ChatUIMessage
   isLoading: () => boolean
   failedUserMessage: () => UIMessage | null
-  onResendUserMessage: (message: UIMessage) => void
+  onResendUserMessage: (message: UIMessage, editedParts?: ContentPart[]) => void
 }) {
   return (
     <Show
@@ -203,6 +263,129 @@ function UserResendButton(props: {
         {props.failedUserMessage()?.id === props.message.id ? 'Retry' : 'Resend'}
       </button>
     </Show>
+  )
+}
+
+const ACTION_BUTTON_CLASS =
+  'text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-[11px] font-medium underline-offset-2 hover:underline disabled:pointer-events-none disabled:opacity-40'
+
+function MessageActions(props: {
+  message: ChatUIMessage
+  isLoading: () => boolean
+  onEdit: () => void
+  onRegenerate: (message: UIMessage) => void
+  onBranch: (message: UIMessage) => void
+}) {
+  const [copied, setCopied] = createSignal(false)
+  const text = () => messageToPlainText(props.message)
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text())
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // Clipboard unavailable (e.g. insecure context); ignore.
+    }
+  }
+
+  return (
+    <Show when={props.message.role !== 'system'}>
+      <div class="flex items-center gap-1">
+        <Show when={text()}>
+          <button
+            type="button"
+            class={ACTION_BUTTON_CLASS}
+            aria-label="Copy message"
+            onClick={() => void copy()}
+          >
+            <Show
+              when={copied()}
+              fallback={<Copy class="size-3 shrink-0" aria-hidden="true" />}
+            >
+              <Check class="size-3 shrink-0" aria-hidden="true" />
+            </Show>
+            {copied() ? 'Copied' : 'Copy'}
+          </button>
+        </Show>
+        <Show
+          when={
+            props.message.role === 'user' &&
+            userMessageToResendParts(props.message) !== null
+          }
+        >
+          <button
+            type="button"
+            class={ACTION_BUTTON_CLASS}
+            disabled={props.isLoading()}
+            aria-label="Edit and resend this message"
+            onClick={props.onEdit}
+          >
+            <Pencil class="size-3 shrink-0" aria-hidden="true" />
+            Edit
+          </button>
+        </Show>
+        <Show when={props.message.role === 'assistant'}>
+          <button
+            type="button"
+            class={ACTION_BUTTON_CLASS}
+            disabled={props.isLoading()}
+            aria-label="Regenerate this response"
+            onClick={() => void props.onRegenerate(props.message)}
+          >
+            <RotateCw class="size-3 shrink-0" aria-hidden="true" />
+            Regenerate
+          </button>
+        </Show>
+        <button
+          type="button"
+          class={ACTION_BUTTON_CLASS}
+          disabled={props.isLoading()}
+          aria-label="Branch into a new chat from this message"
+          onClick={() => props.onBranch(props.message)}
+        >
+          <GitBranch class="size-3 shrink-0" aria-hidden="true" />
+          Branch
+        </button>
+      </div>
+    </Show>
+  )
+}
+
+function EditMessageForm(props: {
+  message: ChatUIMessage
+  onSave: (text: string) => void
+  onCancel: () => void
+}) {
+  const [value, setValue] = createSignal(messageToPlainText(props.message))
+  const canSave = () =>
+    value().trim() !== '' ||
+    (userMessageToResendParts(props.message)?.some((p) => p.type !== 'text') ??
+      false)
+
+  return (
+    <form
+      class="flex w-full min-w-0 flex-col gap-2"
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (canSave()) props.onSave(value().trim())
+      }}
+    >
+      <textarea
+        class="border-border bg-background text-foreground min-h-20 w-full rounded-xl border px-3 py-2 text-sm"
+        value={value()}
+        onInput={(e) => setValue(e.currentTarget.value)}
+        ref={(el) => queueMicrotask(() => el.focus())}
+      />
+      <div class="flex justify-end gap-2">
+        <button type="button" class={ACTION_BUTTON_CLASS} onClick={props.onCancel}>
+          Cancel
+        </button>
+        <button type="submit" class={ACTION_BUTTON_CLASS} disabled={!canSave()}>
+          Save and resend
+        </button>
+      </div>
+    </form>
   )
 }
 

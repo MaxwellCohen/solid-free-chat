@@ -1,3 +1,6 @@
+import { parseModelPricing } from './usage-cost'
+import type { ModelPricing } from './usage-cost'
+
 /** OpenRouter Free Models Router — picks a capable free model per request. */
 export const FREE_MODELS_ROUTER_ID = 'openrouter/free'
 
@@ -30,6 +33,8 @@ export interface ChatModelOption {
   inputModalities?: string[]
   /** From OpenRouter `supported_parameters`; `undefined` when unknown. */
   supportsTools?: boolean
+  /** From OpenRouter `pricing`; used to estimate cost when the API reports none. */
+  pricing?: ModelPricing
 }
 
 function coercePricingScalar(v: unknown): number | null {
@@ -83,6 +88,7 @@ export function toFreeTextChatOptions(
     id: m.id,
     name: m.name,
     inputModalities: m.architecture.input_modalities,
+    pricing: parseModelPricing(m.pricing),
     supportsTools: m.supported_parameters
       ? m.supported_parameters.includes('tools')
       : undefined,

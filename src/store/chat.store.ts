@@ -12,6 +12,8 @@ export interface TokenUsageSnapshot {
   promptTokens: number
   completionTokens: number
   totalTokens: number
+  /** USD: provider-reported, else computed from model pricing; absent when unknown. */
+  cost?: number
   recordedAt: number
 }
 
@@ -38,6 +40,8 @@ export interface ChatConversation {
   lastUsage?: TokenUsageSnapshot
   /** Sum of `totalTokens` from each completed run in this chat (approx. session usage). */
   sessionTotalTokens?: number
+  /** Sum of known per-run costs (USD) in this chat. */
+  sessionTotalCost?: number
 }
 
 export interface ChatConversationWithMessages extends ChatConversation {
@@ -125,6 +129,7 @@ export function normalizeTokenUsageSnapshot(
   const completionTokens = o.completionTokens
   const totalTokens = o.totalTokens
   const recordedAt = o.recordedAt
+  const cost = o.cost
   if (
     typeof promptTokens !== 'number' ||
     typeof completionTokens !== 'number' ||
@@ -139,6 +144,7 @@ export function normalizeTokenUsageSnapshot(
     promptTokens,
     completionTokens,
     totalTokens,
+    ...(typeof cost === 'number' && Number.isFinite(cost) && cost >= 0 ? { cost } : {}),
     recordedAt:
       typeof recordedAt === 'number' && Number.isFinite(recordedAt)
         ? recordedAt
@@ -258,6 +264,12 @@ function normalizeConversationRecord(
     Number.isFinite(source.sessionTotalTokens)
       ? source.sessionTotalTokens
       : undefined
+  const sessionTotalCost =
+    typeof source.sessionTotalCost === 'number' &&
+    Number.isFinite(source.sessionTotalCost) &&
+    source.sessionTotalCost >= 0
+      ? source.sessionTotalCost
+      : undefined
 
   let nextSkills = skills
   const validIds = new Set(nextSkills.map((s) => s.id))
@@ -283,6 +295,7 @@ function normalizeConversationRecord(
       skillIds,
       ...(lastUsage ? { lastUsage } : {}),
       ...(sessionTotalTokens !== undefined ? { sessionTotalTokens } : {}),
+      ...(sessionTotalCost !== undefined ? { sessionTotalCost } : {}),
     },
   }
 }
@@ -532,6 +545,33 @@ export const chatActions = {
     return conversation.id
   },
 
+  /** New conversation seeded with `messages` (history up to a branch point). */
+  branchConversation(sourceId: string, messages: ChatUIMessage[]) {
+    const conversation = newConversation()
+    chatStore.setState((s) => {
+      const source = getConversation(s, sourceId)
+      const titleHint = deriveTitleFromMessages(messages)
+      return {
+        ...s,
+        conversationOrder: [conversation.id, ...s.conversationOrder],
+        conversationsById: {
+          ...s.conversationsById,
+          [conversation.id]: {
+            ...conversation,
+            title: titleHint ? truncate(titleHint, 52) : conversation.title,
+            skillIds: [...(source?.skillIds ?? [])],
+          },
+        },
+        messagesByConversationId: {
+          ...s.messagesByConversationId,
+          [conversation.id]: messages,
+        },
+        currentConversationId: conversation.id,
+      }
+    })
+    return conversation.id
+  },
+
   setCurrentConversationId(id: string | null) {
     chatStore.setState((s) => ({
       ...s,
@@ -700,6 +740,9 @@ export const chatActions = {
             ...conversation,
             lastUsage: { ...usage, recordedAt },
             sessionTotalTokens: prevSession + usage.totalTokens,
+            ...(usage.cost !== undefined
+              ? { sessionTotalCost: (conversation.sessionTotalCost ?? 0) + usage.cost }
+              : {}),
             updatedAt: Date.now(),
           },
         },

@@ -1,5 +1,6 @@
 import type { UIMessage } from '@tanstack/ai-client'
 import type { ContentPart } from '@tanstack/ai'
+import { formatCost } from '../../lib/usage-cost'
 import type { TokenUsageSnapshot } from '../../store/chat.store'
 
 export function formatTokenCount(n: number): string {
@@ -11,7 +12,8 @@ export function formatTokenCount(n: number): string {
 }
 
 export function formatReplyTokenLine(usage: TokenUsageSnapshot): string {
-  return `Reply: ${formatTokenCount(usage.promptTokens)} context · ${formatTokenCount(usage.completionTokens)} out`
+  const cost = usage.cost === undefined ? '' : ` · ${formatCost(usage.cost)}`
+  return `Reply: ${formatTokenCount(usage.promptTokens)} context · ${formatTokenCount(usage.completionTokens)} out${cost}`
 }
 
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024
@@ -102,4 +104,30 @@ export function userMessageToResendParts(message: UIMessage): ContentPart[] | nu
     }
   }
   return out.length > 0 ? out : null
+}
+
+/** Messages strictly before `id` (or through it when `inclusive`); null if not found. */
+export function messagesBefore<T extends { id: string }>(
+  messages: T[],
+  id: string,
+  inclusive = false,
+): T[] | null {
+  const idx = messages.findIndex((m) => m.id === id)
+  if (idx === -1) return null
+  return messages.slice(0, inclusive ? idx + 1 : idx)
+}
+
+/** Concatenated text parts of a message, for copying. */
+export function messageToPlainText(message: UIMessage): string {
+  const out: string[] = []
+  for (const p of message.parts) {
+    if (p.type === 'text') out.push(p.content)
+  }
+  return out.join('\n\n')
+}
+
+/** Resend parts with all text replaced by `text` (attachments kept). */
+export function withEditedText(parts: ContentPart[], text: string): ContentPart[] {
+  const rest = parts.filter((p) => p.type !== 'text')
+  return text ? [{ type: 'text', content: text }, ...rest] : rest
 }

@@ -313,6 +313,33 @@ export default function ChatApp() {
     el?.focus()
   }
 
+  function focusSidebarSearch() {
+    setSidebarOpen(true)
+    // Wait for the sidebar to render before focusing.
+    requestAnimationFrame(() => {
+      const el = document.getElementById('sidebar-search-input')
+      if (el instanceof HTMLInputElement) {
+        el.focus()
+        el.select()
+      }
+    })
+  }
+
+  function searchCorpus() {
+    const state = chatStore.state
+    return state.conversationOrder.flatMap((id) => {
+      const conversation = state.conversationsById[id]
+      return conversation
+        ? [
+            {
+              ...conversation,
+              messages: state.messagesByConversationId[id] ?? [],
+            },
+          ]
+        : []
+    })
+  }
+
   function handleChatShortcut(event: KeyboardEvent) {
     if (event.isComposing) return
     const match = findMatchingShortcut(event)
@@ -354,6 +381,9 @@ export default function ChatApp() {
         break
       case 'toggleSidebar':
         toggleSidebar()
+        break
+      case 'searchChats':
+        focusSidebarSearch()
         break
       case 'focusComposer':
         focusChatComposer()
@@ -440,6 +470,7 @@ export default function ChatApp() {
         onSelectConversation={selectConversation}
         onCreateConversation={createConversationFromSidebar}
         onDeleteConversation={(id) => actions.deleteConversation(id)}
+        getSearchCorpus={searchCorpus}
         openRouterApiKeyApplied={openRouterApiKeyApplied}
         openRouterApiKeyModalOpen={openRouterApiKeyModalOpen}
         onOpenOpenRouterModal={openOpenRouterApiKeyModal}
@@ -484,6 +515,7 @@ export default function ChatApp() {
                   initialMessages={initialMessages}
                   inputModalities={selectedModelMeta()?.inputModalities}
                   supportsTools={modelSupportsTools(selectedModelMeta())}
+                  modelPricing={selectedModelMeta()?.pricing}
                   openRouterApiKey={openRouterApiKeyApplied()}
                   onLoadingChange={setCurrentConversationLoading}
                   onRegisterStop={(stop) => {

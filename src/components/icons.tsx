@@ -3,10 +3,13 @@ import { Dynamic } from '@solidjs/web'
 import type { JSX } from '@solidjs/web'
 
 import checkCircle2 from 'lucide/dist/esm/icons/circle-check.mjs'
+import check from 'lucide/dist/esm/icons/check.mjs'
 import chevronRight from 'lucide/dist/esm/icons/chevron-right.mjs'
 import circleAlert from 'lucide/dist/esm/icons/circle-alert.mjs'
+import copy from 'lucide/dist/esm/icons/copy.mjs'
 import download from 'lucide/dist/esm/icons/download.mjs'
 import fileText from 'lucide/dist/esm/icons/file-text.mjs'
+import gitBranch from 'lucide/dist/esm/icons/git-branch.mjs'
 import image from 'lucide/dist/esm/icons/image.mjs'
 import keyRound from 'lucide/dist/esm/icons/key-round.mjs'
 import keyboard from 'lucide/dist/esm/icons/keyboard.mjs'
@@ -15,6 +18,7 @@ import monitor from 'lucide/dist/esm/icons/monitor.mjs'
 import moon from 'lucide/dist/esm/icons/moon.mjs'
 import panelLeftClose from 'lucide/dist/esm/icons/panel-left-close.mjs'
 import panelLeft from 'lucide/dist/esm/icons/panel-left.mjs'
+import pencil from 'lucide/dist/esm/icons/pencil.mjs'
 import rotateCw from 'lucide/dist/esm/icons/rotate-cw.mjs'
 import share2 from 'lucide/dist/esm/icons/share-2.mjs'
 import squarePen from 'lucide/dist/esm/icons/square-pen.mjs'
@@ -55,11 +59,14 @@ function createIcon(icon: IconNode) {
 }
 
 export const CheckCircle2 = createIcon(checkCircle2)
+export const Check = createIcon(check)
 export const ChevronRight = createIcon(chevronRight)
 export const CircleAlert = createIcon(circleAlert)
 export const Computer = createIcon(monitor)
+export const Copy = createIcon(copy)
 export const Download = createIcon(download)
 export const FileText = createIcon(fileText)
+export const GitBranch = createIcon(gitBranch)
 export const Image = createIcon(image)
 export const KeyRound = createIcon(keyRound)
 export const Keyboard = createIcon(keyboard)
@@ -67,6 +74,7 @@ export const LoaderCircle = createIcon(loaderCircle)
 export const Moon = createIcon(moon)
 export const PanelLeft = createIcon(panelLeft)
 export const PanelLeftClose = createIcon(panelLeftClose)
+export const Pencil = createIcon(pencil)
 export const RotateCw = createIcon(rotateCw)
 export const Share2 = createIcon(share2)
 export const SquarePen = createIcon(squarePen)

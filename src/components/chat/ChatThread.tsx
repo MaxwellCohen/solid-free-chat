@@ -16,6 +16,15 @@ import {
   modelSupportsDocumentInput,
   modelSupportsImageInput,
 } from '../../lib/chat-models'
+import {
+  computeUsageCost,
+  formatCost,
+  isOverThreshold,
+  loadCostThreshold,
+  parseCostThreshold,
+  saveCostThreshold,
+} from '../../lib/usage-cost'
+import type { ModelPricing } from '../../lib/usage-cost'
 import { composeSystemPrompt } from '../../lib/compose-system-prompt'
 import {
   attachTokenUsageToLastAssistantMessage,
@@ -37,6 +46,7 @@ import {
   parseDataUrl,
   readFileAsDataUrl,
   guessImageMimeFromFilename,
+  messagesBefore,
   userMessageToResendParts,
 } from './chat-thread-utils'
 
@@ -46,6 +56,8 @@ export default function ChatThread(props: {
   inputModalities?: string[]
   /** Whether the selected model accepts tool definitions. */
   supportsTools: boolean
+  /** Selected model pricing, for estimating cost when the API reports none. */
+  modelPricing?: ModelPricing
   /** Committed key from the client (after blur); optional proxy env only for local dev. */
   openRouterApiKey: string
   onLoadingChange: (isLoading: boolean) => void
@@ -59,6 +71,7 @@ export default function ChatThread(props: {
           initialMessages={props.initialMessages}
           inputModalities={props.inputModalities}
           supportsTools={props.supportsTools}
+          modelPricing={props.modelPricing}
           openRouterApiKey={props.openRouterApiKey}
           onLoadingChange={props.onLoadingChange}
           onRegisterStop={props.onRegisterStop}
@@ -73,6 +86,7 @@ function ChatThreadSession(props: {
   initialMessages: ChatUIMessage[]
   inputModalities?: string[]
   supportsTools: boolean
+  modelPricing?: ModelPricing
   /** Committed key from the client (after blur); optional proxy env only for local dev. */
   openRouterApiKey: string
   onLoadingChange: (isLoading: boolean) => void
@@ -159,11 +173,19 @@ function ChatThreadSession(props: {
   const sessionTotalTokens = useChatStore(
     (state) => state.conversationsById[conversationId]?.sessionTotalTokens,
   )
+  const sessionTotalCost = useChatStore(
+    (state) => state.conversationsById[conversationId]?.sessionTotalCost,
+  )
   const sessionTotalSuffix = createMemo(() => {
     const session = sessionTotalTokens()
     if (typeof session !== 'number' || session <= 0) return ''
-    return ` · This chat: ~${formatTokenCount(session)} tokens total`
+    const cost = sessionTotalCost()
+    return ` · This chat: ~${formatTokenCount(session)} tokens${cost === undefined ? '' : `, ${formatCost(cost)}`} total`
   })
+  const [costThreshold, setCostThreshold] = createSignal(loadCostThreshold())
+  const overThreshold = createMemo(() =>
+    isOverThreshold(sessionTotalCost() ?? 0, costThreshold()),
+  )
 
   const chat = useChat({
     id: conversationId,
@@ -172,16 +194,19 @@ function ChatThreadSession(props: {
       if (chunk.type !== 'RUN_FINISHED') return
       const u = chunk.usage
       if (!u) return
+      const cost = computeUsageCost(u, props.modelPricing)
       chatActions.recordConversationTokenUsage(conversationId, {
         promptTokens: u.promptTokens,
         completionTokens: u.completionTokens,
         totalTokens: u.totalTokens,
+        ...(cost !== undefined ? { cost } : {}),
       })
       const recordedAt = Date.now()
       const snap: TokenUsageSnapshot = {
         promptTokens: u.promptTokens,
         completionTokens: u.completionTokens,
         totalTokens: u.totalTokens,
+        ...(cost !== undefined ? { cost } : {}),
         recordedAt,
       }
       // Patch after the stream processor finishes this tick — avoids racing
@@ -264,14 +289,12 @@ function ChatThreadSession(props: {
     return null
   })
 
-  async function resendUserMessage(message: UIMessage) {
+  async function resendUserMessage(message: UIMessage, editedParts?: ContentPart[]) {
     if (message.role !== 'user' || chat.isLoading()) return
-    const parts = userMessageToResendParts(message)
-    if (!parts) return
-    const msgs = chat.messages()
-    const idx = msgs.findIndex((m) => m.id === message.id)
-    if (idx === -1) return
-    const truncated = msgs.slice(0, idx)
+    const parts = editedParts ?? userMessageToResendParts(message)
+    if (!parts || parts.length === 0) return
+    const truncated = messagesBefore(chat.messages(), message.id)
+    if (!truncated) return
     chat.setMessages(truncated)
     commitConversationMessages(truncated as ChatUIMessage[])
     const sendPromise = chat.sendMessage({
@@ -279,6 +302,20 @@ function ChatThreadSession(props: {
     } as unknown as Parameters<typeof chat.sendMessage>[0])
     scheduleCommitCurrentMessages()
     await sendPromise
+  }
+
+  async function regenerateAssistantMessage(message: UIMessage) {
+    if (message.role !== 'assistant' || chat.isLoading()) return
+    const before = messagesBefore(chat.messages(), message.id)
+    const user = before?.filter((m) => m.role === 'user').pop()
+    if (user) await resendUserMessage(user)
+  }
+
+  function branchFromMessage(message: UIMessage) {
+    const upTo = messagesBefore(chat.messages() as ChatUIMessage[], message.id, true)
+    if (!upTo) return
+    chatActions.setConversationMessages(conversationId, chat.messages() as ChatUIMessage[])
+    chatActions.branchConversation(conversationId, upTo)
   }
 
   onSettled(() => {
@@ -471,15 +508,41 @@ function ChatThreadSession(props: {
 
   return (
     <div class="flex min-h-0 flex-1 flex-col">
+      <Show when={overThreshold()}>
+        <p
+          class="border-border bg-muted text-foreground border-b px-3 py-1.5 text-xs"
+          role="alert"
+        >
+          Spending warning: this chat has cost {formatCost(sessionTotalCost() ?? 0)}, over your{' '}
+          {formatCost(costThreshold() ?? 0)} limit.
+        </p>
+      </Show>
       <ChatThreadMessageList
         messages={() => chat.messages() as ChatUIMessage[]}
         isLoading={() => chat.isLoading()}
         lastAssistantMessageIndex={lastAssistantMessageIndex}
         sessionTotalSuffix={sessionTotalSuffix}
         onResendUserMessage={resendUserMessage}
+        onRegenerateMessage={regenerateAssistantMessage}
+        onBranchMessage={branchFromMessage}
         failedUserMessage={failedUserMessage}
         error={() => chat.error()}
       />
+      <label class="text-muted-foreground flex items-center justify-end gap-1.5 px-3 pt-1 text-xs">
+        Warn above $
+        <input
+          type="text"
+          inputmode="decimal"
+          class="border-border bg-background w-16 rounded border px-1 py-0.5 tabular-nums"
+          placeholder="off"
+          value={costThreshold() ?? ''}
+          onChange={(e) => {
+            const next = parseCostThreshold(e.currentTarget.value)
+            saveCostThreshold(next)
+            setCostThreshold(next)
+          }}
+        />
+      </label>
       <ChatThreadComposer
         supportsImage={supportsImage}
         supportsDocument={supportsDocument}

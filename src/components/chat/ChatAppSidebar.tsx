@@ -1,4 +1,4 @@
-import { For, Show, createSignal } from 'solid-js'
+import { For, Show, createMemo, createSignal, onCleanup } from 'solid-js'
 import {
   ChevronRight,
   KeyRound,
@@ -8,6 +8,8 @@ import {
 } from '../icons'
 import type { ChatConversation } from '../../store/chat.hooks'
 import { NEW_CHAT_TITLE } from '../../store/chat.store'
+import { searchSidebarConversations } from '../../lib/conversation-search'
+import type { HistoryConversation } from '../../lib/harness/chat-history'
 
 type ChatAppSidebarProps = {
   sidebarOpen: () => boolean
@@ -17,6 +19,7 @@ type ChatAppSidebarProps = {
   onSelectConversation: (id: string) => void
   onCreateConversation: () => void
   onDeleteConversation: (id: string) => void
+  getSearchCorpus: () => HistoryConversation[]
   openRouterApiKeyApplied: () => string
   openRouterApiKeyModalOpen: () => boolean
   onOpenOpenRouterModal: () => void
@@ -136,7 +139,7 @@ function ConversationPane(props: { props: ChatAppSidebarProps }) {
       <ConversationHeader
         onCreateConversation={props.props.onCreateConversation}
       />
-      <ConversationNav props={props.props} />
+      <ConversationSearch props={props.props} />
     </div>
   )
 }
@@ -157,6 +160,106 @@ function ConversationHeader(props: {
         New
       </button>
     </div>
+  )
+}
+
+const SEARCH_DEBOUNCE_MS = 200
+
+function ConversationSearch(props: { props: ChatAppSidebarProps }) {
+  const [input, setInput] = createSignal('')
+  const [query, setQuery] = createSignal('')
+  let timer: ReturnType<typeof setTimeout> | undefined
+  onCleanup(() => clearTimeout(timer))
+
+  function onInput(value: string) {
+    setInput(value)
+    clearTimeout(timer)
+    timer = setTimeout(() => setQuery(value), SEARCH_DEBOUNCE_MS)
+  }
+
+  function clear() {
+    clearTimeout(timer)
+    setInput('')
+    setQuery('')
+  }
+
+  const results = createMemo(() => {
+    const q = query().trim()
+    return q ? searchSidebarConversations(props.props.getSearchCorpus(), q) : null
+  })
+
+  return (
+    <>
+      <div class="shrink-0 px-3 pb-2">
+        <input
+          id="sidebar-search-input"
+          type="search"
+          class="border-border bg-background placeholder:text-muted-foreground w-full rounded-lg border px-2.5 py-1.5 text-sm"
+          placeholder="Search chats"
+          aria-label="Search chats"
+          value={input()}
+          onInput={(e) => onInput(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' && input()) {
+              e.stopPropagation()
+              clear()
+            }
+          }}
+        />
+      </div>
+      <Show when={results()} fallback={<ConversationNav props={props.props} />}>
+        {(hits) => (
+          <nav
+            class="min-h-0 flex-1 overflow-y-auto"
+            aria-label="Search results"
+          >
+            <Show
+              when={hits().length > 0}
+              fallback={
+                <p class="text-muted-foreground px-4 py-2 text-sm">
+                  No matching chats.
+                </p>
+              }
+            >
+              <ul class="space-y-0.5 px-2 pb-3">
+                <For each={hits()}>
+                  {(hit) => (
+                    <li>
+                      <button
+                        type="button"
+                        class={[
+                          'hover:bg-muted w-full rounded-lg px-2 py-2 text-left text-sm',
+                          {
+                            'bg-muted':
+                              props.props.currentConversationId() === hit.id,
+                          },
+                        ]}
+                        onClick={() => props.props.onSelectConversation(hit.id)}
+                      >
+                        <span class="block truncate font-medium">
+                          {hit.title || NEW_CHAT_TITLE}
+                        </span>
+                        <Show when={hit.snippet}>
+                          {(snippet) => (
+                            <span class="text-muted-foreground block text-xs break-words">
+                              {snippet().before}
+                              <mark class="bg-primary/20 text-foreground rounded-sm">
+                                {snippet().match}
+                              </mark>
+                              {snippet().after}
+                            </span>
+                          )}
+                        </Show>
+                      </button>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </Show>
+          </nav>
+        )}
+      </Show>
+    </>
   )
 }
 

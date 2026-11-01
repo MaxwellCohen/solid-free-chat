@@ -8,6 +8,7 @@ export type ShortcutChord = {
 export type ShortcutId =
   | 'newChat'
   | 'toggleSidebar'
+  | 'searchChats'
   | 'focusComposer'
   | 'shareChat'
   | 'openSkills'
@@ -31,6 +32,11 @@ export const CHAT_SHORTCUTS: readonly ShortcutDefinition[] = [
     id: 'toggleSidebar',
     label: 'Toggle sidebar',
     keys: { key: 'b', mod: true },
+  },
+  {
+    id: 'searchChats',
+    label: 'Search chats',
+    keys: { key: 'f', mod: true, shift: true },
   },
   {
     id: 'focusComposer',
