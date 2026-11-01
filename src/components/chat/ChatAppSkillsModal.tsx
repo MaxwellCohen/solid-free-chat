@@ -185,7 +185,9 @@ function SkillsModalDialog(props: {
                               class="border-input bg-background rounded-lg border px-2 py-1.5 text-sm"
                               value={editName()}
                               maxlength={120}
-                              onInput={(e) => setEditName(e.currentTarget.value)}
+                              onInput={(e) =>
+                                setEditName(e.currentTarget.value)
+                              }
                             />
                           </label>
                           <label class="text-muted-foreground flex flex-col gap-1 text-xs">

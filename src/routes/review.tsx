@@ -1,9 +1,12 @@
 import { createFileRoute } from '@tanstack/solid-router'
-import { For, Show, createMemo, createSignal } from 'solid-js'
+import { For, Show, createMemo, createSignal, onSettled } from 'solid-js'
 
 import { runAgent } from '../lib/harness/run-agent'
-import { DEFAULT_CHAT_MODEL } from '../lib/chat-models'
+import { ModelSelect } from '../components/ModelSelect'
+import { loadToolModelSelection } from '../lib/model-options'
+import type { ModelSelection } from '../lib/model-options'
 import { loadStoredApiKey } from '../lib/openrouter-key-storage'
+import { getProvider } from '../lib/providers'
 import {
   applySuggestion,
   buildReviewSystemPrompt,
@@ -24,6 +27,13 @@ const FOCUSES: { id: ReviewFocus; label: string }[] = [
 ]
 
 function Review() {
+  const [modelSel, setModelSel] = createSignal<ModelSelection>({
+    providerId: 'openrouter',
+    modelId: 'openrouter/free',
+  })
+  onSettled(() => {
+    setModelSel(loadToolModelSelection())
+  })
   const [text, setText] = createSignal('')
   const [focus, setFocus] = createSignal<ReviewFocus>('editor')
   const [reviewedText, setReviewedText] = createSignal<string | null>(null)
@@ -49,9 +59,12 @@ function Review() {
   }
 
   const runReview = async () => {
-    const apiKey = loadStoredApiKey().key.trim()
+    const sel = modelSel()
+    const apiKey = loadStoredApiKey(sel.providerId).key.trim()
     if (!apiKey) {
-      setError('Add your OpenRouter API key on the Chat page first.')
+      setError(
+        `Add your ${getProvider(sel.providerId).name} API key on the Chat page first.`,
+      )
       return
     }
     const input = text()
@@ -66,7 +79,8 @@ function Review() {
       let raw = ''
       for await (const chunk of runAgent({
         apiKey,
-        model: DEFAULT_CHAT_MODEL,
+        providerId: sel.providerId,
+        model: sel.modelId,
         messages: [{ role: 'user', content: input }],
         systemPrompt: buildReviewSystemPrompt(focus()),
         abortSignal: abort.signal,
@@ -94,6 +108,7 @@ function Review() {
           <h1 class="text-foreground mr-auto text-2xl font-bold tracking-tight">
             Writing review
           </h1>
+          <ModelSelect value={modelSel} onChange={setModelSel} />
           <For each={FOCUSES}>
             {(f) => (
               <button

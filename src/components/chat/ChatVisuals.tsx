@@ -45,7 +45,9 @@ export function DiagramView(props: { code: string; title?: string }) {
   return (
     <VisualFrame title={props.title}>
       <Show when={error()}>
-        <p class="text-destructive text-xs">Could not draw diagram: {error()}</p>
+        <p class="text-destructive text-xs">
+          Could not draw diagram: {error()}
+        </p>
       </Show>
       <div ref={(el) => (container = el)} class="chat-diagram" />
     </VisualFrame>

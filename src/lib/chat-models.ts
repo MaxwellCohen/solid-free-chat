@@ -28,6 +28,8 @@ export interface OpenRouterUserModelRow {
 
 export interface ChatModelOption {
   id: string
+  /** Provider that serves this model (set when listing across providers). */
+  providerId?: string
   name: string
   /** From OpenRouter `architecture.input_modalities`; controls upload UI. */
   inputModalities?: string[]

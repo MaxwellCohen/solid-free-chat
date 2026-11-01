@@ -19,7 +19,10 @@ export function formatReplyTokenLine(usage: TokenUsageSnapshot): string {
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024
 export const MAX_PDF_BYTES = 12 * 1024 * 1024
 
-export function parseDataUrl(dataUrl: string): { mimeType: string; base64: string } {
+export function parseDataUrl(dataUrl: string): {
+  mimeType: string
+  base64: string
+} {
   const m = /^data:([^;,]+);base64,(.+)$/i.exec(dataUrl.replace(/\s/g, ''))
   if (!m) throw new Error('Invalid data URL')
   return { mimeType: m[1], base64: m[2] }
@@ -39,8 +42,7 @@ export async function readFileAsDataUrl(file: File): Promise<string> {
 
 export function isPdfFile(file: File): boolean {
   return (
-    file.type === 'application/pdf' ||
-    file.name.toLowerCase().endsWith('.pdf')
+    file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
   )
 }
 
@@ -83,7 +85,9 @@ export type PendingFile = {
 }
 
 /** Parts we can round-trip through sendMessage for resend. */
-export function userMessageToResendParts(message: UIMessage): ContentPart[] | null {
+export function userMessageToResendParts(
+  message: UIMessage,
+): ContentPart[] | null {
   if (message.role !== 'user') return null
   const out: ContentPart[] = []
   for (const p of message.parts) {
@@ -127,7 +131,10 @@ export function messageToPlainText(message: UIMessage): string {
 }
 
 /** Resend parts with all text replaced by `text` (attachments kept). */
-export function withEditedText(parts: ContentPart[], text: string): ContentPart[] {
+export function withEditedText(
+  parts: ContentPart[],
+  text: string,
+): ContentPart[] {
   const rest = parts.filter((p) => p.type !== 'text')
   return text ? [{ type: 'text', content: text }, ...rest] : rest
 }

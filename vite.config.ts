@@ -13,12 +13,14 @@ import solidPlugin from '@solidjs/vite-plugin'
 // `@tanstack/solid-query-devtools@6.0.0-rc.4` imports Solid patch-channel exports
 // removed in solid-js 2.0.0-rc.8. Those names are unused in the published build.
 function stripRemovedSolidImports() {
-  const removed = /\b(?:patchableRaw|registerRowOps|registerSlotPatch|registerPatch)\s*,\s*/g
+  const removed =
+    /\b(?:patchableRaw|registerRowOps|registerSlotPatch|registerPatch)\s*,\s*/g
 
   return {
     name: 'strip-removed-solid-imports',
     transform(code: string, id: string) {
-      if (!id.includes('@tanstack/solid-query-devtools') || !removed.test(code)) return
+      if (!id.includes('@tanstack/solid-query-devtools') || !removed.test(code))
+        return
       removed.lastIndex = 0
       return code.replace(removed, '')
     },
@@ -41,7 +43,11 @@ function serviceWorker() {
     apply: 'build' as const,
     generateBundle(this: {
       environment: { name: string }
-      emitFile: (file: { type: 'asset'; fileName: string; source: string }) => void
+      emitFile: (file: {
+        type: 'asset'
+        fileName: string
+        source: string
+      }) => void
     }) {
       if (this.environment.name !== 'client') return
       const source = readFileSync('src/sw.js', 'utf8').replace(

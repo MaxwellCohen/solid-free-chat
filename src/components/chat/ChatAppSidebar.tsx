@@ -52,7 +52,8 @@ export function ChatAppSidebar(props: ChatAppSidebarProps) {
           {
             'bg-background fixed top-14 bottom-0 left-0 z-40 w-[85vw] max-w-xs overflow-hidden border-r pb-[env(safe-area-inset-bottom)] shadow-xl sm:static sm:z-auto sm:h-full sm:w-64 sm:max-w-none sm:pb-0 sm:shadow-none md:w-72':
               props.sidebarOpen(),
-            'hidden sm:flex sm:h-full sm:w-12 sm:min-w-12': !props.sidebarOpen(),
+            'hidden sm:flex sm:h-full sm:w-12 sm:min-w-12':
+              !props.sidebarOpen(),
           },
         ]}
       >
@@ -94,7 +95,9 @@ function CollapsedSidebarActions(props: { props: ChatAppSidebarProps }) {
         title="OpenRouter API key"
         aria-label="OpenRouter API key"
         aria-haspopup="dialog"
-        aria-expanded={props.props.openRouterApiKeyModalOpen() ? 'true' : 'false'}
+        aria-expanded={
+          props.props.openRouterApiKeyModalOpen() ? 'true' : 'false'
+        }
       >
         <KeyRound class="size-5 shrink-0" aria-hidden="true" />
       </button>
@@ -149,9 +152,7 @@ function ConversationPane(props: { props: ChatAppSidebarProps }) {
   )
 }
 
-function ConversationHeader(props: {
-  onCreateConversation: () => void
-}) {
+function ConversationHeader(props: { onCreateConversation: () => void }) {
   return (
     <div class="flex shrink-0 items-center justify-between gap-2 p-3">
       <h2 class="text-muted-foreground min-w-0 flex-1 truncate text-xs font-semibold tracking-wide uppercase">
@@ -190,7 +191,9 @@ function ConversationSearch(props: { props: ChatAppSidebarProps }) {
 
   const results = createMemo(() => {
     const q = query().trim()
-    return q ? searchSidebarConversations(props.props.getSearchCorpus(), q) : null
+    return q
+      ? searchSidebarConversations(props.props.getSearchCorpus(), q)
+      : null
   })
 
   return (
@@ -399,10 +402,18 @@ function ExportImportMenu(props: { props: ChatAppSidebarProps }) {
       </summary>
       <div class="border-border space-y-0.5 border-t p-1">
         <Show when={props.props.currentConversationId()}>
-          <button type="button" class={item} onClick={() => props.props.onExportChat('md')}>
+          <button
+            type="button"
+            class={item}
+            onClick={() => props.props.onExportChat('md')}
+          >
             Export chat (Markdown)
           </button>
-          <button type="button" class={item} onClick={() => props.props.onExportChat('json')}>
+          <button
+            type="button"
+            class={item}
+            onClick={() => props.props.onExportChat('json')}
+          >
             Export chat (JSON)
           </button>
         </Show>
@@ -427,7 +438,10 @@ function ExportImportMenu(props: { props: ChatAppSidebarProps }) {
           }}
         />
         <Show when={status()}>
-          <p class="text-muted-foreground m-0 px-2 py-1 text-[11px]" role="status">
+          <p
+            class="text-muted-foreground m-0 px-2 py-1 text-[11px]"
+            role="status"
+          >
             {status()}
           </p>
         </Show>
@@ -486,9 +500,7 @@ function SkillsPreview(props: { props: ChatAppSidebarProps }) {
         >
           <ul class="m-0 list-disc space-y-0.5 pl-4 text-xs">
             <For each={props.props.attachedSkillNames()}>
-              {(name) => (
-                <li class="text-foreground">{name}</li>
-              )}
+              {(name) => <li class="text-foreground">{name}</li>}
             </For>
           </ul>
         </Show>

@@ -1,10 +1,5 @@
 import { For, Show } from 'solid-js'
-import {
-  CheckCircle2,
-  FileText,
-  Image as ImageIcon,
-  X,
-} from '../icons'
+import { CheckCircle2, FileText, Image as ImageIcon, X } from '../icons'
 import type { PendingFile, PendingImage } from './chat-thread-utils'
 
 type ChatThreadComposerProps = {
@@ -158,7 +153,8 @@ function PendingAttachmentList(props: { props: ChatThreadComposerProps }) {
   return (
     <Show
       when={
-        props.props.pendingImages().length > 0 || props.props.pendingFiles().length > 0
+        props.props.pendingImages().length > 0 ||
+        props.props.pendingFiles().length > 0
       }
     >
       <ul class="flex flex-wrap gap-2" aria-label="Attachments ready to send">
