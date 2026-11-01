@@ -159,14 +159,14 @@ export async function buildWorkspace(files: Files): Promise<BuildResult> {
     const head = `<style>${css}</style><script>${escapeScript(PREVIEW_BRIDGE)}</script>`
     const body = `<script type="module">${escapeScript(js)}</script>`
     const doc = /<\/head>/i.test(page)
-      ? page.replace(/<\/head>/i, `${head}</head>`)
+      ? page.replace(/<\/head>/i, () => `${head}</head>`)
       : /<body\b/i.test(page)
-        ? page.replace(/<body\b/i, `${head}<body`)
+        ? page.replace(/<body\b/i, () => `${head}<body`)
         : `${head}${page}`
     return {
       ok: true,
       html: /<\/body>/i.test(doc)
-        ? doc.replace(/<\/body>/i, `${body}</body>`)
+        ? doc.replace(/<\/body>/i, () => `${body}</body>`)
         : doc + body,
       warnings: result.warnings.map((w) => w.text),
     }

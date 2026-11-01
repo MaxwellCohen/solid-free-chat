@@ -3,6 +3,7 @@ import { For, Show, createSignal, onSettled } from 'solid-js'
 
 import { runAgent } from '../lib/harness/run-agent'
 import { DEFAULT_CHAT_MODEL } from '../lib/chat-models'
+import { decodeWorkspace, encodeWorkspace } from '../lib/dev-share'
 import { loadStoredApiKey } from '../lib/openrouter-key-storage'
 import {
   DEV_SYSTEM_PROMPT,
@@ -28,6 +29,7 @@ function Dev() {
   const [reply, setReply] = createSignal('')
   const [error, setError] = createSignal('')
   const [running, setRunning] = createSignal(false)
+  const [shareNote, setShareNote] = createSignal('')
   let abort: AbortController | undefined
   let frame: HTMLIFrameElement | undefined
   let editTimer: ReturnType<typeof setTimeout> | undefined
@@ -51,7 +53,14 @@ function Dev() {
 
   onSettled(() => {
     setMounted(true)
-    void build()
+    void (async () => {
+      const shared = await decodeWorkspace(location.hash)
+      if (shared) {
+        commit(shared)
+        setSelected(Object.keys(shared).sort()[0] ?? '')
+      }
+      await build()
+    })()
     const onMessage = (e: MessageEvent) => {
       const data = e.data as {
         source?: string
@@ -74,6 +83,18 @@ function Dev() {
     commit({ ...current, [selected()]: content })
     clearTimeout(editTimer)
     editTimer = setTimeout(() => void build(), 500)
+  }
+
+  const share = async () => {
+    try {
+      const hash = await encodeWorkspace(current)
+      await navigator.clipboard.writeText(
+        `${location.origin}${location.pathname}${hash}`,
+      )
+      setShareNote('Link copied to clipboard.')
+    } catch {
+      setShareNote('Could not copy share link.')
+    }
   }
 
   const send = async () => {
@@ -124,9 +145,23 @@ function Dev() {
   return (
     <main class="mx-auto grid max-w-7xl gap-4 px-4 py-6 lg:grid-cols-2">
       <section class="min-w-0 space-y-3">
-        <h1 class="text-foreground text-2xl font-bold tracking-tight">
-          Dev workspace
-        </h1>
+        <div class="flex items-center justify-between gap-2">
+          <h1 class="text-foreground text-2xl font-bold tracking-tight">
+            Dev workspace
+          </h1>
+          <div class="flex items-center gap-2">
+            <Show when={shareNote()}>
+              <span class="text-muted-foreground text-xs">{shareNote()}</span>
+            </Show>
+            <button
+              type="button"
+              class="border-border text-foreground rounded-lg border px-3 py-1.5 text-sm font-medium"
+              onClick={share}
+            >
+              Share
+            </button>
+          </div>
+        </div>
 
         <Show when={error()}>
           <p class="text-destructive text-sm" role="alert">
