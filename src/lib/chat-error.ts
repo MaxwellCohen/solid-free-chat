@@ -1,10 +1,5 @@
 export type ChatErrorKind =
-  | 'auth'
-  | 'rate-limit'
-  | 'credits'
-  | 'network'
-  | 'stream'
-  | 'unknown'
+  'auth' | 'rate-limit' | 'credits' | 'network' | 'stream' | 'unknown'
 
 export type ChatErrorInfo = {
   kind: ChatErrorKind
@@ -38,7 +33,10 @@ function readStatus(err: unknown, depth = 0): number | undefined {
 function readHeader(err: unknown, name: string): string | undefined {
   if (!err || typeof err !== 'object') return undefined
   const o = err as Record<string, unknown>
-  for (const holder of [o.headers, (o.response as Record<string, unknown> | undefined)?.headers]) {
+  for (const holder of [
+    o.headers,
+    (o.response as Record<string, unknown> | undefined)?.headers,
+  ]) {
     if (!holder) continue
     if (typeof (holder as Headers).get === 'function') {
       const v = (holder as Headers).get(name)
@@ -76,8 +74,9 @@ export function formatRetryAfter(seconds: number): string {
  */
 export function classifyChatError(
   error: unknown,
-  options: { hasPartialResponse?: boolean } = {},
+  options: { hasPartialResponse?: boolean; providerName?: string } = {},
 ): ChatErrorInfo {
+  const provider = options.providerName ?? 'OpenRouter'
   const message =
     error instanceof Error
       ? error.message
@@ -89,18 +88,16 @@ export function classifyChatError(
   if (status === 401 || status === 403) {
     return {
       kind: 'auth',
-      title: 'OpenRouter key rejected',
-      detail:
-        'Your OpenRouter key is invalid, expired or revoked. Reconnect OpenRouter to continue.',
+      title: `${provider} key rejected`,
+      detail: `Your ${provider} key is invalid, expired or revoked. Reconnect ${provider} to continue.`,
       needsReconnect: true,
     }
   }
   if (status === 402 || /insufficient (credits|funds)/i.test(message)) {
     return {
       kind: 'credits',
-      title: 'Out of OpenRouter credits',
-      detail:
-        'This model needs credits your account does not have. Add credits on openrouter.ai or pick a free model, then retry.',
+      title: `Out of ${provider} credits`,
+      detail: `This model needs credits your account does not have. Add credits with ${provider} or pick a free model, then retry.`,
       needsReconnect: false,
     }
   }
@@ -128,7 +125,7 @@ export function classifyChatError(
     return {
       kind: 'network',
       title: 'Connection problem',
-      detail: 'Could not reach OpenRouter. Check your connection, then retry.',
+      detail: `Could not reach ${provider}. Check your connection, then retry.`,
       needsReconnect: false,
     }
   }

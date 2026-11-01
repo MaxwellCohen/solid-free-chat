@@ -23,6 +23,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/ai": "^0.42.0",
     "@tanstack/ai-client": "0.22.1",
+    "@tanstack/ai-openai": "^0.17.1",
     "@tanstack/ai-openrouter": "^0.15.10",
     "@tanstack/charts": "^1.1.0",
     "@tanstack/highlight": "^0.0.9",

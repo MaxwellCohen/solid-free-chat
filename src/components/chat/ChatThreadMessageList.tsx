@@ -30,6 +30,7 @@ type ChatThreadMessageListProps = {
   failedUserMessage: () => UIMessage | null
   error: () => Error | undefined
   onReconnectOpenRouter?: () => void
+  providerName: string
 }
 
 export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
@@ -147,10 +148,7 @@ function VirtualChatMessage(props: {
               },
             ]}
           >
-            <Show
-              when={editing()}
-              fallback={<MessageBubble message={msg()} />}
-            >
+            <Show when={editing()} fallback={<MessageBubble message={msg()} />}>
               <EditMessageForm
                 message={msg()}
                 onCancel={() => setEditing(false)}
@@ -221,7 +219,9 @@ function AssistantUsageLine(props: {
 }) {
   return (
     <Show
-      when={props.message.role === 'assistant' ? props.message.tokenUsage : false}
+      when={
+        props.message.role === 'assistant' ? props.message.tokenUsage : false
+      }
       keyed
     >
       {(usage) => (
@@ -262,7 +262,9 @@ function UserResendButton(props: {
         onClick={() => void props.onResendUserMessage(props.message)}
       >
         <RotateCw class="size-3 shrink-0" aria-hidden="true" />
-        {props.failedUserMessage()?.id === props.message.id ? 'Retry' : 'Resend'}
+        {props.failedUserMessage()?.id === props.message.id
+          ? 'Retry'
+          : 'Resend'}
       </button>
     </Show>
   )
@@ -380,7 +382,11 @@ function EditMessageForm(props: {
         ref={(el) => queueMicrotask(() => el.focus())}
       />
       <div class="flex justify-end gap-2">
-        <button type="button" class={ACTION_BUTTON_CLASS} onClick={props.onCancel}>
+        <button
+          type="button"
+          class={ACTION_BUTTON_CLASS}
+          onClick={props.onCancel}
+        >
           Cancel
         </button>
         <button type="submit" class={ACTION_BUTTON_CLASS} disabled={!canSave()}>
@@ -401,6 +407,7 @@ function ErrorBanner(props: { props: ChatThreadMessageListProps }) {
           classifyChatError(err, {
             hasPartialResponse:
               props.props.messages().at(-1)?.role === 'assistant',
+            providerName: props.props.providerName,
           })
         return (
           <div
@@ -412,14 +419,16 @@ function ErrorBanner(props: { props: ChatThreadMessageListProps }) {
             </span>
             <span class="flex shrink-0 gap-2">
               <Show
-                when={info().needsReconnect && props.props.onReconnectOpenRouter}
+                when={
+                  info().needsReconnect && props.props.onReconnectOpenRouter
+                }
               >
                 <button
                   type="button"
                   class={btn}
                   onClick={() => props.props.onReconnectOpenRouter?.()}
                 >
-                  Reconnect OpenRouter
+                  Reconnect {props.props.providerName}
                 </button>
               </Show>
               <Show when={props.props.failedUserMessage()} keyed>
@@ -428,7 +437,9 @@ function ErrorBanner(props: { props: ChatThreadMessageListProps }) {
                     type="button"
                     class={btn}
                     disabled={props.props.isLoading()}
-                    onClick={() => void props.props.onResendUserMessage(message)}
+                    onClick={() =>
+                      void props.props.onResendUserMessage(message)
+                    }
                   >
                     Retry
                   </button>

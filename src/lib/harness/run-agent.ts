@@ -4,12 +4,18 @@ import {
   createOpenRouterResponsesText,
   createOpenRouterText,
 } from '@tanstack/ai-openrouter'
-import { OPENROUTER_API_BASE_URL, OPENROUTER_APP_TITLE } from '../openrouter-api'
+import { createOpenaiChatCompletions } from '@tanstack/ai-openai'
+import {
+  OPENROUTER_API_BASE_URL,
+  OPENROUTER_APP_TITLE,
+} from '../openrouter-api'
+import { getProvider } from '../providers'
 
 /** Upper bound on model ↔ tool round trips per user turn. */
 export const MAX_AGENT_ITERATIONS = 12
 
 export type RunAgentOptions = {
+  providerId?: string
   apiKey: string
   model: string
   messages: unknown[]
@@ -28,7 +34,9 @@ function messagesIncludeDocumentParts(messages: unknown[]): boolean {
         Array.isArray(list) &&
         list.some(
           (p) =>
-            p && typeof p === 'object' && (p as { type?: string }).type === 'document',
+            p &&
+            typeof p === 'object' &&
+            (p as { type?: string }).type === 'document',
         )
       ) {
         return true
@@ -38,32 +46,60 @@ function messagesIncludeDocumentParts(messages: unknown[]): boolean {
   return false
 }
 
+/** Providers' CORS preflights reject the OpenAI SDK's `x-stainless-*` headers. */
+function fetchWithoutStainlessHeaders(
+  input: Parameters<typeof fetch>[0],
+  init?: RequestInit,
+) {
+  const headers = new Headers(init?.headers)
+  for (const name of [...headers.keys()]) {
+    if (name.startsWith('x-stainless-')) headers.delete(name)
+  }
+  return fetch(input, { ...init, headers })
+}
+
 /**
  * Runs the full agent loop in the browser: model calls go straight to
  * OpenRouter (the key never touches this app's server), and tools execute
  * locally.
  */
 export function runAgent(options: RunAgentOptions): AsyncIterable<StreamChunk> {
+  const provider = getProvider(options.providerId)
   const adapterConfig = {
     serverURL: OPENROUTER_API_BASE_URL,
     httpReferer: location.origin,
     appTitle: OPENROUTER_APP_TITLE,
   }
-  const adapter = messagesIncludeDocumentParts(options.messages)
-    ? createOpenRouterResponsesText(
-        options.model as never,
-        options.apiKey,
-        adapterConfig,
-      )
-    : createOpenRouterText(options.model as never, options.apiKey, adapterConfig)
+  const adapter =
+    provider.id !== 'openrouter'
+      ? createOpenaiChatCompletions(options.model as never, options.apiKey, {
+          baseURL: provider.baseUrl,
+          dangerouslyAllowBrowser: true,
+          fetch: fetchWithoutStainlessHeaders,
+        })
+      : messagesIncludeDocumentParts(options.messages)
+        ? createOpenRouterResponsesText(
+            options.model as never,
+            options.apiKey,
+            adapterConfig,
+          )
+        : createOpenRouterText(
+            options.model as never,
+            options.apiKey,
+            adapterConfig,
+          )
 
   const abortController = new AbortController()
   if (options.abortSignal) {
     if (options.abortSignal.aborted) abortController.abort()
     else {
-      options.abortSignal.addEventListener('abort', () => abortController.abort(), {
-        once: true,
-      })
+      options.abortSignal.addEventListener(
+        'abort',
+        () => abortController.abort(),
+        {
+          once: true,
+        },
+      )
     }
   }
 
