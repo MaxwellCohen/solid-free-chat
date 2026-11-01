@@ -1,4 +1,5 @@
 import type { ChatModelOption } from './chat-models'
+import type { FreeModelsCatalog } from './free-models-catalog'
 import type { Provider } from './providers'
 
 export const NON_CHAT =
@@ -6,6 +7,16 @@ export const NON_CHAT =
 
 const cache = new Map<string, { options: ChatModelOption[]; expires: number }>()
 const CACHE_TTL_MS = 5 * 60_000
+
+let catalogPromise: Promise<FreeModelsCatalog> | undefined
+
+/** Metadata catalog from our cached endpoint; `{}` when unavailable. */
+function loadCatalog(): Promise<FreeModelsCatalog> {
+  catalogPromise ??= fetch('/api/free-models')
+    .then((res) => (res.ok ? (res.json() as Promise<FreeModelsCatalog>) : {}))
+    .catch(() => ({}))
+  return catalogPromise
+}
 
 /** Lists chat models from an OpenAI-compatible `/models` endpoint. */
 export async function getProviderModelOptionsCached(
@@ -32,16 +43,30 @@ export async function getProviderModelOptionsCached(
   if (!Array.isArray(data)) {
     throw new Error(`${provider.name} models: unexpected response shape`)
   }
+  const catalog = (await loadCatalog())[provider.id]
+  const known = new Map(catalog?.map((m) => [m.id, m]))
   const options: ChatModelOption[] = []
   for (const item of data) {
     if (!item || typeof item !== 'object') continue
     const id = (item as { id?: unknown }).id
-    if (typeof id !== 'string' || NON_CHAT.test(id)) continue
+    if (typeof id !== 'string') continue
+    const meta = known.get(id)
+    // Catalogued models are known text chat; others fall back to the name filter.
+    if (!meta && NON_CHAT.test(id)) continue
     // Mistral reports chat support explicitly.
     const caps = (item as { capabilities?: { completion_chat?: unknown } })
       .capabilities
     if (caps?.completion_chat === false) continue
-    options.push({ id, name: id })
+    options.push(
+      meta
+        ? {
+            id,
+            name: meta.name,
+            inputModalities: meta.inputModalities,
+            supportsTools: meta.supportsTools,
+          }
+        : { id, name: id },
+    )
   }
   options.sort((a, b) => a.id.localeCompare(b.id))
   cache.set(cacheKey, { options, expires: Date.now() + CACHE_TTL_MS })
