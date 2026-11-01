@@ -147,6 +147,7 @@ export default function ChatApp() {
     setRememberApiKeyDraft(stored.remember)
     const oauthCode = takeOpenRouterCallbackCode()
     if (oauthCode) void finishOpenRouterSignIn(oauthCode)
+    else if (!stored.key.trim()) setOpenRouterApiKeyModalOpen(true)
     const saved = loadChatState()
     if (saved) {
       actions.hydrate(saved)
