@@ -51,8 +51,8 @@ export async function getProviderModelOptionsCached(
     const id = (item as { id?: unknown }).id
     if (typeof id !== 'string') continue
     const meta = known.get(id)
-    // Catalogued models are known text chat; others fall back to the name filter.
-    if (!meta && NON_CHAT.test(id)) continue
+    // The catalog is text-in/text-out, which still includes guard classifiers.
+    if (NON_CHAT.test(id)) continue
     // Mistral reports chat support explicitly.
     const caps = (item as { capabilities?: { completion_chat?: unknown } })
       .capabilities
