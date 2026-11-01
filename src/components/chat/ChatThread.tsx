@@ -62,6 +62,7 @@ export default function ChatThread(props: {
   openRouterApiKey: string
   onLoadingChange: (isLoading: boolean) => void
   onRegisterStop?: (stop: (() => void) | null) => void
+  onReconnectOpenRouter?: () => void
 }) {
   return (
     <Show when={props.conversationId} keyed>
@@ -75,6 +76,7 @@ export default function ChatThread(props: {
           openRouterApiKey={props.openRouterApiKey}
           onLoadingChange={props.onLoadingChange}
           onRegisterStop={props.onRegisterStop}
+          onReconnectOpenRouter={props.onReconnectOpenRouter}
         />
       )}
     </Show>
@@ -91,6 +93,7 @@ function ChatThreadSession(props: {
   openRouterApiKey: string
   onLoadingChange: (isLoading: boolean) => void
   onRegisterStop?: (stop: (() => void) | null) => void
+  onReconnectOpenRouter?: () => void
 }) {
   // The parent remounts this session per conversation, so these are snapshots.
   const conversationId = untrack(() => props.conversationId)
@@ -527,6 +530,7 @@ function ChatThreadSession(props: {
         onBranchMessage={branchFromMessage}
         failedUserMessage={failedUserMessage}
         error={() => chat.error()}
+        onReconnectOpenRouter={props.onReconnectOpenRouter}
       />
       <label class="text-muted-foreground flex items-center justify-end gap-1.5 px-3 pt-1 text-xs">
         Warn above $

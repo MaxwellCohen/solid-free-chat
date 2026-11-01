@@ -1,10 +1,12 @@
 import { For, Show, createMemo, createSignal, onCleanup } from 'solid-js'
 import {
   ChevronRight,
+  Download,
   KeyRound,
   PanelLeft,
   PanelLeftClose,
   SquarePen,
+  Upload,
 } from '../icons'
 import type { ChatConversation } from '../../store/chat.hooks'
 import { NEW_CHAT_TITLE } from '../../store/chat.store'
@@ -26,6 +28,9 @@ type ChatAppSidebarProps = {
   skillsPreview: () => string
   attachedSkillNames: () => string[]
   onOpenSkillsLibrary: () => void
+  onExportChat: (format: 'md' | 'json') => void
+  onExportAll: () => void
+  onImportFile: (file: File) => Promise<string>
 }
 
 export function ChatAppSidebar(props: ChatAppSidebarProps) {
@@ -350,6 +355,7 @@ function SidebarSettings(props: { props: ChatAppSidebarProps }) {
   return (
     <div class="border-border order-2 shrink-0 space-y-2 border-b px-2 py-2 sm:order-1">
       <ApiKeyButton props={props.props} />
+      <ExportImportMenu props={props.props} />
       <Show when={props.props.currentConversationId()}>
         <CurrentConversationSettings props={props.props} />
       </Show>
@@ -377,6 +383,56 @@ function ApiKeyButton(props: { props: ChatAppSidebarProps }) {
         </span>
       </Show>
     </button>
+  )
+}
+
+function ExportImportMenu(props: { props: ChatAppSidebarProps }) {
+  const [status, setStatus] = createSignal('')
+  let fileInput: HTMLInputElement | undefined
+  const item =
+    'text-foreground hover:bg-muted block w-full rounded px-2 py-1 text-left text-xs'
+  return (
+    <details class="group/exp border-border bg-card/30 rounded-lg border">
+      <summary class="text-muted-foreground hover:bg-muted/40 flex cursor-pointer list-none items-center gap-2 px-2 py-1.5 text-xs font-medium [&::-webkit-details-marker]:hidden">
+        <Download class="size-3.5 shrink-0" aria-hidden="true" />
+        Export / import
+      </summary>
+      <div class="border-border space-y-0.5 border-t p-1">
+        <Show when={props.props.currentConversationId()}>
+          <button type="button" class={item} onClick={() => props.props.onExportChat('md')}>
+            Export chat (Markdown)
+          </button>
+          <button type="button" class={item} onClick={() => props.props.onExportChat('json')}>
+            Export chat (JSON)
+          </button>
+        </Show>
+        <button type="button" class={item} onClick={props.props.onExportAll}>
+          Export all chats (JSON)
+        </button>
+        <button type="button" class={item} onClick={() => fileInput?.click()}>
+          <Upload class="mr-1 inline size-3" aria-hidden="true" />
+          Import JSON…
+        </button>
+        <input
+          ref={fileInput}
+          type="file"
+          accept="application/json,.json"
+          class="hidden"
+          onChange={async (e) => {
+            const input = e.currentTarget
+            const file = input.files?.[0]
+            input.value = ''
+            if (!file) return
+            setStatus(await props.props.onImportFile(file))
+          }}
+        />
+        <Show when={status()}>
+          <p class="text-muted-foreground m-0 px-2 py-1 text-[11px]" role="status">
+            {status()}
+          </p>
+        </Show>
+      </div>
+    </details>
   )
 }
 

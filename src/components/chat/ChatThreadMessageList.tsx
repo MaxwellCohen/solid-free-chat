@@ -13,6 +13,7 @@ import {
   withEditedText,
 } from './chat-thread-utils'
 import { MessageParts } from './ChatMessageParts'
+import { classifyChatError } from '../../lib/chat-error'
 
 const MESSAGE_GAP_PX = 16
 const ESTIMATED_MESSAGE_HEIGHT_PX = 96
@@ -28,6 +29,7 @@ type ChatThreadMessageListProps = {
   onBranchMessage: (message: UIMessage) => void
   failedUserMessage: () => UIMessage | null
   error: () => Error | undefined
+  onReconnectOpenRouter?: () => void
 }
 
 export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
@@ -390,25 +392,52 @@ function EditMessageForm(props: {
 }
 
 function ErrorBanner(props: { props: ChatThreadMessageListProps }) {
+  const btn =
+    'border-destructive/30 hover:bg-destructive/10 rounded-lg border px-2.5 py-1 text-xs font-medium text-current disabled:pointer-events-none disabled:opacity-50'
   return (
     <Show when={props.props.error()} keyed>
-      {(err) => (
-        <div class="bg-destructive/10 text-destructive mt-4 flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm">
-          <span>{err.message}</span>
-          <Show when={props.props.failedUserMessage()} keyed>
-            {(message) => (
-              <button
-                type="button"
-                class="border-destructive/30 hover:bg-destructive/10 rounded-lg border px-2.5 py-1 text-xs font-medium text-current disabled:pointer-events-none disabled:opacity-50"
-                disabled={props.props.isLoading()}
-                onClick={() => void props.props.onResendUserMessage(message)}
+      {(err) => {
+        const info = () =>
+          classifyChatError(err, {
+            hasPartialResponse:
+              props.props.messages().at(-1)?.role === 'assistant',
+          })
+        return (
+          <div
+            class="bg-destructive/10 text-destructive mt-4 flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm"
+            role="alert"
+          >
+            <span>
+              <span class="font-medium">{info().title}.</span> {info().detail}
+            </span>
+            <span class="flex shrink-0 gap-2">
+              <Show
+                when={info().needsReconnect && props.props.onReconnectOpenRouter}
               >
-                Retry
-              </button>
-            )}
-          </Show>
-        </div>
-      )}
+                <button
+                  type="button"
+                  class={btn}
+                  onClick={() => props.props.onReconnectOpenRouter?.()}
+                >
+                  Reconnect OpenRouter
+                </button>
+              </Show>
+              <Show when={props.props.failedUserMessage()} keyed>
+                {(message) => (
+                  <button
+                    type="button"
+                    class={btn}
+                    disabled={props.props.isLoading()}
+                    onClick={() => void props.props.onResendUserMessage(message)}
+                  >
+                    Retry
+                  </button>
+                )}
+              </Show>
+            </span>
+          </div>
+        )
+      }}
     </Show>
   )
 }

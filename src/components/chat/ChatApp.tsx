@@ -26,6 +26,15 @@ import { SIDEBAR_OPEN_LS_KEY } from './chat-app-constants'
 import { ChatAppModelToolbar } from './ChatAppModelToolbar'
 import { ChatAppOpenRouterModal } from './ChatAppOpenRouterModal'
 import { ChatAppShortcutsModal } from './ChatAppShortcutsModal'
+import {
+  MAX_IMPORT_BYTES,
+  chatToMarkdown,
+  exportFileName,
+  mergeImportedChats,
+  parseChatImport,
+  serializeAllChats,
+  serializeChat,
+} from '../../lib/chat-export'
 import { ChatAppSidebar } from './ChatAppSidebar'
 import { ChatAppSkillsModal } from './ChatAppSkillsModal'
 
@@ -306,6 +315,47 @@ export default function ChatApp() {
     collapseSidebarIfNarrow()
   }
 
+  function downloadTextFile(name: string, text: string, mime: string) {
+    const url = URL.createObjectURL(new Blob([text], { type: mime }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = name
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function exportCurrentChat(format: 'md' | 'json') {
+    const id = currentConversationId()
+    if (!id) return
+    const state = chatStore.state
+    const text =
+      format === 'md' ? chatToMarkdown(state, id) : serializeChat(state, id)
+    if (text == null) return
+    downloadTextFile(
+      exportFileName(state.conversationsById[id]?.title ?? 'chat', format),
+      text,
+      format === 'md' ? 'text/markdown' : 'application/json',
+    )
+  }
+
+  function exportAllChats() {
+    downloadTextFile(
+      'solid-free-chat-backup.json',
+      serializeAllChats(chatStore.state),
+      'application/json',
+    )
+  }
+
+  async function importChatsFile(file: File): Promise<string> {
+    if (file.size > MAX_IMPORT_BYTES) return 'File is too large.'
+    const result = parseChatImport(await file.text())
+    if (!result.ok) return result.error
+    const { state, addedIds } = mergeImportedChats(chatStore.state, result.state)
+    chatStore.setState(() => state)
+    collapseSidebarIfNarrow()
+    return `Imported ${addedIds.length} chat${addedIds.length === 1 ? '' : 's'}.`
+  }
+
   function focusChatComposer() {
     const el = document.querySelector<HTMLTextAreaElement>(
       '[data-chat-composer]',
@@ -477,6 +527,9 @@ export default function ChatApp() {
         skillsPreview={skillsPreview}
         attachedSkillNames={attachedSkillNames}
         onOpenSkillsLibrary={() => setSkillsLibraryOpen(true)}
+        onExportChat={exportCurrentChat}
+        onExportAll={exportAllChats}
+        onImportFile={importChatsFile}
       />
 
       <section class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -518,6 +571,7 @@ export default function ChatApp() {
                   modelPricing={selectedModelMeta()?.pricing}
                   openRouterApiKey={openRouterApiKeyApplied()}
                   onLoadingChange={setCurrentConversationLoading}
+                  onReconnectOpenRouter={openOpenRouterApiKeyModal}
                   onRegisterStop={(stop) => {
                     stopStreaming = stop
                   }}

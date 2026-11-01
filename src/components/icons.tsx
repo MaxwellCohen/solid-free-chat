@@ -24,6 +24,7 @@ import share2 from 'lucide/dist/esm/icons/share-2.mjs'
 import squarePen from 'lucide/dist/esm/icons/square-pen.mjs'
 import sun from 'lucide/dist/esm/icons/sun.mjs'
 import wrench from 'lucide/dist/esm/icons/wrench.mjs'
+import upload from 'lucide/dist/esm/icons/upload.mjs'
 import x from 'lucide/dist/esm/icons/x.mjs'
 
 type IconNode = ReadonlyArray<readonly [string, Record<string, string>]>
@@ -80,4 +81,5 @@ export const Share2 = createIcon(share2)
 export const SquarePen = createIcon(squarePen)
 export const Sun = createIcon(sun)
 export const Wrench = createIcon(wrench)
+export const Upload = createIcon(upload)
 export const X = createIcon(x)
