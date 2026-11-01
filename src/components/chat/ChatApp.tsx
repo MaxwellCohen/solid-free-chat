@@ -13,7 +13,14 @@ import { DEFAULT_CHAT_MODEL, modelSupportsTools } from '../../lib/chat-models'
 import { findMatchingShortcut } from '../../lib/keyboard-shortcuts'
 import { HARNESS_TOOLS } from '../../lib/harness/tools'
 import { getFreeTextChatModelOptionsCached } from '../../lib/openrouter-models'
-import { loadStoredApiKey, storeApiKey } from '../../lib/openrouter-key-storage'
+import {
+  loadActiveProviderId,
+  loadStoredApiKey,
+  storeActiveProviderId,
+  storeApiKey,
+} from '../../lib/openrouter-key-storage'
+import { getProviderModelOptionsCached } from '../../lib/provider-models'
+import { getProvider } from '../../lib/providers'
 import {
   completeOpenRouterLogin,
   startOpenRouterLogin,
@@ -46,7 +53,9 @@ function isNarrowViewport() {
 
 export default function ChatApp() {
   const actions = useChatActions()
-  const currentConversationId = useChatStore((state) => state.currentConversationId)
+  const currentConversationId = useChatStore(
+    (state) => state.currentConversationId,
+  )
   const conversations = useChatStore((state) =>
     chatSelectors.conversationList(state),
   )
@@ -63,13 +72,18 @@ export default function ChatApp() {
   /** Last saved value; sent only to openrouter.ai, never to this app's server. */
   const [openRouterApiKeyApplied, setOpenRouterApiKeyApplied] = createSignal('')
   /** Persist the key in localStorage (vs. this tab's sessionStorage). */
+  /** Provider whose key is applied / being edited in the modal. */
+  const [providerId, setProviderId] = createSignal('openrouter')
+  const [providerIdDraft, setProviderIdDraft] = createSignal('openrouter')
   const [rememberApiKey, setRememberApiKey] = createSignal(false)
   const [rememberApiKeyDraft, setRememberApiKeyDraft] = createSignal(false)
   const [openRouterSignInBusy, setOpenRouterSignInBusy] = createSignal(false)
   const [openRouterSignInError, setOpenRouterSignInError] = createSignal<
     string | null
   >(null)
-  const [modelList, setModelList] = createSignal<ChatModelOption[] | undefined>()
+  const [modelList, setModelList] = createSignal<
+    ChatModelOption[] | undefined
+  >()
   const [modelListLoading, setModelListLoading] = createSignal(true)
   const [modelListError, setModelListError] = createSignal<unknown>()
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
@@ -90,15 +104,25 @@ export default function ChatApp() {
   })
 
   createEffect(
-    () => (isServer ? null : openRouterApiKeyApplied()),
-    (applied) => {
+    () => (isServer ? null : `${providerId()}\n${openRouterApiKeyApplied()}`),
+    (appliedWithProvider) => {
+      const applied = appliedWithProvider?.slice(
+        appliedWithProvider.indexOf('\n') + 1,
+      )
+      const activeProvider = getProvider(providerId())
       if (applied == null || isServer) return
       let cancelled = false
       setModelListLoading(true)
       setModelListError(undefined)
       void (async () => {
         try {
-          const list = await getFreeTextChatModelOptionsCached(applied.trim())
+          const list =
+            activeProvider.id === 'openrouter'
+              ? await getFreeTextChatModelOptionsCached(applied.trim())
+              : await getProviderModelOptionsCached(
+                  activeProvider,
+                  applied.trim(),
+                )
           if (cancelled) return
           setModelList(list)
         } catch (error) {
@@ -140,7 +164,10 @@ export default function ChatApp() {
     } catch {
       /* ignore */
     }
-    const stored = loadStoredApiKey()
+    const activeId = getProvider(loadActiveProviderId()).id
+    setProviderId(activeId)
+    setProviderIdDraft(activeId)
+    const stored = loadStoredApiKey(activeId)
     setOpenRouterApiKeyDraft(stored.key)
     setOpenRouterApiKeyApplied(stored.key)
     setRememberApiKey(stored.remember)
@@ -178,9 +205,7 @@ export default function ChatApp() {
           {
             id,
             name:
-              id === DEFAULT_CHAT_MODEL
-                ? `${id} (fallback)`
-                : `${id} (saved)`,
+              id === DEFAULT_CHAT_MODEL ? `${id} (fallback)` : `${id} (saved)`,
             inputModalities: id === DEFAULT_CHAT_MODEL ? ['text'] : undefined,
           },
         ]
@@ -214,10 +239,21 @@ export default function ChatApp() {
     setOpenRouterApiKeyApplied(v)
     setRememberApiKey(remember)
     setRememberApiKeyDraft(remember)
-    storeApiKey({ key: v, remember })
+    storeApiKey({ key: v, remember }, providerIdDraft())
+    setProviderId(providerIdDraft())
+    storeActiveProviderId(providerIdDraft())
+  }
+
+  function selectProviderDraft(id: string) {
+    setProviderIdDraft(id)
+    const stored = loadStoredApiKey(id)
+    setOpenRouterApiKeyDraft(stored.key)
+    setRememberApiKeyDraft(stored.remember)
+    setOpenRouterSignInError(null)
   }
 
   function openOpenRouterApiKeyModal() {
+    setProviderIdDraft(providerId())
     setOpenRouterApiKeyDraft(openRouterApiKeyApplied())
     setRememberApiKeyDraft(rememberApiKey())
     setOpenRouterSignInError(null)
@@ -225,6 +261,7 @@ export default function ChatApp() {
   }
 
   function closeOpenRouterApiKeyModal() {
+    setProviderIdDraft(providerId())
     setOpenRouterApiKeyDraft(openRouterApiKeyApplied())
     setRememberApiKeyDraft(rememberApiKey())
     setOpenRouterApiKeyModalOpen(false)
@@ -250,6 +287,7 @@ export default function ChatApp() {
     setOpenRouterSignInBusy(true)
     try {
       const { key, remember } = await completeOpenRouterLogin(code)
+      setProviderIdDraft('openrouter')
       persistOpenRouterApiKey(key, remember)
     } catch (error) {
       setOpenRouterSignInError(
@@ -351,7 +389,10 @@ export default function ChatApp() {
     if (file.size > MAX_IMPORT_BYTES) return 'File is too large.'
     const result = parseChatImport(await file.text())
     if (!result.ok) return result.error
-    const { state, addedIds } = mergeImportedChats(chatStore.state, result.state)
+    const { state, addedIds } = mergeImportedChats(
+      chatStore.state,
+      result.state,
+    )
     chatStore.setState(() => state)
     collapseSidebarIfNarrow()
     return `Imported ${addedIds.length} chat${addedIds.length === 1 ? '' : 's'}.`
@@ -571,6 +612,7 @@ export default function ChatApp() {
                   supportsTools={modelSupportsTools(selectedModelMeta())}
                   modelPricing={selectedModelMeta()?.pricing}
                   openRouterApiKey={openRouterApiKeyApplied()}
+                  providerId={providerId()}
                   onLoadingChange={setCurrentConversationLoading}
                   onReconnectOpenRouter={openOpenRouterApiKeyModal}
                   onRegisterStop={(stop) => {
@@ -584,6 +626,8 @@ export default function ChatApp() {
 
         <ChatAppOpenRouterModal
           open={openRouterApiKeyModalOpen}
+          providerId={providerIdDraft}
+          onProviderChange={selectProviderDraft}
           draft={openRouterApiKeyDraft}
           onDraftInput={setOpenRouterApiKeyDraft}
           remember={rememberApiKeyDraft}

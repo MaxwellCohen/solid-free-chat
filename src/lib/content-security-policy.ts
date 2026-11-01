@@ -1,3 +1,5 @@
+import { providerOrigins } from './providers'
+
 /**
  * Page CSP. The point is `connect-src`: even if hostile script ran in the page,
  * the browser refuses `fetch`/XHR/WebSocket/beacon to anywhere but this origin,
@@ -14,7 +16,7 @@ function sentryOrigin(): string | undefined {
 }
 
 export function contentSecurityPolicy(): string {
-  const connect = ["'self'", 'https://openrouter.ai']
+  const connect = ["'self'", ...providerOrigins()]
   const sentry = sentryOrigin()
   if (sentry) connect.push(sentry)
   // Vite HMR and TanStack devtools use local websockets / ports.

@@ -60,6 +60,7 @@ export default function ChatThread(props: {
   modelPricing?: ModelPricing
   /** Committed key from the client (after blur); optional proxy env only for local dev. */
   openRouterApiKey: string
+  providerId: string
   onLoadingChange: (isLoading: boolean) => void
   onRegisterStop?: (stop: (() => void) | null) => void
   onReconnectOpenRouter?: () => void
@@ -74,6 +75,7 @@ export default function ChatThread(props: {
           supportsTools={props.supportsTools}
           modelPricing={props.modelPricing}
           openRouterApiKey={props.openRouterApiKey}
+          providerId={props.providerId}
           onLoadingChange={props.onLoadingChange}
           onRegisterStop={props.onRegisterStop}
           onReconnectOpenRouter={props.onReconnectOpenRouter}
@@ -91,6 +93,7 @@ function ChatThreadSession(props: {
   modelPricing?: ModelPricing
   /** Committed key from the client (after blur); optional proxy env only for local dev. */
   openRouterApiKey: string
+  providerId: string
   onLoadingChange: (isLoading: boolean) => void
   onRegisterStop?: (stop: (() => void) | null) => void
   onReconnectOpenRouter?: () => void
@@ -232,6 +235,7 @@ function ChatThreadSession(props: {
     connection: stream((messages, _data, abortSignal) =>
       runAgent({
         apiKey: props.openRouterApiKey.trim(),
+        providerId: props.providerId,
         model: selectedModel(),
         messages,
         systemPrompt: composeSystemPrompt(skillIds(), skills()),
