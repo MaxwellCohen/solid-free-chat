@@ -43,6 +43,7 @@ function Dev() {
   const [fullscreen, setFullscreen] = createSignal(false)
   let abort: AbortController | undefined
   let frame: HTMLIFrameElement | undefined
+  let pane: HTMLDivElement | undefined
   let editTimer: ReturnType<typeof setTimeout> | undefined
   // Mirror of `files()` readable synchronously from tools mid-turn.
   let current: Files = { ...STARTER_FILES }
@@ -85,11 +86,16 @@ function Dev() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setFullscreen(false)
     }
+    const onFsChange = () => {
+      if (!document.fullscreenElement) setFullscreen(false)
+    }
+    document.addEventListener('fullscreenchange', onFsChange)
     addEventListener('message', onMessage)
     addEventListener('keydown', onKey)
     return () => {
       removeEventListener('message', onMessage)
       removeEventListener('keydown', onKey)
+      document.removeEventListener('fullscreenchange', onFsChange)
       abort?.abort()
       clearTimeout(editTimer)
     }
@@ -99,6 +105,13 @@ function Dev() {
     commit({ ...current, [selected()]: content })
     clearTimeout(editTimer)
     editTimer = setTimeout(() => void build(), 500)
+  }
+
+  const toggleFullscreen = () => {
+    const next = !fullscreen()
+    setFullscreen(next)
+    if (next) void pane?.requestFullscreen?.().catch(() => {})
+    else if (document.fullscreenElement) void document.exitFullscreen()
   }
 
   const share = async () => {
@@ -254,17 +267,18 @@ function Dev() {
 
       <section class="min-w-0">
         <div
+          ref={pane}
           class={[
             'border-border bg-card relative overflow-hidden border',
             fullscreen()
-              ? 'fixed inset-0 z-50 h-screen rounded-none'
+              ? 'fixed inset-0 z-[100] h-screen w-screen rounded-none'
               : 'h-[70vh] rounded-xl',
           ]}
         >
           <button
             type="button"
             class="border-border bg-background/90 text-foreground absolute top-2 right-2 z-10 rounded-lg border px-3 py-1.5 text-sm font-medium"
-            onClick={() => setFullscreen((f) => !f)}
+            onClick={toggleFullscreen}
           >
             {fullscreen() ? 'Exit full screen' : 'Full screen'}
           </button>
