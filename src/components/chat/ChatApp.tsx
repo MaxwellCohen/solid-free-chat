@@ -12,14 +12,15 @@ import type { ChatModelOption } from '../../lib/chat-models'
 import { DEFAULT_CHAT_MODEL, modelSupportsTools } from '../../lib/chat-models'
 import { findMatchingShortcut } from '../../lib/keyboard-shortcuts'
 import { HARNESS_TOOLS } from '../../lib/harness/tools'
-import { getFreeTextChatModelOptionsCached } from '../../lib/openrouter-models'
 import {
   loadActiveProviderId,
+  loadSelectedModelProviderId,
+  storeSelectedModelProviderId,
   loadStoredApiKey,
   storeActiveProviderId,
   storeApiKey,
 } from '../../lib/openrouter-key-storage'
-import { getProviderModelOptionsCached } from '../../lib/provider-models'
+import { loadAllModelOptions } from '../../lib/model-options'
 import { getProvider } from '../../lib/providers'
 import {
   completeOpenRouterLogin,
@@ -74,6 +75,9 @@ export default function ChatApp() {
   /** Persist the key in localStorage (vs. this tab's sessionStorage). */
   /** Provider whose key is applied / being edited in the modal. */
   const [providerId, setProviderId] = createSignal('openrouter')
+  /** Provider of the selected model (models from all keyed providers are listed). */
+  const [selectedProviderId, setSelectedProviderId] = createSignal('openrouter')
+  const [keysVersion, setKeysVersion] = createSignal(0)
   const [providerIdDraft, setProviderIdDraft] = createSignal('openrouter')
   const [rememberApiKey, setRememberApiKey] = createSignal(false)
   const [rememberApiKeyDraft, setRememberApiKeyDraft] = createSignal(false)
@@ -104,33 +108,18 @@ export default function ChatApp() {
   })
 
   createEffect(
-    () => (isServer ? null : `${providerId()}\n${openRouterApiKeyApplied()}`),
-    (appliedWithProvider) => {
-      const applied = appliedWithProvider?.slice(
-        appliedWithProvider.indexOf('\n') + 1,
-      )
-      const activeProvider = getProvider(providerId())
-      if (applied == null || isServer) return
+    () => (isServer ? null : keysVersion()),
+    (version) => {
+      if (version == null || isServer) return
       let cancelled = false
       setModelListLoading(true)
       setModelListError(undefined)
       void (async () => {
-        try {
-          const list =
-            activeProvider.id === 'openrouter'
-              ? await getFreeTextChatModelOptionsCached(applied.trim())
-              : await getProviderModelOptionsCached(
-                  activeProvider,
-                  applied.trim(),
-                )
-          if (cancelled) return
-          setModelList(list)
-        } catch (error) {
-          if (cancelled) return
-          setModelListError(error)
-        } finally {
-          if (!cancelled) setModelListLoading(false)
-        }
+        const { options, error } = await loadAllModelOptions()
+        if (cancelled) return
+        if (options.length === 0 && error) setModelListError(error)
+        else setModelList(options)
+        setModelListLoading(false)
       })()
       return () => {
         cancelled = true
@@ -143,11 +132,15 @@ export default function ChatApp() {
       const list = modelList()
       const selected = selectedModel()
       if (!list?.length) return null
-      if (list.some((model) => model.id === selected)) return null
-      return list[0].id
+      const pid = selectedProviderId()
+      if (list.some((m) => m.id === selected && m.providerId === pid))
+        return null
+      return list[0]
     },
-    (nextId) => {
-      if (nextId) actions.setSelectedModel(nextId)
+    (next) => {
+      if (!next) return
+      setSelectedProviderId(next.providerId ?? providerId())
+      actions.setSelectedModel(next.id)
     },
   )
 
@@ -167,6 +160,7 @@ export default function ChatApp() {
     const activeId = getProvider(loadActiveProviderId()).id
     setProviderId(activeId)
     setProviderIdDraft(activeId)
+    setSelectedProviderId(loadSelectedModelProviderId() ?? activeId)
     const stored = loadStoredApiKey(activeId)
     setOpenRouterApiKeyDraft(stored.key)
     setOpenRouterApiKeyApplied(stored.key)
@@ -204,6 +198,7 @@ export default function ChatApp() {
           ...fb,
           {
             id,
+            providerId: selectedProviderId(),
             name:
               id === DEFAULT_CHAT_MODEL ? `${id} (fallback)` : `${id} (saved)`,
             inputModalities: id === DEFAULT_CHAT_MODEL ? ['text'] : undefined,
@@ -214,11 +209,15 @@ export default function ChatApp() {
     }
     const fromApi = modelList() ?? []
     const id = selectedModel()
-    if (fromApi.some((o) => o.id === id)) return fromApi
+    if (
+      fromApi.some((o) => o.id === id && o.providerId === selectedProviderId())
+    )
+      return fromApi
     return [
       ...fromApi,
       {
         id,
+        providerId: selectedProviderId(),
         name:
           id === DEFAULT_CHAT_MODEL
             ? `${id} (fallback)`
@@ -242,6 +241,7 @@ export default function ChatApp() {
     storeApiKey({ key: v, remember }, providerIdDraft())
     setProviderId(providerIdDraft())
     storeActiveProviderId(providerIdDraft())
+    setKeysVersion((v) => v + 1)
   }
 
   function selectProviderDraft(id: string) {
@@ -301,7 +301,9 @@ export default function ChatApp() {
 
   const selectedModelMeta = createMemo((): ChatModelOption | undefined => {
     const id = selectedModel()
-    return selectOptions().find((m) => m.id === id)
+    return selectOptions().find(
+      (m) => m.id === id && m.providerId === selectedProviderId(),
+    )
   })
 
   const attachedSkillNames = createMemo(() => {
@@ -579,14 +581,22 @@ export default function ChatApp() {
           sidebarOpen={sidebarOpen}
           onToggleSidebar={toggleSidebar}
           onNewChat={createConversationFromSidebar}
-          selectedModel={selectedModel}
+          selectedModel={() => `${selectedProviderId()}\n${selectedModel()}`}
           selectDisabled={selectDisabled}
           selectOptions={selectOptions}
           modelListLoading={modelListLoading}
           modelListError={modelListError}
           modelListEmpty={modelListEmpty}
           isStreaming={currentConversationLoading}
-          onModelChange={(id) => actions.setSelectedModel(id)}
+          showProvider={() =>
+            new Set(modelList()?.map((m) => m.providerId)).size > 1
+          }
+          onModelChange={(value) => {
+            const i = value.indexOf('\n')
+            setSelectedProviderId(value.slice(0, i))
+            storeSelectedModelProviderId(value.slice(0, i))
+            actions.setSelectedModel(value.slice(i + 1))
+          }}
           shareDisabled={() => currentMessageCount() === 0}
           shareBusy={shareBusy}
           shareFeedback={shareFeedback}
@@ -611,8 +621,8 @@ export default function ChatApp() {
                   inputModalities={selectedModelMeta()?.inputModalities}
                   supportsTools={modelSupportsTools(selectedModelMeta())}
                   modelPricing={selectedModelMeta()?.pricing}
-                  openRouterApiKey={openRouterApiKeyApplied()}
-                  providerId={providerId()}
+                  openRouterApiKey={loadStoredApiKey(selectedProviderId()).key}
+                  providerId={selectedProviderId()}
                   onLoadingChange={setCurrentConversationLoading}
                   onReconnectOpenRouter={openOpenRouterApiKeyModal}
                   onRegisterStop={(stop) => {

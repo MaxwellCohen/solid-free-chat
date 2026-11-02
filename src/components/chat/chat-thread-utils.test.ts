@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { UIMessage } from '@tanstack/ai-client'
-import { messageToPlainText, messagesBefore, withEditedText } from './chat-thread-utils'
+import {
+  messageToPlainText,
+  messagesBefore,
+  withEditedText,
+} from './chat-thread-utils'
 
 describe('messagesBefore', () => {
   const msgs = [{ id: 'a' }, { id: 'b' }, { id: 'c' }]
@@ -30,10 +34,15 @@ describe('messageToPlainText', () => {
 
 describe('withEditedText', () => {
   it('replaces text and keeps attachments', () => {
-    const img = { type: 'image', source: { type: 'data', value: 'x', mimeType: 'image/png' } } as const
+    const img = {
+      type: 'image',
+      source: { type: 'data', value: 'x', mimeType: 'image/png' },
+    } as const
     expect(
       withEditedText([{ type: 'text', content: 'old' }, img], 'new'),
     ).toEqual([{ type: 'text', content: 'new' }, img])
-    expect(withEditedText([{ type: 'text', content: 'old' }, img], '')).toEqual([img])
+    expect(withEditedText([{ type: 'text', content: 'old' }, img], '')).toEqual(
+      [img],
+    )
   })
 })

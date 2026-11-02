@@ -58,3 +58,21 @@ export function storeApiKey(
     /* ignore quota / private mode */
   }
 }
+
+const MODEL_PROVIDER_STORAGE_KEY = 'solid-free-chat-model-provider'
+
+export function loadSelectedModelProviderId(): string | null {
+  try {
+    return localStorage.getItem(MODEL_PROVIDER_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function storeSelectedModelProviderId(id: string) {
+  try {
+    localStorage.setItem(MODEL_PROVIDER_STORAGE_KEY, id)
+  } catch {
+    /* ignore */
+  }
+}

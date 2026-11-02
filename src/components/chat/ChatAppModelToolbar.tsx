@@ -7,6 +7,7 @@ import {
   SquarePen,
   Wrench,
 } from '../icons'
+import { getProvider } from '../../lib/providers'
 import type { ChatModelOption } from '../../lib/chat-models'
 import type { HarnessToolDescriptor } from '../../lib/harness/tools'
 
@@ -21,7 +22,8 @@ type ChatAppModelToolbarProps = {
   modelListError: () => unknown
   modelListEmpty: () => boolean
   isStreaming: () => boolean
-  onModelChange: (modelId: string) => void
+  onModelChange: (value: string) => void
+  showProvider: () => boolean
   shareDisabled: () => boolean
   shareBusy: () => boolean
   shareFeedback: () => string | null
@@ -221,19 +223,29 @@ function ModelOptionList(props: { props: ChatAppModelToolbarProps }) {
       <Show when={props.props.modelListLoading()}>
         <option value={props.props.selectedModel()}>Loading models…</option>
       </Show>
-      <Show when={!props.props.modelListLoading() && props.props.modelListError()}>
+      <Show
+        when={!props.props.modelListLoading() && props.props.modelListError()}
+      >
         <For each={props.props.selectOptions()}>
           {(model) => (
-            <option value={model.id}>
+            <option value={`${model.providerId}\n${model.id}`}>
+              {props.props.showProvider()
+                ? `${getProvider(model.providerId).name}: `
+                : ''}
               {model.name} ({model.id})
             </option>
           )}
         </For>
       </Show>
-      <Show when={!props.props.modelListLoading() && !props.props.modelListError()}>
+      <Show
+        when={!props.props.modelListLoading() && !props.props.modelListError()}
+      >
         <For each={props.props.selectOptions()}>
           {(model) => (
-            <option value={model.id}>
+            <option value={`${model.providerId}\n${model.id}`}>
+              {props.props.showProvider()
+                ? `${getProvider(model.providerId).name}: `
+                : ''}
               {model.name} ({model.id})
             </option>
           )}

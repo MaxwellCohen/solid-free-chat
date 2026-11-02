@@ -70,7 +70,9 @@ function SharePage() {
                 <h1 class="text-foreground mb-2 text-xl font-semibold tracking-tight">
                   Shared chat
                 </h1>
-                <p class="text-muted-foreground mb-4 text-sm">{state.message}</p>
+                <p class="text-muted-foreground mb-4 text-sm">
+                  {state.message}
+                </p>
                 <Link
                   to="/"
                   class="text-primary text-sm font-medium underline-offset-4 hover:underline"
@@ -121,7 +123,9 @@ function SharedChatView(props: {
         <Show
           when={props.messages.length > 0}
           fallback={
-            <p class="text-muted-foreground text-sm">No messages in this share.</p>
+            <p class="text-muted-foreground text-sm">
+              No messages in this share.
+            </p>
           }
         >
           <For each={props.messages}>

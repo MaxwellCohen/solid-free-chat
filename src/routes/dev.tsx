@@ -2,9 +2,12 @@ import { createFileRoute } from '@tanstack/solid-router'
 import { For, Show, createSignal, onSettled } from 'solid-js'
 
 import { runAgent } from '../lib/harness/run-agent'
-import { DEFAULT_CHAT_MODEL } from '../lib/chat-models'
+import { ModelSelect } from '../components/ModelSelect'
+import { loadToolModelSelection } from '../lib/model-options'
+import type { ModelSelection } from '../lib/model-options'
 import { decodeWorkspace, encodeWorkspace } from '../lib/dev-share'
 import { loadStoredApiKey } from '../lib/openrouter-key-storage'
+import { getProvider } from '../lib/providers'
 import {
   DEV_SYSTEM_PROMPT,
   STARTER_FILES,
@@ -19,6 +22,13 @@ export const Route = createFileRoute('/dev')({
 
 function Dev() {
   // The file list is client-only state; rendering it during SSR mismatches hydration.
+  const [modelSel, setModelSel] = createSignal<ModelSelection>({
+    providerId: 'openrouter',
+    modelId: 'openrouter/free',
+  })
+  onSettled(() => {
+    setModelSel(loadToolModelSelection())
+  })
   const [mounted, setMounted] = createSignal(false)
   const [files, setFiles] = createSignal<Files>({ ...STARTER_FILES })
   const [selected, setSelected] = createSignal('main.js')
@@ -98,9 +108,12 @@ function Dev() {
   }
 
   const send = async () => {
-    const apiKey = loadStoredApiKey().key.trim()
+    const sel = modelSel()
+    const apiKey = loadStoredApiKey(sel.providerId).key.trim()
     if (!apiKey) {
-      setError('Add your OpenRouter API key on the Chat page first.')
+      setError(
+        `Add your ${getProvider(sel.providerId).name} API key on the Chat page first.`,
+      )
       return
     }
     const input = prompt().trim()
@@ -123,7 +136,8 @@ function Dev() {
       })
       for await (const chunk of runAgent({
         apiKey,
-        model: DEFAULT_CHAT_MODEL,
+        providerId: sel.providerId,
+        model: sel.modelId,
         messages: [{ role: 'user', content: input }],
         systemPrompt: DEV_SYSTEM_PROMPT,
         tools,
@@ -150,6 +164,7 @@ function Dev() {
             Dev workspace
           </h1>
           <div class="flex items-center gap-2">
+            <ModelSelect value={modelSel} onChange={setModelSel} />
             <Show when={shareNote()}>
               <span class="text-muted-foreground text-xs">{shareNote()}</span>
             </Show>

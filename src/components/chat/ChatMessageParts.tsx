@@ -153,7 +153,10 @@ function ThinkingPart(props: { part: Accessor<MessagePart> }) {
 function isShownOnToolCall(part: MessagePart, message: UIMessage): boolean {
   if (part.type !== 'tool-result') return false
   return message.parts.some(
-    (p) => p.type === 'tool-call' && p.id === part.toolCallId && p.output !== undefined,
+    (p) =>
+      p.type === 'tool-call' &&
+      p.id === part.toolCallId &&
+      p.output !== undefined,
   )
 }
 
@@ -178,7 +181,9 @@ function isHarnessToolOutput(value: unknown): value is HarnessToolOutput {
   const keys = Object.keys(value)
   return (
     keys.length > 0 &&
-    keys.every((k) => k === 'ok' || k === 'output' || k === 'result' || k === 'error')
+    keys.every(
+      (k) => k === 'ok' || k === 'output' || k === 'result' || k === 'error',
+    )
   )
 }
 
@@ -208,7 +213,11 @@ function ToolCallPart(props: { part: Accessor<MessagePart> }) {
     ) {
       return (parsed as { code: string }).code
     }
-    if (parsed && typeof parsed === 'object' && Object.keys(parsed).length === 0) {
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      Object.keys(parsed).length === 0
+    ) {
       return ''
     }
     return formatValue(parsed)
@@ -228,7 +237,8 @@ function ToolCallPart(props: { part: Accessor<MessagePart> }) {
   const visual = createMemo(() => {
     const part = call()
     const out = output()
-    if (!part || failed() || !isHarnessToolOutput(out) || out.ok !== true) return null
+    if (!part || failed() || !isHarnessToolOutput(out) || out.ok !== true)
+      return null
     return toolVisual(part.name, part.input ?? parseMaybeJson(part.arguments))
   })
 
@@ -243,7 +253,13 @@ function ToolCallPart(props: { part: Accessor<MessagePart> }) {
           )
         }
       </Show>
-      <ToolCallDetails call={call} input={input} output={output} running={running} failed={failed} />
+      <ToolCallDetails
+        call={call}
+        input={input}
+        output={output}
+        running={running}
+        failed={failed}
+      />
     </>
   )
 }
@@ -265,11 +281,17 @@ function ToolCallDetails(props: {
         <Wrench class="size-3.5 shrink-0" aria-hidden="true" />
         <span class="text-foreground font-mono">{call()?.name}</span>
         <Show when={running()}>
-          <LoaderCircle class="size-3.5 shrink-0 animate-spin" aria-hidden="true" />
+          <LoaderCircle
+            class="size-3.5 shrink-0 animate-spin"
+            aria-hidden="true"
+          />
           <span>running…</span>
         </Show>
         <Show when={failed()}>
-          <CircleAlert class="text-destructive size-3.5 shrink-0" aria-hidden="true" />
+          <CircleAlert
+            class="text-destructive size-3.5 shrink-0"
+            aria-hidden="true"
+          />
           <span class="text-destructive">failed</span>
         </Show>
       </summary>
@@ -297,7 +319,11 @@ function toolVisual(name: string, args: unknown): ToolVisual | null {
   if (name === 'render_diagram') {
     const { code, title } = args as { code?: unknown; title?: unknown }
     if (typeof code !== 'string') return null
-    return { kind: 'diagram', code, title: typeof title === 'string' ? title : undefined }
+    return {
+      kind: 'diagram',
+      code,
+      title: typeof title === 'string' ? title : undefined,
+    }
   }
   if (name === 'render_chart') {
     const checked = validateChartSpec(args)
