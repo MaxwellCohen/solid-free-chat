@@ -40,6 +40,7 @@ function Dev() {
   const [error, setError] = createSignal('')
   const [running, setRunning] = createSignal(false)
   const [shareNote, setShareNote] = createSignal('')
+  const [fullscreen, setFullscreen] = createSignal(false)
   let abort: AbortController | undefined
   let frame: HTMLIFrameElement | undefined
   let editTimer: ReturnType<typeof setTimeout> | undefined
@@ -81,9 +82,14 @@ function Dev() {
         return
       setConsole((c) => `${c}[${data.level}] ${data.text}\n`.slice(-10_000))
     }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFullscreen(false)
+    }
     addEventListener('message', onMessage)
+    addEventListener('keydown', onKey)
     return () => {
       removeEventListener('message', onMessage)
+      removeEventListener('keydown', onKey)
       abort?.abort()
       clearTimeout(editTimer)
     }
@@ -247,7 +253,21 @@ function Dev() {
       </section>
 
       <section class="min-w-0">
-        <div class="border-border bg-card h-[70vh] overflow-hidden rounded-xl border">
+        <div
+          class={[
+            'border-border bg-card relative overflow-hidden border',
+            fullscreen()
+              ? 'fixed inset-0 z-50 h-screen rounded-none'
+              : 'h-[70vh] rounded-xl',
+          ]}
+        >
+          <button
+            type="button"
+            class="border-border bg-background/90 text-foreground absolute top-2 right-2 z-10 rounded-lg border px-3 py-1.5 text-sm font-medium"
+            onClick={() => setFullscreen((f) => !f)}
+          >
+            {fullscreen() ? 'Exit full screen' : 'Full screen'}
+          </button>
           <iframe
             ref={frame}
             title="Preview"
