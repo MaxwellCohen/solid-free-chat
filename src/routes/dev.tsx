@@ -41,9 +41,11 @@ function Dev() {
   const [running, setRunning] = createSignal(false)
   const [shareNote, setShareNote] = createSignal('')
   const [fullscreen, setFullscreen] = createSignal(false)
+  const [split, setSplit] = createSignal(50)
   let abort: AbortController | undefined
   let frame: HTMLIFrameElement | undefined
   let pane: HTMLDivElement | undefined
+  let layout: HTMLElement | undefined
   let editTimer: ReturnType<typeof setTimeout> | undefined
   // Mirror of `files()` readable synchronously from tools mid-turn.
   let current: Files = { ...STARTER_FILES }
@@ -105,6 +107,23 @@ function Dev() {
     commit({ ...current, [selected()]: content })
     clearTimeout(editTimer)
     editTimer = setTimeout(() => void build(), 500)
+  }
+
+  const clampSplit = (v: number) => Math.min(80, Math.max(20, v))
+
+  const onDrag = (e: PointerEvent) => {
+    if (
+      !layout ||
+      !(e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)
+    )
+      return
+    const rect = layout.getBoundingClientRect()
+    setSplit(clampSplit(((e.clientX - rect.left) / rect.width) * 100))
+  }
+
+  const onDividerKey = (e: KeyboardEvent) => {
+    if (e.key === 'ArrowLeft') setSplit((v) => clampSplit(v - 2))
+    else if (e.key === 'ArrowRight') setSplit((v) => clampSplit(v + 2))
   }
 
   const toggleFullscreen = () => {
@@ -176,7 +195,11 @@ function Dev() {
   }
 
   return (
-    <main class="mx-auto grid max-w-7xl gap-4 px-4 py-6 lg:grid-cols-2">
+    <main
+      ref={layout}
+      class="mx-auto grid max-w-[120rem] gap-4 px-4 py-6 lg:grid-cols-[minmax(0,var(--split))_auto_minmax(0,var(--rest))] lg:gap-2"
+      style={{ '--split': `${split()}fr`, '--rest': `${100 - split()}fr` }}
+    >
       <section class="min-w-0 space-y-3">
         <div class="flex items-center justify-between gap-2">
           <h1 class="text-foreground text-2xl font-bold tracking-tight">
@@ -264,6 +287,17 @@ function Dev() {
           {console_() || 'Preview console output appears here.'}
         </pre>
       </section>
+
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize panels"
+        tabindex={0}
+        class="bg-border hover:bg-primary focus-visible:bg-primary hidden w-1.5 cursor-col-resize touch-none self-stretch rounded-full lg:block"
+        onPointerDown={(e) => e.currentTarget.setPointerCapture(e.pointerId)}
+        onPointerMove={onDrag}
+        onKeyDown={onDividerKey}
+      />
 
       <section class="min-w-0">
         <div
