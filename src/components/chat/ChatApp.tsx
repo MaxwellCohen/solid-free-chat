@@ -412,6 +412,22 @@ export default function ChatApp() {
   const importChatsFile = (file: File) =>
     importChatsFromFile(file, collapseSidebarIfNarrow)
 
+  const [importToast, setImportToast] = createSignal('')
+  let importToastTimer: ReturnType<typeof setTimeout> | undefined
+  function pickChatsToImport() {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'application/json,.json'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      setImportToast(await importChatsFile(file))
+      clearTimeout(importToastTimer)
+      importToastTimer = setTimeout(() => setImportToast(''), 5000)
+    }
+    input.click()
+  }
+
   function focusChatComposer() {
     const el = document.querySelector<HTMLTextAreaElement>(
       '[data-chat-composer]',
@@ -585,6 +601,12 @@ export default function ChatApp() {
         label: 'Open skills',
         hint: hint('openSkills'),
         run: () => setSkillsLibraryOpen(true),
+      },
+      {
+        id: 'importChats',
+        label: 'Import chats',
+        keywords: 'backup chatgpt json restore upload',
+        run: pickChatsToImport,
       },
       {
         id: 'openInsights',
@@ -880,6 +902,15 @@ export default function ChatApp() {
           items={paletteItems}
           onClose={() => setPaletteOpen(false)}
         />
+
+        <Show when={importToast()}>
+          <div
+            role="status"
+            class="bg-card text-card-foreground border-border fixed right-4 bottom-4 z-50 rounded-lg border px-3 py-2 text-sm shadow-lg"
+          >
+            {importToast()}
+          </div>
+        </Show>
 
         <ChatAppShortcutsModal
           open={shortcutsHelpOpen}

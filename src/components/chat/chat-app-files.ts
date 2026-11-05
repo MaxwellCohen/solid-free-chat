@@ -9,6 +9,7 @@ import {
   mergeImportedChats,
   parseChatImport,
 } from '../../lib/chat-export'
+import { isChatGptExport, parseChatGptExport } from '../../lib/chat-import'
 import type { ChatAppState } from '../../store/chat.store'
 import { chatStore } from '../../store/chat.store'
 
@@ -51,7 +52,13 @@ export async function importChatsFromFile(
       return e instanceof Error ? e.message : 'Could not read backup.'
     }
   } else {
-    const result = parseChatImport(text)
+    let isGpt = false
+    try {
+      isGpt = isChatGptExport(JSON.parse(text))
+    } catch {
+      /* handled by parser below */
+    }
+    const result = isGpt ? parseChatGptExport(text) : parseChatImport(text)
     if (!result.ok) return result.error
     incoming = result.state
   }

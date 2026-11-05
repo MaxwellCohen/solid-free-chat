@@ -498,7 +498,7 @@ function ExportImportMenu(props: { props: ChatAppSidebarProps }) {
         </button>
         <button type="button" class={item} onClick={() => fileInput?.click()}>
           <Upload class="mr-1 inline size-3" aria-hidden="true" />
-          Import JSON…
+          Import chats…
         </button>
         <input
           ref={fileInput}
