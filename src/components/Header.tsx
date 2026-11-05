@@ -148,7 +148,7 @@ function MobileMenu() {
 
 export default function Header() {
   return (
-    <header class="border-border bg-card text-card-foreground sticky top-0 z-50 h-14 border-b shadow-sm">
+    <header class="border-border bg-card text-card-foreground in-data-[zen]:hidden sticky top-0 z-50 h-14 border-b shadow-sm">
       <nav class="mx-auto flex h-full max-w-6xl flex-nowrap items-center gap-x-2 px-3 sm:gap-x-4 sm:px-4">
         <h2 class="m-0 shrink-0 text-base font-semibold tracking-tight">
           <Link

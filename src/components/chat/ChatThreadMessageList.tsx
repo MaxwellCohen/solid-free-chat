@@ -128,7 +128,7 @@ export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
       role="log"
       aria-label="Conversation"
       aria-live="polite"
-      class="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6"
+      class="min-h-0 w-full flex-1 overflow-y-auto px-3 py-4 group-data-[zen]/app:mx-auto group-data-[zen]/app:max-w-3xl group-data-[zen]/app:pt-12 sm:px-6"
     >
       <Show when={props.messages().length === 0 && !props.isLoading()}>
         <div class="mx-auto flex max-w-2xl flex-col items-center gap-4 py-8 text-center">

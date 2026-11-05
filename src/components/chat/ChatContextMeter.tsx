@@ -21,7 +21,7 @@ export function ChatContextMeter(props: {
     <Show when={props.usage()}>
       {(usage) => (
         <div
-          class="mx-auto flex w-full max-w-3xl items-center gap-2 px-3 pt-1 text-xs"
+          class="mx-auto flex w-full max-w-3xl items-center gap-2 px-3 pt-1 text-xs group-data-[zen]/app:hidden"
           data-testid="context-meter"
         >
           <div
