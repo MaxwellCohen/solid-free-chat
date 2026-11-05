@@ -8,6 +8,7 @@ const LINKS = [
   ['Saved', '/saved'],
   ['Insights', '/insights'],
   ['Arena', '/arena'],
+  ['Roundtable', '/roundtable'],
   ['Dev', '/dev'],
   ['About', '/about'],
 ] as const

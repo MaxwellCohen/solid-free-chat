@@ -674,6 +674,12 @@ export default function ChatApp() {
         run: () => void navigate({ to: '/arena' }),
       },
       {
+        id: 'openRoundtable',
+        label: 'Open roundtable',
+        keywords: 'personas debate conversation panel discuss',
+        run: () => void navigate({ to: '/roundtable' }),
+      },
+      {
         id: 'showHelp',
         label: 'Keyboard shortcuts',
         hint: hint('showHelp'),
