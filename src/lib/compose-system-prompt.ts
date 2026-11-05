@@ -2,7 +2,7 @@ import type { ChatSkill } from '../store/chat.store'
 
 /** Always prepended before any attached skill instructions. */
 export const BASELINE_SYSTEM_MESSAGE =
-  'You are a helpful chat assistant. Follow the user\'s instructions carefully and concisely.'
+  "You are a helpful chat assistant. Follow the user's instructions carefully and concisely."
 
 /**
  * Compose the system prompt from the baseline plus attached skills (in order).

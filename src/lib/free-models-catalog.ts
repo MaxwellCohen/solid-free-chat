@@ -1,3 +1,4 @@
+import { lookup } from './nullable'
 import type { ProviderId } from './providers'
 
 /** One chat model on a provider's free tier, with metadata from models.dev. */
@@ -38,7 +39,7 @@ export function buildFreeModelsCatalog(raw: unknown): FreeModelsCatalog {
   const providers = raw as Record<string, { models?: Record<string, unknown> }>
 
   for (const [providerId, devId] of Object.entries(MODELS_DEV_PROVIDERS)) {
-    const models = providers[devId!]?.models
+    const models = lookup(providers, devId)?.models
     if (!models || typeof models !== 'object') continue
     const out: CatalogModel[] = []
     for (const [key, value] of Object.entries(models)) {

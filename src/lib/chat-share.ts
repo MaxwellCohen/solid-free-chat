@@ -161,21 +161,17 @@ function sanitizePart(
     return { type: 'thinking', content: part.content }
   }
   if (part.type === 'tool-call') {
+    const args: unknown = part.arguments
     return {
       type: 'tool-call',
       id: part.id,
       name: part.name,
-      arguments:
-        typeof part.arguments === 'string'
-          ? part.arguments
-          : JSON.stringify(part.arguments ?? {}),
+      arguments: typeof args === 'string' ? args : JSON.stringify(args ?? {}),
     }
   }
   if (part.type === 'tool-result') {
-    const content =
-      typeof part.content === 'string'
-        ? part.content
-        : JSON.stringify(part.content ?? null)
+    const raw: unknown = part.content
+    const content = typeof raw === 'string' ? raw : JSON.stringify(raw ?? null)
     return {
       type: 'tool-result',
       toolCallId: part.toolCallId,

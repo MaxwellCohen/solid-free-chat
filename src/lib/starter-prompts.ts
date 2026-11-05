@@ -10,7 +10,8 @@ export const STARTER_PROMPTS: readonly StarterPrompt[] = [
     id: 'explain',
     title: 'Explain a concept',
     description: 'Get a clear, simple explanation',
-    prompt: 'Explain how public-key cryptography works, as if I were new to it.',
+    prompt:
+      'Explain how public-key cryptography works, as if I were new to it.',
   },
   {
     id: 'code',
@@ -37,7 +38,8 @@ export const STARTER_PROMPTS: readonly StarterPrompt[] = [
     id: 'brainstorm',
     title: 'Brainstorm ideas',
     description: 'Get a list of fresh ideas',
-    prompt: 'Brainstorm 10 creative side-project ideas for learning a new programming language.',
+    prompt:
+      'Brainstorm 10 creative side-project ideas for learning a new programming language.',
   },
   {
     id: 'summarize',

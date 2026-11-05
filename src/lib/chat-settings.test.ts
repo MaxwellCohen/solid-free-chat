@@ -26,7 +26,11 @@ describe('chat settings', () => {
     expect(normalizeChatSettings(null)).toBeUndefined()
     expect(normalizeChatSettings({ systemPrompt: '  ' })).toBeUndefined()
     expect(
-      normalizeChatSettings({ systemPrompt: ' hi ', temperature: 9, maxTokens: 'x' }),
+      normalizeChatSettings({
+        systemPrompt: ' hi ',
+        temperature: 9,
+        maxTokens: 'x',
+      }),
     ).toEqual({ systemPrompt: 'hi', temperature: 2 })
   })
 

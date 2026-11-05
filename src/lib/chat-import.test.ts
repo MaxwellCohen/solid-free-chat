@@ -3,7 +3,12 @@ import { describe, expect, it } from 'vitest'
 import { mergeImportedChats } from './chat-export'
 import { parseChatGptExport } from './chat-import'
 
-const msg = (id: string, role: string, text: string, parent: string | null) => ({
+const msg = (
+  id: string,
+  role: string,
+  text: string,
+  parent: string | null,
+) => ({
   id,
   parent,
   message: {

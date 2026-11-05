@@ -12,9 +12,8 @@ import {
   buildReviewSystemPrompt,
   parseReviewComments,
   segmentText,
-  type ReviewComment,
-  type ReviewFocus,
 } from '../lib/writing-review'
+import type { ReviewComment, ReviewFocus } from '../lib/writing-review'
 
 export const Route = createFileRoute('/review')({
   component: Review,

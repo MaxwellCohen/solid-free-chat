@@ -39,7 +39,10 @@ function shiftDay(key: string, delta: number): string {
 }
 
 function messageTime(
-  message: { createdAt?: Date | string | number; tokenUsage?: { recordedAt: number } },
+  message: {
+    createdAt?: Date | string | number
+    tokenUsage?: { recordedAt: number }
+  },
   fallback: number,
 ): number {
   const raw = message.createdAt
@@ -80,7 +83,12 @@ export function computeInsights(
     messages += list.length
     tokens += chatTokens
     cost += chatCost
-    rows.push({ id, title: convo.title || 'Untitled chat', tokens: chatTokens, messages: list.length })
+    rows.push({
+      id,
+      title: convo.title || 'Untitled chat',
+      tokens: chatTokens,
+      messages: list.length,
+    })
   }
 
   const today = dayKey(now)

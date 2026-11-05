@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/solid-router'
+import { maybe } from '../lib/nullable'
 import { Errored, For, Show, createSignal, onSettled } from 'solid-js'
 
 import { ChatErrorFallback } from '../components/chat/ChatErrorFallback'
@@ -284,7 +285,10 @@ function Dev() {
   const toggleFullscreen = () => {
     const next = !fullscreen()
     setFullscreen(next)
-    if (next) void pane?.requestFullscreen?.().catch(() => {})
+    if (next)
+      void maybe(pane?.requestFullscreen)
+        ?.call(pane)
+        .catch(() => {})
     else if (document.fullscreenElement) void document.exitFullscreen()
   }
 

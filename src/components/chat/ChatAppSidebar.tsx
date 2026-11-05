@@ -280,8 +280,12 @@ function ConversationSearch(props: { props: ChatAppSidebarProps }) {
 }
 
 function ConversationNav(props: { props: ChatAppSidebarProps }) {
-  const pinned = createMemo(() => props.props.conversations().filter((c) => c.pinned))
-  const unpinned = createMemo(() => props.props.conversations().filter((c) => !c.pinned))
+  const pinned = createMemo(() =>
+    props.props.conversations().filter((c) => c.pinned),
+  )
+  const unpinned = createMemo(() =>
+    props.props.conversations().filter((c) => !c.pinned),
+  )
   const renderItems = (items: ChatConversation[]) => (
     <For each={items}>
       {(conversation) => (
@@ -349,30 +353,30 @@ function ConversationListItem(props: {
         />
       </Show>
       <Show when={!editing()}>
-      <button
-        type="button"
-        class={[
-          'hover:bg-muted min-w-0 flex-1 rounded-lg px-2 py-2.5 text-left text-sm sm:py-2',
-          {
-            'bg-muted font-medium':
-              props.currentConversationId() === props.conversation.id,
-          },
-        ]}
-        onClick={() => {
-          setConfirmingDelete(false)
-          props.onSelectConversation(props.conversation.id)
-        }}
-        onDblClick={startEdit}
-      >
-        <span class="block truncate">
-          {props.conversation.title || NEW_CHAT_TITLE}
-        </span>
-        <Show when={(props.conversation.sessionTotalCost ?? 0) > 0}>
-          <span class="text-muted-foreground block text-xs">
-            {formatCost(props.conversation.sessionTotalCost ?? 0)}
+        <button
+          type="button"
+          class={[
+            'hover:bg-muted min-w-0 flex-1 rounded-lg px-2 py-2.5 text-left text-sm sm:py-2',
+            {
+              'bg-muted font-medium':
+                props.currentConversationId() === props.conversation.id,
+            },
+          ]}
+          onClick={() => {
+            setConfirmingDelete(false)
+            props.onSelectConversation(props.conversation.id)
+          }}
+          onDblClick={startEdit}
+        >
+          <span class="block truncate">
+            {props.conversation.title || NEW_CHAT_TITLE}
           </span>
-        </Show>
-      </button>
+          <Show when={(props.conversation.sessionTotalCost ?? 0) > 0}>
+            <span class="text-muted-foreground block text-xs">
+              {formatCost(props.conversation.sessionTotalCost ?? 0)}
+            </span>
+          </Show>
+        </button>
       </Show>
       <button
         type="button"

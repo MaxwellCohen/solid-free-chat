@@ -42,6 +42,7 @@ import {
 } from '../../store/chat.store'
 import type { ChatUIMessage, TokenUsageSnapshot } from '../../store/chat.store'
 import { useChatStore } from '../../store/chat.hooks'
+import { lookup } from '../../lib/nullable'
 import { createDictation, stopSpeaking } from '../../lib/speech'
 import { ChatThreadComposer } from './ChatThreadComposer'
 import { parseSlash } from '../../lib/slash-commands'
@@ -201,18 +202,20 @@ function ChatThreadSession(props: {
 
   const selectedModel = useChatStore((state) => state.selectedModel)
   const skillIds = useChatStore(
-    (state) => state.conversationsById[conversationId]?.skillIds ?? [],
+    (state) => lookup(state.conversationsById, conversationId)?.skillIds ?? [],
   )
   const skills = useChatStore((state) => state.skills)
   const chatSettings = useChatStore(
-    (state) => state.conversationsById[conversationId]?.settings,
+    (state) => lookup(state.conversationsById, conversationId)?.settings,
   )
   const enabledToolIds = useChatStore((state) => state.enabledToolIds)
   const sessionTotalTokens = useChatStore(
-    (state) => state.conversationsById[conversationId]?.sessionTotalTokens,
+    (state) =>
+      lookup(state.conversationsById, conversationId)?.sessionTotalTokens,
   )
   const sessionTotalCost = useChatStore(
-    (state) => state.conversationsById[conversationId]?.sessionTotalCost,
+    (state) =>
+      lookup(state.conversationsById, conversationId)?.sessionTotalCost,
   )
   const sessionTotalSuffix = createMemo(() => {
     const session = sessionTotalTokens()

@@ -1,4 +1,5 @@
 import { For, Show } from 'solid-js'
+import { maybe } from '../../lib/nullable'
 import {
   Keyboard,
   LoaderCircle,
@@ -77,7 +78,7 @@ function ToolsMenu(props: { props: ChatAppModelToolbarProps }) {
   let details: HTMLDetailsElement | undefined
   // Tolerate a missing accessor (e.g. a stale parent after a hot reload) so the
   // toolbar degrades to "no tools enabled" instead of crashing the page.
-  const enabledToolIds = () => props.props.enabledToolIds?.() ?? []
+  const enabledToolIds = () => maybe(props.props.enabledToolIds)?.() ?? []
   const enabledCount = () => enabledToolIds().length
   const isEnabled = (id: string) => enabledToolIds().includes(id)
 

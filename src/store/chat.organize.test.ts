@@ -59,7 +59,13 @@ describe('pin and rename', () => {
     const state = normalizeChatAppState({
       conversationOrder: ['x', 'y'],
       conversationsById: {
-        x: { id: 'x', title: 'X', updatedAt: 1, pinned: true, titleLocked: true },
+        x: {
+          id: 'x',
+          title: 'X',
+          updatedAt: 1,
+          pinned: true,
+          titleLocked: true,
+        },
         y: { id: 'y', title: 'Y', updatedAt: 1, pinned: 'yes' },
       },
       messagesByConversationId: {},

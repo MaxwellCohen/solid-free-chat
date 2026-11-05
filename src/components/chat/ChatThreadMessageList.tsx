@@ -89,7 +89,7 @@ export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
   createEffect(
     () => props.messages().length,
     (count) => {
-      const last = props.messages()[count - 1]
+      const last = props.messages().at(count - 1)
       if (count > prevCount && last?.role === 'user') {
         requestAnimationFrame(() =>
           virtualizer.scrollToIndex(count - 1, { align: 'start' }),
@@ -105,7 +105,8 @@ export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
     const count = props.messages().length
     let i = count - 1
     while (i >= 0 && props.messages()[i]?.role !== 'user') i--
-    const start = virtualizer.measurementsCache[i]?.start
+    const start =
+      i >= 0 ? virtualizer.measurementsCache.at(i)?.start : undefined
     if (start === undefined || !scrollContainerRef) return 0
     return Math.max(0, scrollContainerRef.clientHeight - 32 - (total - start))
   }

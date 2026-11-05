@@ -15,7 +15,9 @@ function Stat(props: { label: string; value: string }) {
   return (
     <div class="border-border bg-card text-card-foreground rounded-xl border p-4">
       <div class="text-muted-foreground text-xs">{props.label}</div>
-      <div class="text-foreground mt-1 text-2xl font-semibold">{props.value}</div>
+      <div class="text-foreground mt-1 text-2xl font-semibold">
+        {props.value}
+      </div>
     </div>
   )
 }
@@ -33,14 +35,19 @@ function InsightsPage() {
 
   return (
     <main class="mx-auto max-w-3xl px-4 py-8">
-      <h1 class="text-foreground mb-4 text-3xl font-bold tracking-tight">Insights</h1>
+      <h1 class="text-foreground mb-4 text-3xl font-bold tracking-tight">
+        Insights
+      </h1>
       <Show when={loaded()}>
         <Show
           when={data() && data()!.messages > 0 ? data() : null}
           fallback={
             <p class="text-muted-foreground">
               No conversations yet.{' '}
-              <Link to="/" class="text-primary underline-offset-4 hover:underline">
+              <Link
+                to="/"
+                class="text-primary underline-offset-4 hover:underline"
+              >
                 Start a chat
               </Link>{' '}
               to see stats here. Everything is computed locally.
@@ -66,7 +73,9 @@ function InsightsPage() {
                   type: 'bar',
                   title: 'Messages per day (last 30 days)',
                   labels: d().perDay.map((p) => p.day.slice(5)),
-                  datasets: [{ label: 'Messages', data: d().perDay.map((p) => p.count) }],
+                  datasets: [
+                    { label: 'Messages', data: d().perDay.map((p) => p.count) },
+                  ],
                 }}
               />
               <Show when={d().topByTokens.length > 0}>
@@ -75,7 +84,12 @@ function InsightsPage() {
                     type: 'horizontal_bar',
                     title: 'Tokens per chat (top 8)',
                     labels: d().topByTokens.map((r) => r.title.slice(0, 28)),
-                    datasets: [{ label: 'Tokens', data: d().topByTokens.map((r) => r.tokens) }],
+                    datasets: [
+                      {
+                        label: 'Tokens',
+                        data: d().topByTokens.map((r) => r.tokens),
+                      },
+                    ],
                   }}
                 />
               </Show>

@@ -3,8 +3,10 @@ import type { ChatAppState } from './chat.store'
 import { chatStore, chatActions, chatSelectors } from './chat.store'
 
 type ReadableStore<TState> = {
-  get(): TState
-  subscribe(onStoreChange: (state: TState) => void): { unsubscribe(): void }
+  get: () => TState
+  subscribe: (onStoreChange: (state: TState) => void) => {
+    unsubscribe: () => void
+  }
 }
 
 /**
@@ -17,11 +19,13 @@ function useSelector<TState, TSelected>(
   options?: { compare?: (previous: TSelected, next: TSelected) => boolean },
 ) {
   const compare = options?.compare ?? Object.is
+  // Solid treats function values as lazy computes; keep the exact `Function` exclusion.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
   type Stored = Exclude<TSelected, Function>
   const [selected, setSelected] = createSignal(
     selector(source.get()) as Stored,
     {
-      equals: (previous, next) => compare(previous as TSelected, next as TSelected),
+      equals: (previous, next) => compare(previous, next),
     },
   )
   const subscription = source.subscribe((state) => {

@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createSignal, onSettled } from 'solid-js'
+import { maybe } from '../../lib/nullable'
 import { findInMessages, stepMatch } from '../../lib/find-in-chat'
 import { requestScrollToMessage } from '../../lib/scroll-to-message'
 
@@ -11,7 +12,8 @@ function highlightApi(): {
   registry: HighlightRegistry
   Highlight: new (...r: Range[]) => unknown
 } | null {
-  const css = globalThis.CSS as unknown as { highlights?: HighlightRegistry }
+  const css = globalThis.CSS as unknown as
+    { highlights?: HighlightRegistry } | undefined
   const H = (
     globalThis as unknown as { Highlight?: new (...r: Range[]) => unknown }
   ).Highlight
@@ -72,7 +74,7 @@ export function ChatFindBar(props: {
   let input: HTMLInputElement | undefined
 
   const matches = createMemo(() => findInMessages(props.messages(), query()))
-  const current = () => matches()[index()] ?? null
+  const current = () => maybe(matches()[index()]) ?? null
 
   onSettled(() => {
     input?.focus()

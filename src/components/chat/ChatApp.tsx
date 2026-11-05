@@ -46,6 +46,7 @@ import {
 } from '../../lib/openrouter-oauth'
 import { useChatActions, useChatStore } from '../../store/chat.hooks'
 import { chatSelectors, chatStore } from '../../store/chat.store'
+import { lookup, maybe } from '../../lib/nullable'
 import ChatThread from './ChatThread'
 import { SIDEBAR_OPEN_LS_KEY } from './chat-app-constants'
 import { ChatAppModelToolbar } from './ChatAppModelToolbar'
@@ -84,7 +85,7 @@ export default function ChatApp() {
   const attachedSkillIds = useChatStore((state) => {
     const id = state.currentConversationId
     if (!id) return [] as string[]
-    return state.conversationsById[id]?.skillIds ?? []
+    return lookup(state.conversationsById, id)?.skillIds ?? []
   })
   const selectedModel = useChatStore((state) => state.selectedModel)
   const enabledToolIds = useChatStore((state) => state.enabledToolIds)
@@ -119,7 +120,7 @@ export default function ChatApp() {
   const [chatSettingsOpen, setChatSettingsOpen] = createSignal(false)
   const currentChatSettings = useChatStore((state) => {
     const id = state.currentConversationId
-    return id ? state.conversationsById[id]?.settings : undefined
+    return id ? lookup(state.conversationsById, id)?.settings : undefined
   })
   const [openRouterApiKeyModalOpen, setOpenRouterApiKeyModalOpen] =
     createSignal(false)
@@ -134,7 +135,7 @@ export default function ChatApp() {
   const currentMessageCount = useChatStore((state) => {
     const id = state.currentConversationId
     if (!id) return 0
-    return state.messagesByConversationId[id]?.length ?? 0
+    return lookup(state.messagesByConversationId, id)?.length ?? 0
   })
 
   createEffect(
@@ -142,11 +143,12 @@ export default function ChatApp() {
     (version) => {
       if (version == null || isServer) return
       let cancelled = false
+      const isCancelled = () => cancelled
       setModelListLoading(true)
       setModelListError(undefined)
       void (async () => {
         const { options, error } = await loadAllModelOptions()
-        if (cancelled) return
+        if (isCancelled()) return
         if (options.length === 0 && error) setModelListError(error)
         else setModelList(options)
         setModelListLoading(false)
@@ -403,7 +405,10 @@ export default function ChatApp() {
       format === 'md' ? chatToMarkdown(state, id) : serializeChat(state, id)
     if (text == null) return
     downloadTextFile(
-      exportFileName(state.conversationsById[id]?.title ?? 'chat', format),
+      exportFileName(
+        lookup(state.conversationsById, id)?.title ?? 'chat',
+        format,
+      ),
       text,
       format === 'md' ? 'text/markdown' : 'application/json',
     )
@@ -450,7 +455,7 @@ export default function ChatApp() {
   function searchCorpus() {
     const state = chatStore.state
     return state.conversationOrder.flatMap((id) => {
-      const conversation = state.conversationsById[id]
+      const conversation = lookup(state.conversationsById, id)
       return conversation
         ? [
             {
@@ -633,8 +638,8 @@ export default function ChatApp() {
         keywords: 'dark light system appearance',
         run: () => {
           const order = ['light', 'dark', 'system'] as const
-          const cur = theme.preference() ?? 'system'
-          theme.setPreference(order[(order.indexOf(cur) + 1) % order.length]!)
+          const cur = maybe(theme.preference()) ?? 'system'
+          theme.setPreference(order[(order.indexOf(cur) + 1) % order.length])
         },
       },
       {
@@ -719,7 +724,7 @@ export default function ChatApp() {
     setShareBusy(true)
     try {
       const title =
-        chatStore.state.conversationsById[id]?.title ?? 'Shared chat'
+        lookup(chatStore.state.conversationsById, id)?.title ?? 'Shared chat'
       const result = await buildShareLink({
         baseUrl: `${window.location.origin}/share`,
         title,

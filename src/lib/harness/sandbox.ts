@@ -10,6 +10,7 @@
  * `srcdoc`: a `srcdoc` frame would inherit the app's Content-Security-Policy,
  * whose locked-down `connect-src` would stop sandboxed code from fetching.
  */
+import { maybe } from '../nullable'
 import { SANDBOX_DOCUMENT_PATH } from './sandbox-document'
 
 export type SandboxResult = {
@@ -50,7 +51,7 @@ function ensureFrame(): Promise<HTMLIFrameElement> {
         pending.delete(data.id)
         done?.({
           ok: data.ok,
-          output: data.output ?? '',
+          output: maybe(data.output) ?? '',
           result: data.result,
           error: data.error,
           timedOut: data.timedOut,
@@ -69,19 +70,25 @@ export async function runInSandbox(
   options: { timeoutMs: number; signal?: AbortSignal },
 ): Promise<SandboxResult> {
   if (typeof document === 'undefined') {
-    return { ok: false, output: '', error: 'Sandbox is only available in the browser.' }
+    return {
+      ok: false,
+      output: '',
+      error: 'Sandbox is only available in the browser.',
+    }
   }
   const el = await ensureFrame()
   const id = crypto.randomUUID()
   return new Promise<SandboxResult>((resolve) => {
     // Backstop in case the iframe itself is wedged (e.g. worker creation blocked).
-    const backstop = setTimeout(
-      () => {
-        pending.delete(id)
-        resolve({ ok: false, output: '', timedOut: true, error: 'Sandbox did not respond.' })
-      },
-      options.timeoutMs + 5_000,
-    )
+    const backstop = setTimeout(() => {
+      pending.delete(id)
+      resolve({
+        ok: false,
+        output: '',
+        timedOut: true,
+        error: 'Sandbox did not respond.',
+      })
+    }, options.timeoutMs + 5_000)
     const onAbort = () => {
       clearTimeout(backstop)
       pending.delete(id)

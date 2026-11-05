@@ -111,7 +111,8 @@ export function runAgent(options: RunAgentOptions): AsyncIterable<StreamChunk> {
   // Each adapter spells the limit differently (request body shape).
   const { temperature, maxTokens } = options
   const usesResponses =
-    provider.id === 'openrouter' && messagesIncludeDocumentParts(options.messages)
+    provider.id === 'openrouter' &&
+    messagesIncludeDocumentParts(options.messages)
   const maxKey =
     provider.id !== 'openrouter'
       ? 'max_tokens'

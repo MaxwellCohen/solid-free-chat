@@ -11,7 +11,16 @@ function msg(offsetDays: number, tokens = 0) {
     role: 'user',
     parts: [],
     createdAt: new Date(t),
-    ...(tokens ? { tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: tokens, recordedAt: t } } : {}),
+    ...(tokens
+      ? {
+          tokenUsage: {
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: tokens,
+            recordedAt: t,
+          },
+        }
+      : {}),
   } as never
 }
 
@@ -20,9 +29,14 @@ function state(chats: Record<string, { title: string; msgs: unknown[] }>) {
   return {
     conversationOrder: ids,
     conversationsById: Object.fromEntries(
-      ids.map((id) => [id, { id, title: chats[id].title, updatedAt: NOW, skillIds: [] }]),
+      ids.map((id) => [
+        id,
+        { id, title: chats[id].title, updatedAt: NOW, skillIds: [] },
+      ]),
     ),
-    messagesByConversationId: Object.fromEntries(ids.map((id) => [id, chats[id].msgs])),
+    messagesByConversationId: Object.fromEntries(
+      ids.map((id) => [id, chats[id].msgs]),
+    ),
   } as never
 }
 
@@ -55,7 +69,10 @@ describe('computeInsights', () => {
   })
 
   it('streak survives an idle today', () => {
-    const r = computeInsights(state({ a: { title: 'A', msgs: [msg(1), msg(2)] } }), NOW)
+    const r = computeInsights(
+      state({ a: { title: 'A', msgs: [msg(1), msg(2)] } }),
+      NOW,
+    )
     expect(r.currentStreak).toBe(2)
   })
 })
