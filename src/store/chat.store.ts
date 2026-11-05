@@ -1,3 +1,5 @@
+import { mergeSkills } from '../lib/skill-library'
+import type { SkillDraft } from '../lib/skill-library'
 import { Store } from '@tanstack/store'
 import type { UIMessage } from '@tanstack/ai-client'
 import { lookup } from '../lib/nullable'
@@ -644,6 +646,19 @@ export const chatActions = {
       ],
     }))
     return id
+  },
+
+  /** Merge skills by name; returns how many were added / updated. */
+  importSkills(incoming: SkillDraft[]) {
+    let result = { added: 0, updated: 0 }
+    chatStore.setState((s) => {
+      const merged = mergeSkills(s.skills, incoming, newSkillId)
+      result = { added: merged.added, updated: merged.updated }
+      return merged.added || merged.updated
+        ? { ...s, skills: merged.skills }
+        : s
+    })
+    return result
   },
 
   updateSkill(

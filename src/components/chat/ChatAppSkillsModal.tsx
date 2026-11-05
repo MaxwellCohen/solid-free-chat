@@ -1,6 +1,13 @@
 import { For, Show, createSignal, onSettled } from 'solid-js'
 import type { ChatSkill } from '../../store/chat.hooks'
 import { bindModalFocus } from '../../lib/modal-focus'
+import {
+  BUILT_IN_SKILLS,
+  exportSkills,
+  parseSkillImport,
+} from '../../lib/skill-library'
+import type { SkillDraft } from '../../lib/skill-library'
+import { downloadTextFile } from './chat-app-files'
 
 export function ChatAppSkillsModal(props: {
   open: () => boolean
@@ -9,6 +16,7 @@ export function ChatAppSkillsModal(props: {
   attachedSkillIds: () => string[]
   onToggleSkill: (skillId: string) => void
   onAddSkill: (name: string, instructions: string) => void
+  onImportSkills: (incoming: SkillDraft[]) => { added: number; updated: number }
   onUpdateSkill: (
     skillId: string,
     patch: { name?: string; instructions?: string },
@@ -23,6 +31,7 @@ export function ChatAppSkillsModal(props: {
         attachedSkillIds={props.attachedSkillIds}
         onToggleSkill={props.onToggleSkill}
         onAddSkill={props.onAddSkill}
+        onImportSkills={props.onImportSkills}
         onUpdateSkill={props.onUpdateSkill}
         onDeleteSkill={props.onDeleteSkill}
         onClose={props.onClose}
@@ -36,6 +45,7 @@ function SkillsModalDialog(props: {
   attachedSkillIds: () => string[]
   onToggleSkill: (skillId: string) => void
   onAddSkill: (name: string, instructions: string) => void
+  onImportSkills: (incoming: SkillDraft[]) => { added: number; updated: number }
   onUpdateSkill: (
     skillId: string,
     patch: { name?: string; instructions?: string },
@@ -78,6 +88,27 @@ function SkillsModalDialog(props: {
     props.onAddSkill(newName(), newInstructions())
     setNewName('')
     setNewInstructions('')
+  }
+
+  const [libraryStatus, setLibraryStatus] = createSignal('')
+  let importInput: HTMLInputElement | undefined
+
+  const missingBuiltIns = () => {
+    const have = new Set(props.skills().map((s) => s.name.toLowerCase()))
+    return BUILT_IN_SKILLS.filter((b) => !have.has(b.name.toLowerCase()))
+  }
+
+  async function onImportFile(e: Event & { currentTarget: HTMLInputElement }) {
+    const file = e.currentTarget.files?.[0]
+    e.currentTarget.value = ''
+    if (!file) return
+    const incoming = parseSkillImport(await file.text())
+    if (incoming.length === 0) {
+      setLibraryStatus('No valid skills found in that file.')
+      return
+    }
+    const { added, updated } = props.onImportSkills(incoming)
+    setLibraryStatus(`Imported: ${added} added, ${updated} updated.`)
   }
 
   const attachedSet = () => new Set(props.attachedSkillIds())
@@ -222,6 +253,69 @@ function SkillsModalDialog(props: {
                           </div>
                         </div>
                       </Show>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </Show>
+          </section>
+
+          <section class="border-border space-y-2 border-t pt-3">
+            <h3 class="text-foreground text-xs font-semibold">Library</h3>
+            <div class="flex flex-wrap gap-2">
+              <button
+                type="button"
+                class="border-border hover:bg-muted rounded-lg border px-2.5 py-1 text-xs disabled:opacity-50"
+                disabled={props.skills().length === 0}
+                onClick={() =>
+                  downloadTextFile(
+                    'solid-free-chat-skills.json',
+                    exportSkills(props.skills()),
+                    'application/json',
+                  )
+                }
+              >
+                Export skills
+              </button>
+              <button
+                type="button"
+                class="border-border hover:bg-muted rounded-lg border px-2.5 py-1 text-xs"
+                onClick={() => importInput?.click()}
+              >
+                Import skills
+              </button>
+              <input
+                ref={(el) => (importInput = el)}
+                type="file"
+                accept="application/json,.json"
+                class="hidden"
+                aria-label="Import skills file"
+                onChange={onImportFile}
+              />
+            </div>
+            <Show when={libraryStatus()}>
+              <p class="text-muted-foreground text-xs" role="status">
+                {libraryStatus()}
+              </p>
+            </Show>
+            <Show when={missingBuiltIns().length > 0}>
+              <p class="text-muted-foreground text-xs">Built-in examples</p>
+              <ul class="flex flex-wrap gap-2">
+                <For each={missingBuiltIns()}>
+                  {(b) => (
+                    <li>
+                      <button
+                        type="button"
+                        class="border-border hover:bg-muted rounded-full border px-2.5 py-1 text-xs"
+                        title={b.instructions}
+                        aria-label={`Add built-in skill: ${b.name}`}
+                        onClick={() => {
+                          props.onImportSkills([b])
+                          setLibraryStatus(`Added ${b.name}.`)
+                        }}
+                      >
+                        + {b.name}
+                      </button>
                     </li>
                   )}
                 </For>

@@ -895,6 +895,7 @@ export default function ChatApp() {
               actions.toggleConversationSkill(conversationId, skillId)
             }
           }}
+          onImportSkills={(incoming) => actions.importSkills(incoming)}
           onUpdateSkill={(skillId, patch) =>
             actions.updateSkill(skillId, patch)
           }
