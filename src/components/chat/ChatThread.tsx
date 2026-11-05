@@ -37,7 +37,10 @@ import { composeSystemPrompt } from '../../lib/compose-system-prompt'
 import {
   attachTokenUsageToLastAssistantMessage,
   chatActions,
+  snapshotVariants,
+  switchVariantInMessages,
   toggleBookmarkInMessages,
+  withRegeneratedVariants,
   createChatHistoryApi,
   createConversationSkillsApi,
 } from '../../store/chat.store'
@@ -303,9 +306,28 @@ function ChatThreadSession(props: {
       }),
     ),
     onFinish: () => {
+      applyPendingVariants()
       commitConversationMessages()
     },
   })
+
+  /** Earlier versions of a reply being regenerated; `length` is the expected message count when it finishes. */
+  let pendingVariants: {
+    prev: ReturnType<typeof snapshotVariants>
+    length: number
+  } | null = null
+
+  function applyPendingVariants() {
+    const pending = pendingVariants
+    pendingVariants = null
+    if (!pending) return
+    const msgs = chat.messages() as ChatUIMessage[]
+    const last = msgs[msgs.length - 1] as ChatUIMessage | undefined
+    if (msgs.length !== pending.length || last?.role !== 'assistant') return
+    const next = msgs.slice()
+    next[next.length - 1] = withRegeneratedVariants(last, pending.prev)
+    chat.setMessages(next as UIMessage[])
+  }
 
   function commitConversationMessages(
     messages = chat.messages() as ChatUIMessage[],
@@ -494,12 +516,16 @@ function ChatThreadSession(props: {
   async function resendUserMessage(
     message: UIMessage,
     editedParts?: ContentPart[],
+    prevVariants?: ReturnType<typeof snapshotVariants>,
   ) {
     if (message.role !== 'user' || chat.isLoading()) return
     const parts = editedParts ?? userMessageToResendParts(message)
     if (!parts || parts.length === 0) return
     const truncated = messagesBefore(chat.messages(), message.id)
     if (!truncated) return
+    pendingVariants = prevVariants
+      ? { prev: prevVariants, length: truncated.length + 2 }
+      : null
     chat.setMessages(truncated)
     commitConversationMessages(truncated as ChatUIMessage[])
     const sendPromise = chat.sendMessage({
@@ -513,7 +539,20 @@ function ChatThreadSession(props: {
     if (message.role !== 'assistant' || chat.isLoading()) return
     const before = messagesBefore(chat.messages(), message.id)
     const user = before?.filter((m) => m.role === 'user').pop()
-    if (user) await resendUserMessage(user)
+    if (!user) return
+    const prev = snapshotVariants(message as ChatUIMessage)
+    await resendUserMessage(user, undefined, prev)
+  }
+
+  function switchVariant(message: UIMessage, index: number) {
+    if (chat.isLoading()) return
+    const next = switchVariantInMessages(
+      chat.messages() as ChatUIMessage[],
+      message.id,
+      index,
+    )
+    chat.setMessages(next as UIMessage[])
+    commitConversationMessages(next)
   }
 
   function toggleBookmark(message: UIMessage) {
@@ -887,6 +926,7 @@ function ChatThreadSession(props: {
         onRegenerateMessage={regenerateAssistantMessage}
         onBranchMessage={branchFromMessage}
         onToggleBookmark={toggleBookmark}
+        onSwitchVariant={switchVariant}
         failedUserMessage={failedUserMessage}
         error={() => chat.error()}
         onReconnectOpenRouter={props.onReconnectOpenRouter}

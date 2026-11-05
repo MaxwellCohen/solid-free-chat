@@ -316,3 +316,18 @@ test('bookmarking a message lists it on the Saved page', async ({ page }) => {
   await page.reload()
   await expect(page.getByTestId('saved-message')).toHaveCount(1)
 })
+
+test('regenerate keeps the previous reply as a switchable variant', async ({
+  page,
+}) => {
+  await open(page, seedState())
+  await send(page, 'hi')
+  await expect(page.getByText('Mocked streamed reply')).toBeVisible({
+    timeout: 20_000,
+  })
+  await page.getByRole('button', { name: 'Regenerate this response' }).click()
+  const pos = page.getByTestId('variant-position')
+  await expect(pos).toHaveText('2/2', { timeout: 20_000 })
+  await page.getByRole('button', { name: 'Previous version' }).click()
+  await expect(pos).toHaveText('1/2')
+})

@@ -22,11 +22,27 @@ export interface TokenUsageSnapshot {
   recordedAt: number
 }
 
+/** One alternative reply kept after the user regenerated an assistant message. */
+export interface MessageVariant {
+  parts: UIMessage['parts']
+  tokenUsage?: TokenUsageSnapshot
+}
+
+/** Most variants kept per message; the oldest are dropped first. */
+export const MAX_MESSAGE_VARIANTS = 8
+
 /** UIMessage with optional per-reply usage (extension; persisted in local storage). */
 export type ChatUIMessage = UIMessage & {
   tokenUsage?: TokenUsageSnapshot
   /** User starred this message; listed on the Saved page. */
   bookmarked?: boolean
+  /**
+   * All versions of this reply (oldest first), including the active one.
+   * `parts`/`tokenUsage` always mirror `variants[variantIndex]`, so the active
+   * variant is what is sent as context.
+   */
+  variants?: MessageVariant[]
+  variantIndex?: number
 }
 
 /** Reusable skill: instructions composed into the system prompt when attached. */
@@ -347,15 +363,53 @@ function normalizeConversationOrder(
   return order
 }
 
+function clampVariantIndex(raw: unknown, length: number): number {
+  const n = typeof raw === 'number' && Number.isInteger(raw) ? raw : length - 1
+  return Math.min(Math.max(n, 0), length - 1)
+}
+
+/** Valid variants only; fewer than two is not a choice, so it is dropped. */
+function normalizeVariants(raw: unknown): MessageVariant[] | null {
+  if (!Array.isArray(raw)) return null
+  const out: MessageVariant[] = []
+  for (const item of raw as unknown[]) {
+    if (!item || typeof item !== 'object') continue
+    const { parts, tokenUsage } = item as {
+      parts?: unknown
+      tokenUsage?: unknown
+    }
+    if (!Array.isArray(parts)) continue
+    const usage = normalizeTokenUsageSnapshot(tokenUsage)
+    out.push({
+      parts: parts as UIMessage['parts'],
+      ...(usage ? { tokenUsage: usage } : {}),
+    })
+  }
+  return out.length >= 2 ? out.slice(-MAX_MESSAGE_VARIANTS) : null
+}
+
 function normalizeMessage(raw: unknown): ChatUIMessage | null {
   if (!raw || typeof raw !== 'object') return null
-  const { bookmarked, ...message } = raw as UIMessage & {
-    tokenUsage?: unknown
-    bookmarked?: unknown
-  }
+  const { bookmarked, variants, variantIndex, ...message } =
+    raw as UIMessage & {
+      tokenUsage?: unknown
+      bookmarked?: unknown
+      variants?: unknown
+      variantIndex?: unknown
+    }
   const tokenUsage = normalizeTokenUsageSnapshot(message.tokenUsage)
+  const normalizedVariants = normalizeVariants(variants)
   return {
     ...message,
+    ...(normalizedVariants
+      ? {
+          variants: normalizedVariants,
+          variantIndex: clampVariantIndex(
+            variantIndex,
+            normalizedVariants.length,
+          ),
+        }
+      : {}),
     ...(bookmarked === true ? { bookmarked: true } : {}),
     createdAt:
       message.createdAt != null
@@ -865,6 +919,21 @@ export const chatActions = {
     })
   },
 
+  /** Show another stored version of a regenerated reply. */
+  setMessageVariant(conversationId: string, messageId: string, index: number) {
+    chatStore.setState((s) => {
+      const messages = lookup(s.messagesByConversationId, conversationId)
+      if (!messages?.some((m) => m.id === messageId)) return s
+      return {
+        ...s,
+        messagesByConversationId: {
+          ...s.messagesByConversationId,
+          [conversationId]: switchVariantInMessages(messages, messageId, index),
+        },
+      }
+    })
+  },
+
   /** Flip the bookmark flag on one message. */
   toggleMessageBookmark(conversationId: string, messageId: string) {
     chatStore.setState((s) => {
@@ -968,6 +1037,59 @@ export function attachTokenUsageToLastAssistantMessage(
     }
   }
   return next
+}
+
+/** The message's variant list and active index, with the active entry refreshed from the message. */
+export function snapshotVariants(message: ChatUIMessage): {
+  variants: MessageVariant[]
+  index: number
+} {
+  const current: MessageVariant = {
+    parts: message.parts,
+    ...(message.tokenUsage ? { tokenUsage: message.tokenUsage } : {}),
+  }
+  if (!message.variants?.length) return { variants: [current], index: 0 }
+  const index = clampVariantIndex(message.variantIndex, message.variants.length)
+  const variants = message.variants.slice()
+  variants[index] = current
+  return { variants, index }
+}
+
+/** Attach earlier versions (`prev`) to a freshly regenerated reply, which becomes the active one. */
+export function withRegeneratedVariants(
+  message: ChatUIMessage,
+  prev: { variants: MessageVariant[] },
+): ChatUIMessage {
+  const variants = [
+    ...prev.variants,
+    {
+      parts: message.parts,
+      ...(message.tokenUsage ? { tokenUsage: message.tokenUsage } : {}),
+    },
+  ].slice(-MAX_MESSAGE_VARIANTS)
+  return { ...message, variants, variantIndex: variants.length - 1 }
+}
+
+/** Make variant `index` the active content of one message. */
+export function switchVariantInMessages(
+  messages: ChatUIMessage[],
+  messageId: string,
+  index: number,
+): ChatUIMessage[] {
+  return messages.map((m) => {
+    if (m.id !== messageId) return m
+    const { variants } = snapshotVariants(m)
+    if (variants.length < 2 || index < 0 || index >= variants.length) return m
+    const { tokenUsage: _drop, ...rest } = m
+    const target = variants[index]
+    return {
+      ...rest,
+      parts: target.parts,
+      ...(target.tokenUsage ? { tokenUsage: target.tokenUsage } : {}),
+      variants,
+      variantIndex: index,
+    }
+  })
 }
 
 /** Toggle `bookmarked` on one message, dropping the key when cleared. */

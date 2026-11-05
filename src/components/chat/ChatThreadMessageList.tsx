@@ -10,6 +10,8 @@ import { createVirtualizer } from '../../lib/create-virtualizer'
 import type { VirtualItem, Virtualizer } from '../../lib/create-virtualizer'
 import {
   Check,
+  ChevronLeft,
+  ChevronRight,
   Copy,
   GitBranch,
   Pencil,
@@ -48,6 +50,7 @@ type ChatThreadMessageListProps = {
   onRegenerateMessage: (message: UIMessage) => void
   onBranchMessage: (message: UIMessage) => void
   onToggleBookmark: (message: UIMessage) => void
+  onSwitchVariant: (message: UIMessage, index: number) => void
   failedUserMessage: () => UIMessage | null
   error: () => Error | undefined
   onReconnectOpenRouter?: () => void
@@ -240,6 +243,7 @@ function VirtualChatMessage(props: {
               onRegenerate={props.listProps.onRegenerateMessage}
               onBranch={props.listProps.onBranchMessage}
               onToggleBookmark={props.listProps.onToggleBookmark}
+              onSwitchVariant={props.listProps.onSwitchVariant}
             />
             <UserResendButton
               message={msg()}
@@ -342,6 +346,7 @@ function MessageActions(props: {
   onRegenerate: (message: UIMessage) => void
   onBranch: (message: UIMessage) => void
   onToggleBookmark: (message: UIMessage) => void
+  onSwitchVariant: (message: UIMessage, index: number) => void
 }) {
   const [copied, setCopied] = createSignal(false)
   const text = () => messageToPlainText(props.message)
@@ -427,6 +432,52 @@ function MessageActions(props: {
             </Show>
             {speakingId() === props.message.id ? 'Stop' : 'Listen'}
           </button>
+        </Show>
+        <Show when={(props.message.variants?.length ?? 0) > 1}>
+          <span
+            class="text-muted-foreground inline-flex items-center text-[11px] tabular-nums"
+            role="group"
+            aria-label="Reply versions"
+          >
+            <button
+              type="button"
+              class={ACTION_BUTTON_CLASS}
+              disabled={
+                props.isLoading() || (props.message.variantIndex ?? 0) <= 0
+              }
+              aria-label="Previous version"
+              onClick={() =>
+                props.onSwitchVariant(
+                  props.message,
+                  (props.message.variantIndex ?? 0) - 1,
+                )
+              }
+            >
+              <ChevronLeft class="size-3" aria-hidden="true" />
+            </button>
+            <span data-testid="variant-position">
+              {(props.message.variantIndex ?? 0) + 1}/
+              {props.message.variants?.length ?? 0}
+            </span>
+            <button
+              type="button"
+              class={ACTION_BUTTON_CLASS}
+              disabled={
+                props.isLoading() ||
+                (props.message.variantIndex ?? 0) >=
+                  (props.message.variants?.length ?? 0) - 1
+              }
+              aria-label="Next version"
+              onClick={() =>
+                props.onSwitchVariant(
+                  props.message,
+                  (props.message.variantIndex ?? 0) + 1,
+                )
+              }
+            >
+              <ChevronRight class="size-3" aria-hidden="true" />
+            </button>
+          </span>
         </Show>
         <Show when={props.message.role === 'assistant'}>
           <button
