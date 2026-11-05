@@ -1,8 +1,7 @@
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
-const SHOTS =
-  '/private/tmp/claude-501/-Users-maxcohen-code-solid-free-chat/aaae170d-3239-434e-9bce-a3e9911d2558/scratchpad'
+const SHOTS = 'test-results/shots/features'
 
 function seedState(withMessages: boolean) {
   const now = Date.now()

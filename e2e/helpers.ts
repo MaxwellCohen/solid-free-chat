@@ -1,8 +1,8 @@
 import { expect } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
-export const QA_SHOTS =
-  '/private/tmp/claude-501/-Users-maxcohen-code-solid-free-chat/aaae170d-3239-434e-9bce-a3e9911d2558/scratchpad/qa4'
+/** Screenshots land under test-results (gitignored), never an absolute machine path. */
+export const QA_SHOTS = 'test-results/shots/qa4'
 
 type Conv = { id: string; title: string; tags?: string[]; pinned?: boolean }
 

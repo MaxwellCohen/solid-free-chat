@@ -190,8 +190,7 @@ test('projects: screenshots', async ({ page }) => {
       p('p2', 'Empty', '🚀'),
     ],
   })
-  const dir =
-    '/private/tmp/claude-501/-Users-maxcohen-code-solid-free-chat/aaae170d-3239-434e-9bce-a3e9911d2558/scratchpad/qa8'
+  const dir = 'test-results/shots/qa8'
   for (const [w, h] of [
     [1280, 800],
     [390, 800],
