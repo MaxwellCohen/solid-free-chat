@@ -511,6 +511,7 @@ function ChatThreadSession(props: {
     }
   }
 
+  let nudgedFor: string | undefined
   createEffect(
     () => chat.isLoading(),
     (loading, prevLoading) => {
@@ -520,7 +521,15 @@ function ChatThreadSession(props: {
       }
       if (prevLoading === true && !chat.error()) {
         const msgs = chat.messages()
-        if (needsFinalAnswerNudge(msgs) && !wasNudged(msgs)) {
+        const lastId = msgs[msgs.length - 1]?.id
+        // The loading effect can fire twice for one finished run before the
+        // nudge lands in the list; nudge each run's last message only once.
+        if (
+          needsFinalAnswerNudge(msgs) &&
+          !wasNudged(msgs) &&
+          lastId !== nudgedFor
+        ) {
+          nudgedFor = lastId
           void chat.sendMessage(FINAL_ANSWER_NUDGE)
           return
         }

@@ -123,7 +123,7 @@ function SavedPage() {
               Nothing saved yet. Use the Save button under a message in{' '}
               <Link
                 to="/"
-                class="text-primary underline-offset-4 hover:underline"
+                class="text-primary underline underline-offset-4"
               >
                 a chat
               </Link>
