@@ -35,7 +35,7 @@ export function dayKey(ms: number): string {
 
 function shiftDay(key: string, delta: number): string {
   const [y, m, d] = key.split('-').map(Number)
-  return dayKey(new Date(y!, m! - 1, d! + delta).getTime())
+  return dayKey(new Date(y, m - 1, d + delta).getTime())
 }
 
 function messageTime(
@@ -65,8 +65,7 @@ export function computeInsights(
   let tokens = 0
   let cost = 0
   for (const id of state.conversationOrder) {
-    const convo = state.conversationsById[id]
-    if (!convo) continue
+    const convo = state.conversationsById[id]!
     const list = state.messagesByConversationId[id] ?? []
     let chatTokens = 0
     let chatCost = 0

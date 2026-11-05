@@ -20,9 +20,9 @@ function state(chats: Record<string, { title: string; msgs: unknown[] }>) {
   return {
     conversationOrder: ids,
     conversationsById: Object.fromEntries(
-      ids.map((id) => [id, { id, title: chats[id]!.title, updatedAt: NOW, skillIds: [] }]),
+      ids.map((id) => [id, { id, title: chats[id].title, updatedAt: NOW, skillIds: [] }]),
     ),
-    messagesByConversationId: Object.fromEntries(ids.map((id) => [id, chats[id]!.msgs])),
+    messagesByConversationId: Object.fromEntries(ids.map((id) => [id, chats[id].msgs])),
   } as never
 }
 
@@ -50,8 +50,8 @@ describe('computeInsights', () => {
     expect(r.activeDays).toBe(4)
     expect(r.currentStreak).toBe(3)
     expect(r.longestStreak).toBe(3)
-    expect(r.topByTokens[0]!.title).toBe('Untitled chat')
-    expect(r.longest[0]!.id).toBe('a')
+    expect(r.topByTokens[0].title).toBe('Untitled chat')
+    expect(r.longest[0].id).toBe('a')
   })
 
   it('streak survives an idle today', () => {
