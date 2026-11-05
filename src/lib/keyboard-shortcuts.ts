@@ -13,6 +13,7 @@ export type ShortcutId =
   | 'shareChat'
   | 'openSkills'
   | 'commandPalette'
+  | 'findInChat'
   | 'stopGeneration'
   | 'showHelp'
 
@@ -58,6 +59,11 @@ export const CHAT_SHORTCUTS: readonly ShortcutDefinition[] = [
     id: 'commandPalette',
     label: 'Command palette',
     keys: { key: 'k', mod: true },
+  },
+  {
+    id: 'findInChat',
+    label: 'Find in chat',
+    keys: { key: 'f', mod: true },
   },
   {
     id: 'stopGeneration',

@@ -318,3 +318,10 @@ code {
     --ts-chart-tooltip-border: 1px solid var(--border);
   }
 }
+
+::highlight(find-match) {
+  background-color: rgb(250 204 21 / 0.45);
+}
+::highlight(find-current) {
+  background-color: rgb(249 115 22 / 0.7);
+}

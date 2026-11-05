@@ -6,10 +6,15 @@ const SHOTS =
 
 function seedState(withMessages: boolean) {
   const now = Date.now()
-  const msg = (id: string, role: 'user' | 'assistant', text: string, i: number) => ({
+  const msg = (
+    id: string,
+    role: 'user' | 'assistant',
+    text: string,
+    i: number,
+  ) => ({
     id,
     role,
-    parts: [{ type: 'text', text }],
+    parts: [{ type: 'text', content: text }],
     createdAt: new Date(now - i * 3_600_000).toISOString(),
     ...(role === 'assistant'
       ? {
@@ -38,9 +43,18 @@ function seedState(withMessages: boolean) {
     },
     messagesByConversationId: withMessages
       ? {
-          c1: [msg('m1', 'user', 'hello', 1), msg('m2', 'assistant', 'hi there', 1)],
-          c2: [msg('m3', 'user', 'question', 2), msg('m4', 'assistant', 'answer', 2)],
-          c3: [msg('m5', 'user', 'another', 30), msg('m6', 'assistant', 'reply', 30)],
+          c1: [
+            msg('m1', 'user', 'hello', 1),
+            msg('m2', 'assistant', 'hi there', 1),
+          ],
+          c2: [
+            msg('m3', 'user', 'question', 2),
+            msg('m4', 'assistant', 'answer', 2),
+          ],
+          c3: [
+            msg('m5', 'user', 'another', 30),
+            msg('m6', 'assistant', 'reply', 30),
+          ],
         }
       : { c1: [], c2: [], c3: [] },
     currentConversationId: 'c1',
@@ -56,7 +70,10 @@ async function seed(page: Page, state: unknown) {
     if (sessionStorage.getItem('e2e-seeded')) return
     sessionStorage.setItem('e2e-seeded', '1')
     // Fake key so the first-run sign-in modal stays closed (no requests are sent).
-    sessionStorage.setItem('solid-free-chat-openrouter-api-key', 'sk-or-e2e-fake')
+    sessionStorage.setItem(
+      'solid-free-chat-openrouter-api-key',
+      'sk-or-e2e-fake',
+    )
     localStorage.setItem('solid-free-chat:v2', JSON.stringify(s))
   }, state)
 }
@@ -125,7 +142,9 @@ test.describe('new features smoke', () => {
   test('chat settings modal saves and shows indicator', async ({ page }) => {
     const errors = trackErrors(page)
     await openChat(page)
-    await page.getByRole('button', { name: 'Chat settings', exact: true }).click()
+    await page
+      .getByRole('button', { name: 'Chat settings', exact: true })
+      .click()
     const dialog = page.getByRole('dialog', { name: 'Chat settings' })
     await expect(dialog).toBeVisible()
     await dialog.getByLabel('Max tokens').fill('512')
@@ -135,7 +154,9 @@ test.describe('new features smoke', () => {
     await expect(
       page.getByRole('button', { name: 'Chat settings (customized)' }),
     ).toBeVisible()
-    await page.getByRole('button', { name: 'Chat settings (customized)' }).click()
+    await page
+      .getByRole('button', { name: 'Chat settings (customized)' })
+      .click()
     await expect(dialog.getByLabel('Max tokens')).toHaveValue('512')
     expect(errors).toEqual([])
   })
@@ -155,7 +176,9 @@ test.describe('new features smoke', () => {
     await expect(page.getByText('Renamed gamma')).toBeVisible()
     await page.waitForTimeout(800) // persistence debounce
     await page.reload()
-    await expect(page.getByText('Renamed gamma')).toBeVisible({ timeout: 20_000 })
+    await expect(page.getByText('Renamed gamma')).toBeVisible({
+      timeout: 20_000,
+    })
     await expect(
       page.getByRole('button', { name: 'Unpin chat: Beta chat' }),
     ).toBeVisible()
@@ -171,7 +194,9 @@ test.describe('new features smoke', () => {
       timeout: 20_000,
     })
     await expect(page.getByText('No conversations yet')).toHaveCount(0)
-    await expect(page.locator('.chat-chart svg, .chat-chart canvas').first()).toBeVisible({
+    await expect(
+      page.locator('.chat-chart svg, .chat-chart canvas').first(),
+    ).toBeVisible({
       timeout: 20_000,
     })
     await expect(page.getByText('Could not draw chart')).toHaveCount(0)
@@ -182,7 +207,10 @@ test.describe('new features smoke', () => {
         document.documentElement.classList.toggle('dark', s === 'dark')
       }, scheme)
       await page.waitForTimeout(500) // let color transitions settle
-      await page.screenshot({ path: `${SHOTS}/insights-${scheme}.png`, fullPage: true })
+      await page.screenshot({
+        path: `${SHOTS}/insights-${scheme}.png`,
+        fullPage: true,
+      })
     }
     expect(errors).toEqual([])
   })
@@ -195,4 +223,21 @@ test.describe('new features smoke', () => {
     })
     expect(errors).toEqual([])
   })
+})
+
+test('find in chat: opens, counts, steps, closes', async ({ page }) => {
+  const errors = trackErrors(page)
+  await openChat(page, true)
+  await page.keyboard.press('ControlOrMeta+f')
+  const bar = page.getByTestId('find-bar')
+  await expect(bar).toBeVisible()
+  await bar.getByRole('textbox').fill('h')
+  await expect(page.getByTestId('find-count')).toHaveText('1 of 3')
+  await page.keyboard.press('Enter')
+  await expect(page.getByTestId('find-count')).toHaveText('2 of 3')
+  await page.keyboard.press('Shift+Enter')
+  await expect(page.getByTestId('find-count')).toHaveText('1 of 3')
+  await page.keyboard.press('Escape')
+  await expect(bar).toBeHidden()
+  expect(errors).toEqual([])
 })

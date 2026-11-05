@@ -46,6 +46,8 @@ import { createDictation, stopSpeaking } from '../../lib/speech'
 import { ChatThreadComposer } from './ChatThreadComposer'
 import { parseSlash } from '../../lib/slash-commands'
 import type { SlashCommand } from '../../lib/slash-commands'
+import { ChatFindBar } from './ChatFindBar'
+import { CHAT_SHORTCUTS, matchesShortcut } from '../../lib/keyboard-shortcuts'
 import { ChatThreadMessageList } from './ChatThreadMessageList'
 import type { PendingFile, PendingImage } from './chat-thread-utils'
 import {
@@ -686,6 +688,25 @@ function ChatThreadSession(props: {
     await sendPromise
   }
 
+  const [findOpen, setFindOpen] = createSignal(false)
+  onSettled(() => {
+    const def = CHAT_SHORTCUTS.find((d) => d.id === 'findInChat')
+    const onKey = (e: KeyboardEvent) => {
+      if (!def || e.isComposing || !matchesShortcut(e, def.keys)) return
+      const a = document.activeElement
+      // Leave native find alone while text is selected inside the composer.
+      if (
+        a instanceof HTMLTextAreaElement &&
+        a.selectionStart !== a.selectionEnd
+      )
+        return
+      e.preventDefault()
+      setFindOpen(true)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
   const [dragging, setDragging] = createSignal(false)
   let dragDepth = 0
   const hasFiles = (e: DragEvent) =>
@@ -724,6 +745,17 @@ function ChatThreadSession(props: {
         void attachDroppedFiles(files)
       }}
     >
+      <Show when={findOpen()}>
+        <ChatFindBar
+          messages={() =>
+            (chat.messages() as ChatUIMessage[]).map((m) => ({
+              id: m.id,
+              text: messageToPlainText(m),
+            }))
+          }
+          onClose={() => setFindOpen(false)}
+        />
+      </Show>
       <Show when={dragging()}>
         <div
           data-testid="drop-overlay"
