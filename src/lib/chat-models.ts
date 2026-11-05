@@ -137,7 +137,9 @@ export function modelSupportsDocumentInput(
   return inputModalities.includes('document')
 }
 
-export function modelSupportsTools(model: ChatModelOption | undefined): boolean {
+export function modelSupportsTools(
+  model: ChatModelOption | undefined,
+): boolean {
   // Unknown metadata: let OpenRouter decide (the Free Models Router picks a
   // tool-capable model when tools are sent).
   return model?.supportsTools !== false

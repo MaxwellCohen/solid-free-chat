@@ -48,16 +48,16 @@ The app serves at `http://localhost:3000`.
 
 ## Scripts
 
-| Command | Description |
-| --- | --- |
-| `npm run dev` | Vite dev server (port 3000) |
-| `npm run build` | Production build |
-| `npm run start` | Run the built server via Wrangler |
-| `npm run preview` | Preview the production build |
-| `npm run test` | Unit tests (Vitest) |
-| `npm run lint` | ESLint |
-| `npm run format` | Check formatting with Prettier |
-| `npm run check` | Write formatting + ESLint auto-fixes |
+| Command           | Description                          |
+| ----------------- | ------------------------------------ |
+| `npm run dev`     | Vite dev server (port 3000)          |
+| `npm run build`   | Production build                     |
+| `npm run start`   | Run the built server via Wrangler    |
+| `npm run preview` | Preview the production build         |
+| `npm run test`    | Unit tests (Vitest)                  |
+| `npm run lint`    | ESLint                               |
+| `npm run format`  | Check formatting with Prettier       |
+| `npm run check`   | Write formatting + ESLint auto-fixes |
 
 ## Features
 
@@ -110,11 +110,11 @@ Limits: whatever JavaScript this site serves can read the key while you use it â
 
 ## Tools
 
-| Tool | Default | What it does |
-| --- | --- | --- |
-| `list_skills`, `create_skill`, `update_skill`, `set_skill_attached` | on | Lets the model manage your skill library and this chat's attached skills (takes effect next message) |
-| `get_current_datetime` | on | Local date, time, timezone, locale |
-| `run_javascript` | on | Runs JS in an isolated Web Worker (bare expressions or async function bodies; 15s timeout) |
+| Tool                                                                | Default | What it does                                                                                         |
+| ------------------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------- |
+| `list_skills`, `create_skill`, `update_skill`, `set_skill_attached` | on      | Lets the model manage your skill library and this chat's attached skills (takes effect next message) |
+| `get_current_datetime`                                              | on      | Local date, time, timezone, locale                                                                   |
+| `run_javascript`                                                    | on      | Runs JS in an isolated Web Worker (bare expressions or async function bodies; 15s timeout)           |
 
 Code tools run inside a `sandbox="allow-scripts"` iframe (opaque origin), so they cannot read the app's localStorage, API key, or DOM. To add a tool, define it with `toolDefinition(...)` in `src/lib/harness/tools.ts` and append a descriptor to `HARNESS_TOOLS`; because `chat()` runs in the browser, `.server(execute)` tools execute locally.
 
