@@ -65,7 +65,7 @@ export function computeInsights(
   let tokens = 0
   let cost = 0
   for (const id of state.conversationOrder) {
-    const convo = state.conversationsById[id]!
+    const convo = state.conversationsById[id]
     const list = state.messagesByConversationId[id] ?? []
     let chatTokens = 0
     let chatCost = 0
