@@ -14,7 +14,8 @@
     "format": "prettier --check .",
     "check": "prettier --write . && eslint --fix",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run typecheck && npm test && npm run build"
+    "verify": "npm run typecheck && npm test && npm run build",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@fontsource/inter": "^5.3.0",
@@ -51,6 +52,7 @@
     "vite-tsconfig-paths": "^6.1.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@solidjs/babel-plugin": "2.0.0-rc.8",
     "@solidjs/compiler": "2.0.0-rc.8",
     "@solidjs/vite-plugin": "3.0.0-next.40",
@@ -58,6 +60,7 @@
     "@tanstack/eslint-config": "^0.4.0",
     "@types/node": "^26.1.2",
     "eslint": "^9.39.5",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
     "prettier": "^3.9.6",
     "typescript": "^6.0.3",
     "vite": "^8.2.0",

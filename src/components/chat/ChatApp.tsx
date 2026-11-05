@@ -1,4 +1,5 @@
 import {
+  Errored,
   Show,
   createEffect,
   createMemo,
@@ -6,7 +7,18 @@ import {
   onSettled,
 } from 'solid-js'
 import { isServer } from '@solidjs/web'
-import { loadChatState, startChatPersistence } from '../../lib/chat-persistence'
+import {
+  loadChatStateAsync,
+  onPersistenceStatus,
+  startChatPersistence,
+} from '../../lib/chat-persistence'
+import type { PersistenceStatus } from '../../lib/chat-persistence'
+import {
+  downloadTextFile,
+  exportAllChats,
+  importChatsFromFile,
+} from './chat-app-files'
+import { ChatErrorFallback } from './ChatErrorFallback'
 import { buildShareLink } from '../../lib/chat-share'
 import type { ChatModelOption } from '../../lib/chat-models'
 import { DEFAULT_CHAT_MODEL, modelSupportsTools } from '../../lib/chat-models'
@@ -35,12 +47,8 @@ import { ChatAppModelToolbar } from './ChatAppModelToolbar'
 import { ChatAppOpenRouterModal } from './ChatAppOpenRouterModal'
 import { ChatAppShortcutsModal } from './ChatAppShortcutsModal'
 import {
-  MAX_IMPORT_BYTES,
   chatToMarkdown,
   exportFileName,
-  mergeImportedChats,
-  parseChatImport,
-  serializeAllChats,
   serializeChat,
 } from '../../lib/chat-export'
 import { ChatAppSidebar } from './ChatAppSidebar'
@@ -69,6 +77,8 @@ export default function ChatApp() {
   const selectedModel = useChatStore((state) => state.selectedModel)
   const enabledToolIds = useChatStore((state) => state.enabledToolIds)
   /** Input value while typing (does not trigger model refetch). */
+  const [persistStatus, setPersistStatus] =
+    createSignal<PersistenceStatus>('ok')
   const [openRouterApiKeyDraft, setOpenRouterApiKeyDraft] = createSignal('')
   /** Last saved value; sent only to openrouter.ai, never to this app's server. */
   const [openRouterApiKeyApplied, setOpenRouterApiKeyApplied] = createSignal('')
@@ -169,13 +179,22 @@ export default function ChatApp() {
     const oauthCode = takeOpenRouterCallbackCode()
     if (oauthCode) void finishOpenRouterSignIn(oauthCode)
     else if (!stored.key.trim()) setOpenRouterApiKeyModalOpen(true)
-    const saved = loadChatState()
-    if (saved) {
-      actions.hydrate(saved)
+    let stopPersist: (() => void) | undefined
+    let disposed = false
+    const stopStatus = onPersistenceStatus(setPersistStatus)
+    void loadChatStateAsync().then((saved) => {
+      if (disposed) return
+      if (saved) actions.hydrate(saved)
+      actions.ensureDefaultConversation()
+      stopPersist = startChatPersistence(() =>
+        actions.ensureDefaultConversation(),
+      )
+    })
+    return () => {
+      disposed = true
+      stopStatus()
+      stopPersist?.()
     }
-    actions.ensureDefaultConversation()
-    const stopPersist = startChatPersistence()
-    return stopPersist
   })
 
   /** Minimal list when the server could not load models — user can still pick the free router. */
@@ -356,15 +375,6 @@ export default function ChatApp() {
     collapseSidebarIfNarrow()
   }
 
-  function downloadTextFile(name: string, text: string, mime: string) {
-    const url = URL.createObjectURL(new Blob([text], { type: mime }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = name
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
   function exportCurrentChat(format: 'md' | 'json') {
     const id = currentConversationId()
     if (!id) return
@@ -379,26 +389,8 @@ export default function ChatApp() {
     )
   }
 
-  function exportAllChats() {
-    downloadTextFile(
-      'solid-free-chat-backup.json',
-      serializeAllChats(chatStore.state),
-      'application/json',
-    )
-  }
-
-  async function importChatsFile(file: File): Promise<string> {
-    if (file.size > MAX_IMPORT_BYTES) return 'File is too large.'
-    const result = parseChatImport(await file.text())
-    if (!result.ok) return result.error
-    const { state, addedIds } = mergeImportedChats(
-      chatStore.state,
-      result.state,
-    )
-    chatStore.setState(() => state)
-    collapseSidebarIfNarrow()
-    return `Imported ${addedIds.length} chat${addedIds.length === 1 ? '' : 's'}.`
-  }
+  const importChatsFile = (file: File) =>
+    importChatsFromFile(file, collapseSidebarIfNarrow)
 
   function focusChatComposer() {
     const el = document.querySelector<HTMLTextAreaElement>(
@@ -572,7 +564,7 @@ export default function ChatApp() {
         attachedSkillNames={attachedSkillNames}
         onOpenSkillsLibrary={() => setSkillsLibraryOpen(true)}
         onExportChat={exportCurrentChat}
-        onExportAll={exportAllChats}
+        onExportAll={() => void exportAllChats()}
         onImportFile={importChatsFile}
       />
 
@@ -615,20 +607,42 @@ export default function ChatApp() {
               chatStore.state.messagesByConversationId[id] ?? []
             return (
               <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                <ChatThread
-                  conversationId={id}
-                  initialMessages={initialMessages}
-                  inputModalities={selectedModelMeta()?.inputModalities}
-                  supportsTools={modelSupportsTools(selectedModelMeta())}
-                  modelPricing={selectedModelMeta()?.pricing}
-                  openRouterApiKey={loadStoredApiKey(selectedProviderId()).key}
-                  providerId={selectedProviderId()}
-                  onLoadingChange={setCurrentConversationLoading}
-                  onReconnectOpenRouter={openOpenRouterApiKeyModal}
-                  onRegisterStop={(stop) => {
-                    stopStreaming = stop
-                  }}
-                />
+                <Show when={persistStatus() !== 'ok'}>
+                  <p
+                    class="border-border bg-muted text-foreground border-b px-3 py-1.5 text-xs"
+                    role="alert"
+                  >
+                    {persistStatus() === 'storage-full'
+                      ? 'Browser storage is full — recent chats may not be saved. Delete old chats or export a backup.'
+                      : 'Could not save chats to this browser.'}
+                  </p>
+                </Show>
+                <Errored
+                  fallback={(err, reset) => (
+                    <ChatErrorFallback
+                      error={err()}
+                      reset={reset}
+                      label="This chat failed to render."
+                    />
+                  )}
+                >
+                  <ChatThread
+                    conversationId={id}
+                    initialMessages={initialMessages}
+                    inputModalities={selectedModelMeta()?.inputModalities}
+                    supportsTools={modelSupportsTools(selectedModelMeta())}
+                    modelPricing={selectedModelMeta()?.pricing}
+                    openRouterApiKey={
+                      loadStoredApiKey(selectedProviderId()).key
+                    }
+                    providerId={selectedProviderId()}
+                    onLoadingChange={setCurrentConversationLoading}
+                    onReconnectOpenRouter={openOpenRouterApiKeyModal}
+                    onRegisterStop={(stop) => {
+                      stopStreaming = stop
+                    }}
+                  />
+                </Errored>
               </div>
             )
           }}

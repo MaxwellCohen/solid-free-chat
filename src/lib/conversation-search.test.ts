@@ -44,9 +44,40 @@ describe('searchSidebarConversations', () => {
 
   it('truncates long snippets with ellipses', () => {
     const long = `${'x'.repeat(100)}needle${'y'.repeat(100)}`
-    const [hit] = searchSidebarConversations([chat('d', 't', 1, [long])], 'needle')
+    const [hit] = searchSidebarConversations(
+      [chat('d', 't', 1, [long])],
+      'needle',
+    )
     expect(hit.snippet?.before.startsWith('…')).toBe(true)
     expect(hit.snippet?.after.endsWith('…')).toBe(true)
     expect(hit.snippet?.match).toBe('needle')
+  })
+})
+
+describe('search message ids', () => {
+  it('reports the message holding the snippet', () => {
+    const out = searchSidebarConversations(
+      [
+        {
+          id: 'c1',
+          title: 'Chat',
+          updatedAt: 1,
+          messages: [
+            {
+              id: 'm1',
+              role: 'user',
+              parts: [{ type: 'text', content: 'hello' }],
+            },
+            {
+              id: 'm2',
+              role: 'assistant',
+              parts: [{ type: 'text', content: 'needle here' }],
+            },
+          ],
+        },
+      ] as never,
+      'needle',
+    )
+    expect(out[0].messageId).toBe('m2')
   })
 })

@@ -10,6 +10,8 @@ import {
 } from '../icons'
 import type { ChatConversation } from '../../store/chat.hooks'
 import { NEW_CHAT_TITLE } from '../../store/chat.store'
+import { formatCost } from '../../lib/usage-cost'
+import { requestScrollToMessage } from '../../lib/scroll-to-message'
 import { searchSidebarConversations } from '../../lib/conversation-search'
 import type { HistoryConversation } from '../../lib/harness/chat-history'
 
@@ -242,7 +244,11 @@ function ConversationSearch(props: { props: ChatAppSidebarProps }) {
                               props.props.currentConversationId() === hit.id,
                           },
                         ]}
-                        onClick={() => props.props.onSelectConversation(hit.id)}
+                        onClick={() => {
+                          props.props.onSelectConversation(hit.id)
+                          if (hit.messageId)
+                            requestScrollToMessage(hit.messageId)
+                        }}
                       >
                         <span class="block truncate font-medium">
                           {hit.title || NEW_CHAT_TITLE}
@@ -321,6 +327,11 @@ function ConversationListItem(props: {
         <span class="block truncate">
           {props.conversation.title || NEW_CHAT_TITLE}
         </span>
+        <Show when={(props.conversation.sessionTotalCost ?? 0) > 0}>
+          <span class="text-muted-foreground block text-xs">
+            {formatCost(props.conversation.sessionTotalCost ?? 0)}
+          </span>
+        </Show>
       </button>
       <Show
         when={confirmingDelete()}

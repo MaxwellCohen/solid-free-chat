@@ -2,6 +2,10 @@ import { For, Show, createEffect, createSignal, onSettled } from 'solid-js'
 import type { Accessor } from 'solid-js'
 import type { UIMessage } from '@tanstack/ai-client'
 import type { ContentPart } from '@tanstack/ai'
+import {
+  onScrollToMessage,
+  peekPendingScroll,
+} from '../../lib/scroll-to-message'
 import { createVirtualizer } from '../../lib/create-virtualizer'
 import type { VirtualItem, Virtualizer } from '../../lib/create-virtualizer'
 import { Check, Copy, GitBranch, Pencil, RotateCw } from '../icons'
@@ -36,6 +40,7 @@ type ChatThreadMessageListProps = {
 export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
   let scrollContainerRef: HTMLDivElement | undefined
 
+  const hasPendingScroll = peekPendingScroll()
   const virtualizer = createVirtualizer({
     get count() {
       return props.messages().length
@@ -51,7 +56,16 @@ export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
   })
 
   onSettled(() => {
-    virtualizer.scrollToEnd()
+    const stop = onScrollToMessage((id) => {
+      const index = props.messages().findIndex((m) => m.id === id)
+      if (index === -1) return
+      requestAnimationFrame(() =>
+        virtualizer.scrollToIndex(index, { align: 'center' }),
+      )
+    })
+    // A pending search jump replaces the default scroll-to-bottom.
+    if (!hasPendingScroll) virtualizer.scrollToEnd()
+    return stop
   })
 
   // When the user sends a message, pin it to the top so the reply fills the view.
@@ -85,6 +99,9 @@ export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
       ref={(el) => {
         scrollContainerRef = el
       }}
+      role="log"
+      aria-label="Conversation"
+      aria-live="polite"
       class="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6"
     >
       <div
