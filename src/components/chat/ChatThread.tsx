@@ -73,8 +73,11 @@ import { CHAT_SHORTCUTS, matchesShortcut } from '../../lib/keyboard-shortcuts'
 import { ChatThreadMessageList } from './ChatThreadMessageList'
 import type { PendingFile, PendingImage } from './chat-thread-utils'
 import {
+  FINAL_ANSWER_NUDGE,
   MAX_IMAGE_BYTES,
   MAX_PDF_BYTES,
+  needsFinalAnswerNudge,
+  wasNudged,
   formatTokenCount,
   isImageFile,
   isPdfFile,
@@ -470,6 +473,13 @@ function ChatThreadSession(props: {
       if (loading) {
         cancelFollowUps()
         return
+      }
+      if (prevLoading === true && !chat.error()) {
+        const msgs = chat.messages()
+        if (needsFinalAnswerNudge(msgs) && !wasNudged(msgs)) {
+          void chat.sendMessage(FINAL_ANSWER_NUDGE)
+          return
+        }
       }
       if (prevLoading === true && !chat.error()) void generateSmartTitle()
       if (prevLoading === true && !chat.error() && chatSettings()?.followUps) {
@@ -978,6 +988,14 @@ function ChatThreadSession(props: {
           Spending warning: this chat has cost{' '}
           {formatCost(sessionTotalCost() ?? 0)}, over your{' '}
           {formatCost(costThreshold() ?? 0)} limit.
+        </p>
+      </Show>
+      <Show when={wasNudged(chat.messages())}>
+        <p
+          data-testid="nudge-notice"
+          class="text-muted-foreground px-3 py-1 text-center text-xs"
+        >
+          Model returned no answer after using tools — asked again.
         </p>
       </Show>
       <ChatThreadMessageList

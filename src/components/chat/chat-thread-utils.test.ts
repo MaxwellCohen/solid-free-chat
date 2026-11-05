@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { UIMessage } from '@tanstack/ai-client'
 import {
+  FINAL_ANSWER_NUDGE,
   messageToPlainText,
+  needsFinalAnswerNudge,
+  wasNudged,
   messagesBefore,
   partitionAttachableFiles,
   withEditedText,
@@ -71,5 +74,43 @@ describe('partitionAttachableFiles', () => {
   it('flags unsupported types', () => {
     const r = partitionAttachableFiles([txt], { image: true, document: true })
     expect(r.error).toMatch(/images and PDFs/)
+  })
+})
+
+describe('needsFinalAnswerNudge', () => {
+  const msg = (role: string, parts: object[]) =>
+    ({ id: 'x', role, parts }) as unknown as UIMessage
+  const tool = { type: 'tool-call', id: 'c', name: 'calculate' }
+  it('is true when the run ends on tool parts', () => {
+    expect(
+      needsFinalAnswerNudge([
+        msg('assistant', [tool, { type: 'tool-result' }]),
+      ]),
+    ).toBe(true)
+    expect(
+      needsFinalAnswerNudge([
+        msg('assistant', [tool, { type: 'text', content: '  ' }]),
+      ]),
+    ).toBe(true)
+  })
+  it('is false with answer text, no tools, or a user tail', () => {
+    expect(
+      needsFinalAnswerNudge([
+        msg('assistant', [tool, { type: 'text', content: '56' }]),
+      ]),
+    ).toBe(false)
+    expect(
+      needsFinalAnswerNudge([
+        msg('assistant', [{ type: 'text', content: 'hi' }]),
+      ]),
+    ).toBe(false)
+    expect(needsFinalAnswerNudge([msg('user', [])])).toBe(false)
+  })
+  it('wasNudged detects the nudge as latest user message', () => {
+    const nudge = msg('user', [{ type: 'text', content: FINAL_ANSWER_NUDGE }])
+    expect(wasNudged([nudge, msg('assistant', [tool])])).toBe(true)
+    expect(
+      wasNudged([nudge, msg('user', [{ type: 'text', content: 'ok' }])]),
+    ).toBe(false)
   })
 })

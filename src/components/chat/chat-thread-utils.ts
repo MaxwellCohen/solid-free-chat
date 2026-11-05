@@ -166,3 +166,32 @@ export function withEditedText(
   const rest = parts.filter((p) => p.type !== 'text')
   return text ? [{ type: 'text', content: text }, ...rest] : rest
 }
+
+export const FINAL_ANSWER_NUDGE =
+  'Please give your final answer using the tool results.'
+
+/** True when a finished run ended on tool activity with no answer text after it, and was not already nudged. */
+export function needsFinalAnswerNudge(messages: UIMessage[]): boolean {
+  const last = messages[messages.length - 1] as UIMessage | undefined
+  if (last?.role !== 'assistant') {
+    return false
+  }
+  let lastToolIdx = -1
+  last.parts.forEach((p, i) => {
+    if (p.type === 'tool-call' || p.type === 'tool-result') lastToolIdx = i
+  })
+  if (lastToolIdx < 0) return false
+  return !last.parts
+    .slice(lastToolIdx + 1)
+    .some((p) => p.type === 'text' && p.content.trim().length > 0)
+}
+
+/** True when the latest user message is the automatic nudge. */
+export function wasNudged(messages: UIMessage[]): boolean {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'user') {
+      return messageToPlainText(messages[i]).trim() === FINAL_ANSWER_NUDGE
+    }
+  }
+  return false
+}

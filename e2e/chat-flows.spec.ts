@@ -300,6 +300,70 @@ test('calculate tool call round-trips through the agent loop', async ({
   expect(JSON.stringify(followUp?.messages)).toContain('56')
 })
 
+test('empty final turn after a tool result triggers one nudge', async ({
+  page,
+}) => {
+  const requests = await open(page, {
+    ...seedState(),
+    enabledToolIds: ['calculate'],
+  })
+  await page.route(
+    'https://openrouter.ai/api/v1/chat/completions',
+    async (route: Route) => {
+      const body = JSON.parse(route.request().postData() ?? '{}') as ChatBody
+      requests.push(body)
+      const raw = JSON.stringify(body.messages)
+      const chunk = (delta: object, finish: string | null) =>
+        `data: ${JSON.stringify({
+          id: 'gen-e2e',
+          object: 'chat.completion.chunk',
+          created: 1,
+          model: MODEL,
+          choices: [{ index: 0, delta, finish_reason: finish }],
+        })}\n\n`
+      const nudged = raw.includes('Please give your final answer')
+      const hasToolResult = raw.includes('"role":"tool"')
+      const payload = nudged
+        ? sse('The answer is 56.')
+        : hasToolResult
+          ? chunk({ role: 'assistant', content: '' }, 'stop') +
+            'data: [DONE]\n\n'
+          : chunk(
+              {
+                role: 'assistant',
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: 'call_1',
+                    type: 'function',
+                    function: {
+                      name: 'calculate',
+                      arguments: '{"expression":"7 * 8"}',
+                    },
+                  },
+                ],
+              },
+              null,
+            ) +
+            chunk({}, 'tool_calls') +
+            'data: [DONE]\n\n'
+      return route.fulfill({
+        status: 200,
+        headers: { ...CORS, 'content-type': 'text/event-stream' },
+        body: payload,
+      })
+    },
+  )
+  await send(page, 'What is 7 times 8?')
+  await expect(page.getByText('The answer is 56.')).toBeVisible()
+  await expect(page.getByTestId('nudge-notice')).toBeVisible()
+  expect(
+    requests.filter((b) =>
+      JSON.stringify(b.messages).includes('Please give your final answer'),
+    ),
+  ).toHaveLength(1)
+})
+
 test('bookmarking a message lists it on the Saved page', async ({ page }) => {
   await open(page, seedState(true))
   await page.getByRole('button', { name: 'Bookmark message' }).first().click()
