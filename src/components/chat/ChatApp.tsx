@@ -1087,6 +1087,7 @@ export default function ChatApp() {
       </Show>
 
       <section class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <h1 class="sr-only">Chat</h1>
         <Show when={!zen()}>
           <ChatAppModelToolbar
             outlineOpen={outlineOpen}
