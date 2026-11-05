@@ -6,6 +6,11 @@ import { conversationTranscript, searchConversations } from './chat-history'
 import type { HistoryConversation } from './chat-history'
 import { CHART_TYPES, validateChartSpec } from '../visuals/chart'
 import { validateMermaid } from '../visuals/mermaid'
+import { calculate } from './calc'
+import { convertUnits } from './units'
+import { flipCoin, pickFrom, rollDice } from './random'
+import { buildImageUrl } from './image-url'
+import { getWeather, wikipediaLookup } from './web-tools'
 
 /**
  * Browser-local tools for the harness.
@@ -26,7 +31,10 @@ export interface HarnessSkillSummary {
 export interface HarnessSkillsApi {
   list: () => HarnessSkillSummary[]
   create: (name: string, instructions: string) => string | undefined
-  update: (skillId: string, patch: { name?: string; instructions?: string }) => boolean
+  update: (
+    skillId: string,
+    patch: { name?: string; instructions?: string },
+  ) => boolean
   setAttached: (skillId: string, attached: boolean) => boolean
 }
 
@@ -46,6 +54,8 @@ export interface HarnessToolDescriptor {
   /** Shown in the tools menu. */
   summary: string
   enabledByDefault: boolean
+  /** Shown as a hint in the menu when the tool sends data to a third-party host. */
+  network?: string
   /** One menu entry may expose several related tools to the model. */
   create: (context: HarnessToolContext) => Tool | Tool[]
 }
@@ -121,8 +131,14 @@ const createSkillTool = toolDefinition({
   inputSchema: {
     type: 'object',
     properties: {
-      name: { type: 'string', description: 'Short, descriptive skill name (max 120 chars).' },
-      instructions: { type: 'string', description: 'The instructions the skill adds to the system prompt.' },
+      name: {
+        type: 'string',
+        description: 'Short, descriptive skill name (max 120 chars).',
+      },
+      instructions: {
+        type: 'string',
+        description: 'The instructions the skill adds to the system prompt.',
+      },
       attach: {
         type: 'boolean',
         description: 'Attach the new skill to this chat (default true).',
@@ -182,7 +198,10 @@ function createSkillTools({ skills }: HarnessToolContext): Tool[] {
       }
       const id = skills.create(name, instructions)
       if (!id) {
-        return { ok: false, error: 'Both name and instructions must be non-empty.' }
+        return {
+          ok: false,
+          error: 'Both name and instructions must be non-empty.',
+        }
       }
       const attached = attach !== false && skills.setAttached(id, true)
       return { ok: true, skill_id: id, attached }
@@ -194,7 +213,10 @@ function createSkillTools({ skills }: HarnessToolContext): Tool[] {
         instructions?: string
       }
       if (name === undefined && instructions === undefined) {
-        return { ok: false, error: 'Provide name and/or instructions to update.' }
+        return {
+          ok: false,
+          error: 'Provide name and/or instructions to update.',
+        }
       }
       if (!skills.list().some((skill) => skill.id === skill_id)) {
         return unknownSkill(skill_id)
@@ -204,7 +226,10 @@ function createSkillTools({ skills }: HarnessToolContext): Tool[] {
         : { ok: false, error: 'Name and instructions cannot be empty.' }
     }),
     setSkillAttachedTool.server((input) => {
-      const { skill_id, attached } = input as { skill_id: string; attached: boolean }
+      const { skill_id, attached } = input as {
+        skill_id: string
+        attached: boolean
+      }
       return skills.setAttached(skill_id, attached)
         ? { ok: true, skill_id, attached }
         : unknownSkill(skill_id)
@@ -353,18 +378,128 @@ function createChatHistoryTools({ history }: HarnessToolContext): Tool[] {
   ]
 }
 
+const strProp = (description: string) => ({
+  type: 'string' as const,
+  description,
+})
+
+const calculateTool = toolDefinition({
+  name: 'calculate',
+  description:
+    'Evaluate a math expression exactly. Supports + - * / ^ % and parentheses, sqrt sin cos tan log (base 10) ln abs min max round floor ceil, and pi, e. ' +
+    'Prefer this over mental arithmetic.',
+  inputSchema: {
+    type: 'object',
+    properties: { expression: strProp('e.g. "(3 + 4) * 2^3 / sqrt(16)"') },
+    required: ['expression'],
+    additionalProperties: false,
+  },
+})
+
+const convertUnitsTool = toolDefinition({
+  name: 'convert_units',
+  description:
+    'Convert a value between units of length, mass, temperature, volume, time, or data (e.g. km to mi, F to C, GiB to MB).',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      value: { type: 'number' },
+      from: strProp('Source unit, e.g. "km", "lb", "fahrenheit".'),
+      to: strProp('Target unit.'),
+    },
+    required: ['value', 'from', 'to'],
+    additionalProperties: false,
+  },
+})
+
+const randomTool = toolDefinition({
+  name: 'random',
+  description:
+    'Random choices: roll dice (mode "dice", expression like "2d6+1"), flip a coin (mode "coin"), or pick from a list (mode "pick", options, optional count of distinct picks).',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      mode: { type: 'string', enum: ['dice', 'coin', 'pick'] },
+      expression: strProp(
+        'Dice expression for mode "dice", e.g. "d20" or "3d6-1".',
+      ),
+      options: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Choices for mode "pick".',
+      },
+      count: {
+        type: 'number',
+        description: 'How many distinct options to pick (default 1).',
+      },
+    },
+    required: ['mode'],
+    additionalProperties: false,
+  },
+})
+
+const wikipediaTool = toolDefinition({
+  name: 'wikipedia_lookup',
+  description:
+    'Look up a topic on English Wikipedia and return the article title, a short summary extract, and its URL. Use for factual background on people, places, concepts, events.',
+  inputSchema: {
+    type: 'object',
+    properties: { query: strProp('Topic or article title to look up.') },
+    required: ['query'],
+    additionalProperties: false,
+  },
+})
+
+const weatherTool = toolDefinition({
+  name: 'get_weather',
+  description:
+    'Get current weather and a 3-day forecast for a place name (via Open-Meteo).',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      location: strProp(
+        'City or place name, e.g. "Lisbon" or "Portland, Oregon".',
+      ),
+    },
+    required: ['location'],
+    additionalProperties: false,
+  },
+})
+
+const generateImageTool = toolDefinition({
+  name: 'generate_image',
+  description:
+    'Generate an image from a text prompt (Pollinations, free). The image is shown to the user in the chat. ' +
+    'Write a detailed, visual English prompt. Do not describe the image again afterwards beyond a short caption.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      prompt: strProp('Detailed visual description of the image.'),
+      width: { type: 'number', description: 'Pixels, 256-1536 (default 768).' },
+      height: {
+        type: 'number',
+        description: 'Pixels, 256-1536 (default 768).',
+      },
+      seed: { type: 'number', description: 'Optional seed for repeatability.' },
+    },
+    required: ['prompt'],
+    additionalProperties: false,
+  },
+})
+
 export const HARNESS_TOOLS: readonly HarnessToolDescriptor[] = [
   {
     id: 'skills',
     label: 'Skills',
-    summary: 'Lets the model list, create, edit, and attach skills for this chat.',
+    summary:
+      'Lets the model list, create, edit, and attach skills for this chat.',
     enabledByDefault: true,
     create: createSkillTools,
   },
   {
     id: 'get_current_datetime',
     label: 'Date & time',
-    summary: "Reads your local date, time, and timezone.",
+    summary: 'Reads your local date, time, and timezone.',
     enabledByDefault: true,
     create: () =>
       currentDateTimeTool.server(() => {
@@ -385,7 +520,8 @@ export const HARNESS_TOOLS: readonly HarnessToolDescriptor[] = [
   {
     id: 'run_javascript',
     label: 'JavaScript sandbox',
-    summary: 'Runs JS in an isolated Web Worker for calculations and data work.',
+    summary:
+      'Runs JS in an isolated Web Worker for calculations and data work.',
     enabledByDefault: true,
     create: () =>
       runJavaScriptTool.server(async (input) => {
@@ -429,6 +565,103 @@ export const HARNESS_TOOLS: readonly HarnessToolDescriptor[] = [
     summary: 'Lets the model search and read your other saved chats.',
     enabledByDefault: true,
     create: createChatHistoryTools,
+  },
+  {
+    id: 'calculate',
+    label: 'Calculator',
+    summary: 'Evaluates math expressions exactly (local, no eval).',
+    enabledByDefault: true,
+    create: () =>
+      calculateTool.server((input) => {
+        const r = calculate((input as { expression: string }).expression)
+        return r.ok ? { ok: true, result: String(r.value), value: r.value } : r
+      }),
+  },
+  {
+    id: 'convert_units',
+    label: 'Unit converter',
+    summary:
+      'Converts length, mass, temperature, volume, time, and data units.',
+    enabledByDefault: true,
+    create: () =>
+      convertUnitsTool.server((input) => {
+        const { value, from, to } = input as {
+          value: number
+          from: string
+          to: string
+        }
+        const r = convertUnits(value, from, to)
+        return r.ok
+          ? { ...r, result: `${value} ${r.from} = ${r.value} ${r.to}` }
+          : r
+      }),
+  },
+  {
+    id: 'random',
+    label: 'Random',
+    summary: 'Rolls dice, flips a coin, or picks from a list.',
+    enabledByDefault: true,
+    create: () =>
+      randomTool.server((input) => {
+        const { mode, expression, options, count } = input as {
+          mode: string
+          expression?: string
+          options?: string[]
+          count?: number
+        }
+        if (mode === 'coin') {
+          const side = flipCoin()
+          return { ok: true, result: side }
+        }
+        if (mode === 'dice') {
+          const r = rollDice(expression ?? '')
+          return r.ok
+            ? {
+                ...r,
+                result: `${r.expression}: [${r.rolls.join(', ')}] = ${r.total}`,
+              }
+            : r
+        }
+        if (mode === 'pick') {
+          const r = pickFrom(options ?? [], count ?? 1)
+          return r.ok ? { ...r, result: r.picks.join(', ') } : r
+        }
+        return { ok: false, error: 'mode must be "dice", "coin", or "pick".' }
+      }),
+  },
+  {
+    id: 'wikipedia_lookup',
+    label: 'Wikipedia',
+    summary: 'Looks up topic summaries on Wikipedia.',
+    network: 'Sends your query to Wikipedia.',
+    enabledByDefault: false,
+    create: () =>
+      wikipediaTool.server((input) =>
+        wikipediaLookup((input as { query: string }).query),
+      ),
+  },
+  {
+    id: 'get_weather',
+    label: 'Weather',
+    summary: 'Current weather and 3-day forecast for a place.',
+    network: 'Sends your query to Open-Meteo.',
+    enabledByDefault: false,
+    create: () =>
+      weatherTool.server((input) =>
+        getWeather((input as { location: string }).location),
+      ),
+  },
+  {
+    id: 'generate_image',
+    label: 'Image generation',
+    summary: 'Draws an image from a text prompt in the chat.',
+    network: 'Sends your prompt to Pollinations (free, no key).',
+    enabledByDefault: false,
+    create: () =>
+      generateImageTool.server((input) => {
+        const r = buildImageUrl(input as Parameters<typeof buildImageUrl>[0])
+        return r.ok ? { ok: true, url: r.url, prompt: r.prompt } : r
+      }),
   },
 ]
 

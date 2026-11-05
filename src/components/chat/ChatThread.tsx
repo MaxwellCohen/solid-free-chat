@@ -2,6 +2,8 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  For,
+  onCleanup,
   onSettled,
   Show,
   untrack,
@@ -11,7 +13,19 @@ import type { UIMessage } from '@tanstack/ai-client'
 import { useChat } from '../../lib/use-chat'
 import type { ContentPart, StreamChunk } from '@tanstack/ai'
 import { getProvider } from '../../lib/providers'
-import { runAgent } from '../../lib/harness/run-agent'
+import { runAgent } from '../../lib/harness/run-agent-lazy'
+import {
+  FOLLOW_UP_SYSTEM_PROMPT,
+  buildFollowUpMessages,
+  parseFollowUps,
+} from '../../lib/follow-ups'
+import {
+  AUTO_TITLE_SYSTEM_PROMPT,
+  buildAutoTitleMessages,
+  parseAutoTitle,
+  readSmartTitles,
+  shouldGenerateTitle,
+} from '../../lib/auto-title'
 import { createEnabledTools } from '../../lib/harness/tools'
 import {
   modelSupportsDocumentInput,
@@ -27,29 +41,72 @@ import {
 } from '../../lib/usage-cost'
 import type { ModelPricing } from '../../lib/usage-cost'
 import { composeSystemPrompt } from '../../lib/compose-system-prompt'
+import { composeProjectContext, findProject } from '../../lib/chat-projects'
 import {
+  attachElapsedToLastAssistantMessage,
   attachTokenUsageToLastAssistantMessage,
   chatActions,
+  chatStore,
+  snapshotVariants,
+  switchVariantInMessages,
+  toggleBookmarkInMessages,
+  withRegeneratedVariants,
   createChatHistoryApi,
   createConversationSkillsApi,
 } from '../../store/chat.store'
 import type { ChatUIMessage, TokenUsageSnapshot } from '../../store/chat.store'
 import { useChatStore } from '../../store/chat.hooks'
+import { lookup } from '../../lib/nullable'
+import { createDictation, stopSpeaking } from '../../lib/speech'
 import { ChatThreadComposer } from './ChatThreadComposer'
+import type { Snippet } from '../../lib/snippets'
+import { ChatContextMeter } from './ChatContextMeter'
+import {
+  COMPACT_SYSTEM_PROMPT,
+  buildCompactMessages,
+  contextUsage,
+  estimateConversationTokens,
+  splitForCompact,
+  summaryMessageText,
+} from '../../lib/context-meter'
+import { parseSlash } from '../../lib/slash-commands'
+import type { SlashCommand } from '../../lib/slash-commands'
+import { ChatFindBar } from './ChatFindBar'
+import {
+  CHAT_SHORTCUTS,
+  isEditableTarget,
+  matchesShortcut,
+} from '../../lib/keyboard-shortcuts'
+import { stepMessageIndex, threadKeyAction } from '../../lib/message-nav'
+import { requestScrollToMessage } from '../../lib/scroll-to-message'
+import { ChatQuoteButton } from './ChatQuoteButton'
+import { appendQuoteToDraft, selectionToBlockquote } from '../../lib/quote'
 import { ChatThreadMessageList } from './ChatThreadMessageList'
 import type { PendingFile, PendingImage } from './chat-thread-utils'
 import {
+  FINAL_ANSWER_NUDGE,
   MAX_IMAGE_BYTES,
   MAX_PDF_BYTES,
+  needsFinalAnswerNudge,
+  wasNudged,
   formatTokenCount,
   isImageFile,
   isPdfFile,
+  partitionAttachableFiles,
   parseDataUrl,
   readFileAsDataUrl,
   guessImageMimeFromFilename,
+  messageToPlainText,
   messagesBefore,
   userMessageToResendParts,
 } from './chat-thread-utils'
+
+export type SlashAction =
+  | { type: 'new' }
+  | { type: 'export'; format: 'md' | 'json' }
+  | { type: 'model' }
+  | { type: 'help' }
+  | { type: 'skill'; name: string }
 
 export default function ChatThread(props: {
   conversationId: string
@@ -59,12 +116,16 @@ export default function ChatThread(props: {
   supportsTools: boolean
   /** Selected model pricing, for estimating cost when the API reports none. */
   modelPricing?: ModelPricing
+  contextLength?: number
   /** Committed key from the client (after blur); optional proxy env only for local dev. */
   openRouterApiKey: string
   providerId: string
   onLoadingChange: (isLoading: boolean) => void
   onRegisterStop?: (stop: (() => void) | null) => void
   onReconnectOpenRouter?: () => void
+  onOpenPersonas?: () => void
+  onSlashAction?: (action: SlashAction) => void
+  snippets?: () => Snippet[]
 }) {
   return (
     <Show when={props.conversationId} keyed>
@@ -75,11 +136,15 @@ export default function ChatThread(props: {
           inputModalities={props.inputModalities}
           supportsTools={props.supportsTools}
           modelPricing={props.modelPricing}
+          contextLength={props.contextLength}
           openRouterApiKey={props.openRouterApiKey}
           providerId={props.providerId}
           onLoadingChange={props.onLoadingChange}
           onRegisterStop={props.onRegisterStop}
           onReconnectOpenRouter={props.onReconnectOpenRouter}
+          onOpenPersonas={props.onOpenPersonas}
+          onSlashAction={props.onSlashAction}
+          snippets={props.snippets}
         />
       )}
     </Show>
@@ -92,17 +157,23 @@ function ChatThreadSession(props: {
   inputModalities?: string[]
   supportsTools: boolean
   modelPricing?: ModelPricing
+  contextLength?: number
   /** Committed key from the client (after blur); optional proxy env only for local dev. */
   openRouterApiKey: string
   providerId: string
   onLoadingChange: (isLoading: boolean) => void
   onRegisterStop?: (stop: (() => void) | null) => void
   onReconnectOpenRouter?: () => void
+  onOpenPersonas?: () => void
+  onSlashAction?: (action: SlashAction) => void
+  snippets?: () => Snippet[]
 }) {
   // The parent remounts this session per conversation, so these are snapshots.
   const conversationId = untrack(() => props.conversationId)
   const initialMessages = untrack(() => props.initialMessages)
   const [draft, setDraft] = createSignal('')
+  const dictation = createDictation((text) => setDraft(text))
+  const stopDictation = () => dictation?.stop()
   const [pendingImages, setPendingImages] = createSignal<PendingImage[]>([])
   const [pendingFiles, setPendingFiles] = createSignal<PendingFile[]>([])
   const [attachError, setAttachError] = createSignal<string | null>(null)
@@ -175,15 +246,26 @@ function ChatThreadSession(props: {
 
   const selectedModel = useChatStore((state) => state.selectedModel)
   const skillIds = useChatStore(
-    (state) => state.conversationsById[conversationId]?.skillIds ?? [],
+    (state) => lookup(state.conversationsById, conversationId)?.skillIds ?? [],
   )
   const skills = useChatStore((state) => state.skills)
+  const project = useChatStore((state) =>
+    findProject(
+      state.projects,
+      lookup(state.conversationsById, conversationId)?.projectId,
+    ),
+  )
+  const chatSettings = useChatStore(
+    (state) => lookup(state.conversationsById, conversationId)?.settings,
+  )
   const enabledToolIds = useChatStore((state) => state.enabledToolIds)
   const sessionTotalTokens = useChatStore(
-    (state) => state.conversationsById[conversationId]?.sessionTotalTokens,
+    (state) =>
+      lookup(state.conversationsById, conversationId)?.sessionTotalTokens,
   )
   const sessionTotalCost = useChatStore(
-    (state) => state.conversationsById[conversationId]?.sessionTotalCost,
+    (state) =>
+      lookup(state.conversationsById, conversationId)?.sessionTotalCost,
   )
   const sessionTotalSuffix = createMemo(() => {
     const session = sessionTotalTokens()
@@ -196,13 +278,31 @@ function ChatThreadSession(props: {
     isOverThreshold(sessionTotalCost() ?? 0, costThreshold()),
   )
 
+  /** Start of the in-flight model run (0 when idle); feeds `elapsedMs`. */
+  let runStartedAt = 0
   const chat = useChat({
     id: conversationId,
     initialMessages,
     onChunk: (chunk: StreamChunk) => {
       if (chunk.type !== 'RUN_FINISHED') return
+      const elapsedMs = runStartedAt ? Date.now() - runStartedAt : 0
+      runStartedAt = 0
       const u = chunk.usage
-      if (!u) return
+      if (!u) {
+        if (elapsedMs > 0) {
+          queueMicrotask(() => {
+            const msgs = chat.messages() as ChatUIMessage[]
+            if (!msgs.some((m) => m.role === 'assistant')) return
+            chat.setMessages(
+              attachElapsedToLastAssistantMessage(
+                msgs,
+                elapsedMs,
+              ) as UIMessage[],
+            )
+          })
+        }
+        return
+      }
       const cost = computeUsageCost(u, props.modelPricing)
       chatActions.recordConversationTokenUsage(conversationId, {
         promptTokens: u.promptTokens,
@@ -231,17 +331,29 @@ function ChatThreadSession(props: {
           }
         }
         if (!foundAssistant) return
-        const next = attachTokenUsageToLastAssistantMessage(msgs, snap)
+        const withUsage = attachTokenUsageToLastAssistantMessage(msgs, snap)
+        const next =
+          elapsedMs > 0
+            ? attachElapsedToLastAssistantMessage(withUsage, elapsedMs)
+            : withUsage
         chat.setMessages(next as UIMessage[])
       })
     },
-    connection: stream((messages, _data, abortSignal) =>
-      runAgent({
+    connection: stream((messages, _data, abortSignal) => {
+      runStartedAt = Date.now()
+      return runAgent({
         apiKey: props.openRouterApiKey.trim(),
         providerId: props.providerId,
         model: selectedModel(),
         messages,
-        systemPrompt: composeSystemPrompt(skillIds(), skills()),
+        systemPrompt: composeSystemPrompt(
+          skillIds(),
+          skills(),
+          chatSettings()?.systemPrompt,
+          project(),
+        ),
+        temperature: chatSettings()?.temperature,
+        maxTokens: chatSettings()?.maxTokens,
         tools: props.supportsTools
           ? createEnabledTools(enabledToolIds(), {
               skills: createConversationSkillsApi(conversationId),
@@ -249,12 +361,31 @@ function ChatThreadSession(props: {
             })
           : [],
         abortSignal,
-      }),
-    ),
+      })
+    }),
     onFinish: () => {
+      applyPendingVariants()
       commitConversationMessages()
     },
   })
+
+  /** Earlier versions of a reply being regenerated; `length` is the expected message count when it finishes. */
+  let pendingVariants: {
+    prev: ReturnType<typeof snapshotVariants>
+    length: number
+  } | null = null
+
+  function applyPendingVariants() {
+    const pending = pendingVariants
+    pendingVariants = null
+    if (!pending) return
+    const msgs = chat.messages() as ChatUIMessage[]
+    const last = msgs[msgs.length - 1] as ChatUIMessage | undefined
+    if (msgs.length !== pending.length || last?.role !== 'assistant') return
+    const next = msgs.slice()
+    next[next.length - 1] = withRegeneratedVariants(last, pending.prev)
+    chat.setMessages(next as UIMessage[])
+  }
 
   function commitConversationMessages(
     messages = chat.messages() as ChatUIMessage[],
@@ -282,6 +413,216 @@ function ChatThreadSession(props: {
     },
   )
 
+  const [followUps, setFollowUps] = createSignal<string[]>([])
+  let followUpAbort: AbortController | undefined
+  function cancelFollowUps() {
+    followUpAbort?.abort()
+    followUpAbort = undefined
+    setFollowUps([])
+  }
+  onCleanup(() => followUpAbort?.abort())
+
+  async function fetchFollowUps() {
+    const msgs = chat.messages() as ChatUIMessage[]
+    const last = msgs[msgs.length - 1] as ChatUIMessage | undefined
+    if (last?.role !== 'assistant') return
+    let userText = ''
+    for (let i = msgs.length - 2; i >= 0; i--) {
+      if (msgs[i].role === 'user') {
+        userText = messageToPlainText(msgs[i])
+        break
+      }
+    }
+    const assistantText = messageToPlainText(last)
+    if (!userText || !assistantText) return
+    const ctrl = new AbortController()
+    followUpAbort = ctrl
+    try {
+      let out = ''
+      for await (const chunk of runAgent({
+        apiKey: props.openRouterApiKey.trim(),
+        providerId: props.providerId,
+        model: selectedModel(),
+        messages: buildFollowUpMessages(userText, assistantText),
+        systemPrompt: FOLLOW_UP_SYSTEM_PROMPT,
+        temperature: 0.7,
+        maxTokens: 200,
+        tools: [],
+        abortSignal: ctrl.signal,
+      })) {
+        if (ctrl.signal.aborted) return
+        if (chunk.type === 'TEXT_MESSAGE_CONTENT') out += chunk.delta
+        else if (chunk.type === 'RUN_ERROR') return
+      }
+      if (!ctrl.signal.aborted) setFollowUps(parseFollowUps(out))
+    } catch {
+      /* follow-ups are best-effort */
+    }
+  }
+
+  let titleAbort: AbortController | undefined
+  onCleanup(() => titleAbort?.abort())
+
+  /** Optional one-shot model title after the first exchange; failures are ignored. */
+  async function generateSmartTitle() {
+    const msgs = chat.messages() as ChatUIMessage[]
+    const conversation = lookup(
+      chatStore.state.conversationsById,
+      conversationId,
+    )
+    if (
+      !conversation ||
+      !shouldGenerateTitle({
+        enabled: readSmartTitles(),
+        titleLocked: conversation.titleLocked === true,
+        messageCount: msgs.length,
+      })
+    ) {
+      return
+    }
+    const userText = messageToPlainText(msgs[0])
+    const assistantText = messageToPlainText(msgs[1])
+    if (msgs[0].role !== 'user' || !userText || !assistantText) return
+    const ctrl = new AbortController()
+    titleAbort = ctrl
+    try {
+      let out = ''
+      for await (const chunk of runAgent({
+        apiKey: props.openRouterApiKey.trim(),
+        providerId: props.providerId,
+        model: selectedModel(),
+        messages: buildAutoTitleMessages(userText, assistantText),
+        systemPrompt: AUTO_TITLE_SYSTEM_PROMPT,
+        temperature: 0.3,
+        maxTokens: 24,
+        tools: [],
+        abortSignal: ctrl.signal,
+      })) {
+        if (ctrl.signal.aborted) return
+        if (chunk.type === 'TEXT_MESSAGE_CONTENT') out += chunk.delta
+        else if (chunk.type === 'RUN_ERROR') return
+      }
+      const title = parseAutoTitle(out)
+      if (title && !ctrl.signal.aborted) {
+        chatActions.setAutoTitle(conversationId, title)
+      }
+    } catch {
+      /* titles are best-effort */
+    }
+  }
+
+  let nudgedFor: string | undefined
+  createEffect(
+    () => chat.isLoading(),
+    (loading, prevLoading) => {
+      if (loading) {
+        cancelFollowUps()
+        return
+      }
+      if (prevLoading === true && !chat.error()) {
+        const msgs = chat.messages()
+        const lastId = msgs[msgs.length - 1]?.id
+        // The loading effect can fire twice for one finished run before the
+        // nudge lands in the list; nudge each run's last message only once.
+        if (
+          needsFinalAnswerNudge(msgs) &&
+          !wasNudged(msgs) &&
+          lastId !== nudgedFor
+        ) {
+          nudgedFor = lastId
+          void chat.sendMessage(FINAL_ANSWER_NUDGE)
+          return
+        }
+      }
+      if (prevLoading === true && !chat.error()) void generateSmartTitle()
+      if (prevLoading === true && !chat.error() && chatSettings()?.followUps) {
+        void fetchFollowUps()
+      }
+    },
+  )
+
+  const [compacting, setCompacting] = createSignal(false)
+  const [compactError, setCompactError] = createSignal<string | null>(null)
+  const [compactUndo, setCompactUndo] = createSignal<UIMessage[] | null>(null)
+  let compactAbort: AbortController | undefined
+  onCleanup(() => compactAbort?.abort())
+
+  const contextMeter = createMemo(() =>
+    contextUsage(
+      estimateConversationTokens([
+        ...(composeProjectContext(project())
+          ? [composeProjectContext(project())]
+          : []),
+        ...chat.messages().map((m) => messageToPlainText(m)),
+      ]),
+      props.contextLength,
+    ),
+  )
+
+  async function compactChat() {
+    if (chat.isLoading() || compacting()) return
+    const msgs = chat.messages() as ChatUIMessage[]
+    const split = splitForCompact(msgs)
+    if (!split) {
+      setCompactError('Nothing to compact yet.')
+      return
+    }
+    setCompactError(null)
+    setCompacting(true)
+    const ctrl = new AbortController()
+    compactAbort = ctrl
+    try {
+      let out = ''
+      for await (const chunk of runAgent({
+        apiKey: props.openRouterApiKey.trim(),
+        providerId: props.providerId,
+        model: selectedModel(),
+        messages: buildCompactMessages(
+          split.older.map((m) => ({
+            role: m.role,
+            text: messageToPlainText(m),
+          })),
+        ),
+        systemPrompt: COMPACT_SYSTEM_PROMPT,
+        temperature: 0.2,
+        maxTokens: 1200,
+        tools: [],
+        abortSignal: ctrl.signal,
+      })) {
+        if (ctrl.signal.aborted) return
+        if (chunk.type === 'TEXT_MESSAGE_CONTENT') out += chunk.delta
+        else if (chunk.type === 'RUN_ERROR') throw new Error(chunk.message)
+      }
+      if (!out.trim()) throw new Error('Empty summary')
+      const summary = {
+        id: `compact-${Date.now()}`,
+        role: 'user',
+        parts: [{ type: 'text', content: summaryMessageText(out) }],
+        createdAt: new Date(),
+      } as UIMessage
+      const next = [summary, ...split.recent] as UIMessage[]
+      setCompactUndo(msgs as UIMessage[])
+      chat.setMessages(next)
+      commitConversationMessages(next as ChatUIMessage[])
+    } catch (error) {
+      if (!ctrl.signal.aborted) {
+        setCompactError(
+          `Compact failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+        )
+      }
+    } finally {
+      setCompacting(false)
+    }
+  }
+
+  function undoCompact() {
+    const prev = compactUndo()
+    if (!prev || chat.isLoading()) return
+    chat.setMessages(prev)
+    commitConversationMessages(prev as ChatUIMessage[])
+    setCompactUndo(null)
+  }
+
   const lastAssistantMessageIndex = createMemo(() => {
     const msgs = chat.messages()
     for (let i = msgs.length - 1; i >= 0; i--) {
@@ -304,12 +645,16 @@ function ChatThreadSession(props: {
   async function resendUserMessage(
     message: UIMessage,
     editedParts?: ContentPart[],
+    prevVariants?: ReturnType<typeof snapshotVariants>,
   ) {
     if (message.role !== 'user' || chat.isLoading()) return
     const parts = editedParts ?? userMessageToResendParts(message)
     if (!parts || parts.length === 0) return
     const truncated = messagesBefore(chat.messages(), message.id)
     if (!truncated) return
+    pendingVariants = prevVariants
+      ? { prev: prevVariants, length: truncated.length + 2 }
+      : null
     chat.setMessages(truncated)
     commitConversationMessages(truncated as ChatUIMessage[])
     const sendPromise = chat.sendMessage({
@@ -323,7 +668,78 @@ function ChatThreadSession(props: {
     if (message.role !== 'assistant' || chat.isLoading()) return
     const before = messagesBefore(chat.messages(), message.id)
     const user = before?.filter((m) => m.role === 'user').pop()
-    if (user) await resendUserMessage(user)
+    if (!user) return
+    const prev = snapshotVariants(message as ChatUIMessage)
+    await resendUserMessage(user, undefined, prev)
+  }
+
+  function switchVariant(message: UIMessage, index: number) {
+    if (chat.isLoading()) return
+    const next = switchVariantInMessages(
+      chat.messages() as ChatUIMessage[],
+      message.id,
+      index,
+    )
+    chat.setMessages(next as UIMessage[])
+    commitConversationMessages(next)
+  }
+
+  const [focusedMessageId, setFocusedMessageId] = createSignal<string | null>(
+    null,
+  )
+  onSettled(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target
+      const typing =
+        isEditableTarget(target) ||
+        (target instanceof Element &&
+          target.closest('[role="dialog"]') !== null)
+      const action = threadKeyAction(event, typing)
+      if (!action) return
+      const msgs = chat.messages() as ChatUIMessage[]
+      const current = focusedMessageId()
+      const index = msgs.findIndex((m) => m.id === current)
+      if (action === 'clear') {
+        if (current === null) return
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        setFocusedMessageId(null)
+        return
+      }
+      if (action === 'next' || action === 'prev') {
+        const next = stepMessageIndex(
+          index === -1 ? null : index,
+          msgs.length,
+          action === 'next' ? 1 : -1,
+        )
+        if (next === null) return
+        event.preventDefault()
+        setFocusedMessageId(msgs[next].id)
+        requestScrollToMessage(msgs[next].id)
+        return
+      }
+      const msg = index === -1 ? undefined : msgs[index]
+      if (!msg) return
+      event.preventDefault()
+      if (action === 'bookmark') {
+        toggleBookmark(msg)
+        return
+      }
+      navigator.clipboard
+        .writeText(messageToPlainText(msg))
+        .catch(() => undefined)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  })
+
+  function toggleBookmark(message: UIMessage) {
+    const next = toggleBookmarkInMessages(
+      chat.messages() as ChatUIMessage[],
+      message.id,
+    )
+    chat.setMessages(next as UIMessage[])
+    commitConversationMessages(next)
   }
 
   function branchFromMessage(message: UIMessage) {
@@ -348,6 +764,8 @@ function ChatThreadSession(props: {
     props.onRegisterStop?.(stop)
     return () => {
       props.onRegisterStop?.(null)
+      stopDictation()
+      stopSpeaking()
       props.onLoadingChange(false)
       if (imageAttachNoticeTimer != null) {
         clearTimeout(imageAttachNoticeTimer)
@@ -376,10 +794,36 @@ function ChatThreadSession(props: {
     setPendingFiles((list) => list.filter((p) => p.id !== id))
   }
 
-  async function onImageInput(e: Event & { currentTarget: HTMLInputElement }) {
+  function onImageInput(e: Event & { currentTarget: HTMLInputElement }) {
     const input = e.currentTarget
     const files = Array.from(input.files ?? [])
     input.value = ''
+    return attachImages(files)
+  }
+
+  function onFileInput(e: Event & { currentTarget: HTMLInputElement }) {
+    const input = e.currentTarget
+    const files = Array.from(input.files ?? [])
+    input.value = ''
+    return attachPdfs(files)
+  }
+
+  /** Drag-drop / paste entry: routes files through the same paths as the pickers. */
+  async function attachDroppedFiles(files: File[]) {
+    const { images, pdfs, error } = partitionAttachableFiles(files, {
+      image: supportsImage(),
+      document: supportsDocument(),
+    })
+    if (error) {
+      setAttachError(error)
+      if (!images.length && !pdfs.length) return
+    }
+    if (images.length) await attachImages(images)
+    if (pdfs.length) await attachPdfs(pdfs)
+    if (error) setAttachError(error)
+  }
+
+  async function attachImages(files: File[]) {
     if (!files.length) return
     setAttachError(null)
     let sawUnsupportedFile = false
@@ -432,10 +876,7 @@ function ChatThreadSession(props: {
     }
   }
 
-  async function onFileInput(e: Event & { currentTarget: HTMLInputElement }) {
-    const input = e.currentTarget
-    const files = Array.from(input.files ?? [])
-    input.value = ''
+  async function attachPdfs(files: File[]) {
     if (!files.length) return
     setAttachError(null)
     const next: PendingFile[] = []
@@ -477,9 +918,49 @@ function ChatThreadSession(props: {
     return false
   }
 
+  /** Runs a picked/typed slash command; returns true when it was handled. */
+  function runSlash(command: SlashCommand, arg: string): boolean {
+    if (command.template) {
+      setDraft(command.template)
+      return true
+    }
+    const emit = props.onSlashAction
+    switch (command.name) {
+      case 'new':
+      case 'clear':
+        setDraft('')
+        emit?.({ type: 'new' })
+        return true
+      case 'export':
+        setDraft('')
+        emit?.({
+          type: 'export',
+          format: arg.toLowerCase() === 'json' ? 'json' : 'md',
+        })
+        return true
+      case 'model':
+      case 'help':
+        setDraft('')
+        emit?.({ type: command.name })
+        return true
+      case 'skill':
+        if (!arg) {
+          setDraft('/skill ')
+          return true
+        }
+        setDraft('')
+        emit?.({ type: 'skill', name: arg })
+        return true
+    }
+    return false
+  }
+
   async function onSubmit(e: Event) {
     e.preventDefault()
     if (!canSend()) return
+    const slash = parseSlash(draft())
+    if (slash && runSlash(slash.command, slash.arg)) return
+    stopDictation()
 
     const text = draft().trim()
     const imgs = pendingImages()
@@ -528,8 +1009,82 @@ function ChatThreadSession(props: {
     await sendPromise
   }
 
+  const [findOpen, setFindOpen] = createSignal(false)
+  onSettled(() => {
+    const def = CHAT_SHORTCUTS.find((d) => d.id === 'findInChat')
+    const onKey = (e: KeyboardEvent) => {
+      if (!def || e.isComposing || !matchesShortcut(e, def.keys)) return
+      const a = document.activeElement
+      // Leave native find alone while text is selected inside the composer.
+      if (
+        a instanceof HTMLTextAreaElement &&
+        a.selectionStart !== a.selectionEnd
+      )
+        return
+      e.preventDefault()
+      setFindOpen(true)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
+  const [dragging, setDragging] = createSignal(false)
+  let dragDepth = 0
+  const hasFiles = (e: DragEvent) =>
+    Array.from(e.dataTransfer?.types ?? []).includes('Files')
+
   return (
-    <div class="flex min-h-0 flex-1 flex-col">
+    <div
+      class="relative flex min-h-0 flex-1 flex-col"
+      onDragEnter={(e) => {
+        if (!hasFiles(e)) return
+        e.preventDefault()
+        dragDepth++
+        setDragging(true)
+      }}
+      onDragOver={(e) => {
+        if (hasFiles(e)) e.preventDefault()
+      }}
+      onDragLeave={(e) => {
+        if (!hasFiles(e)) return
+        dragDepth = Math.max(0, dragDepth - 1)
+        if (dragDepth === 0) setDragging(false)
+      }}
+      onDrop={(e) => {
+        if (!hasFiles(e)) return
+        e.preventDefault()
+        dragDepth = 0
+        setDragging(false)
+        void attachDroppedFiles(Array.from(e.dataTransfer?.files ?? []))
+      }}
+      onPaste={(e) => {
+        const files = Array.from(e.clipboardData?.files ?? []).filter(
+          (f) => isImageFile(f) || isPdfFile(f),
+        )
+        if (!files.length) return
+        e.preventDefault()
+        void attachDroppedFiles(files)
+      }}
+    >
+      <Show when={findOpen()}>
+        <ChatFindBar
+          messages={() =>
+            (chat.messages() as ChatUIMessage[]).map((m) => ({
+              id: m.id,
+              text: messageToPlainText(m),
+            }))
+          }
+          onClose={() => setFindOpen(false)}
+        />
+      </Show>
+      <Show when={dragging()}>
+        <div
+          data-testid="drop-overlay"
+          class="border-primary bg-background/80 text-foreground pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-xl border-2 border-dashed text-sm font-medium"
+        >
+          Drop images or PDFs to attach
+        </div>
+      </Show>
       <Show when={overThreshold()}>
         <p
           class="border-border bg-muted text-foreground border-b px-3 py-1.5 text-xs"
@@ -540,6 +1095,14 @@ function ChatThreadSession(props: {
           {formatCost(costThreshold() ?? 0)} limit.
         </p>
       </Show>
+      <Show when={wasNudged(chat.messages())}>
+        <p
+          data-testid="nudge-notice"
+          class="text-muted-foreground px-3 py-1 text-center text-xs"
+        >
+          Model returned no answer after using tools — asked again.
+        </p>
+      </Show>
       <ChatThreadMessageList
         messages={() => chat.messages() as ChatUIMessage[]}
         isLoading={() => chat.isLoading()}
@@ -548,12 +1111,54 @@ function ChatThreadSession(props: {
         onResendUserMessage={resendUserMessage}
         onRegenerateMessage={regenerateAssistantMessage}
         onBranchMessage={branchFromMessage}
+        onToggleBookmark={toggleBookmark}
+        onSwitchVariant={switchVariant}
         failedUserMessage={failedUserMessage}
         error={() => chat.error()}
         onReconnectOpenRouter={props.onReconnectOpenRouter}
+        onOpenPersonas={props.onOpenPersonas}
+        needsSignIn={!props.openRouterApiKey.trim()}
         providerName={getProvider(props.providerId).name}
+        onPickStarter={(prompt) => setDraft(prompt)}
+        focusedMessageId={focusedMessageId}
       />
-      <label class="text-muted-foreground flex items-center justify-end gap-1.5 px-3 pt-1 text-xs">
+      <ChatQuoteButton
+        onQuote={(text) => {
+          setDraft((d) => appendQuoteToDraft(d, selectionToBlockquote(text)))
+          const el = document.querySelector<HTMLTextAreaElement>(
+            '[data-chat-composer]',
+          )
+          el?.focus()
+          queueMicrotask(() => {
+            if (el) el.setSelectionRange(el.value.length, el.value.length)
+          })
+        }}
+      />
+      <Show when={followUps().length > 0 && !chat.isLoading()}>
+        <div
+          class="mx-auto flex w-full max-w-3xl flex-wrap gap-2 px-3 pt-1"
+          aria-label="Suggested follow-up questions"
+        >
+          <For each={followUps()}>
+            {(q) => (
+              <button
+                type="button"
+                class="border-border text-muted-foreground hover:bg-muted hover:text-foreground rounded-full border px-3 py-1 text-left text-xs"
+                onClick={() => {
+                  setDraft(q)
+                  setFollowUps([])
+                  document
+                    .querySelector<HTMLTextAreaElement>('[data-chat-composer]')
+                    ?.focus()
+                }}
+              >
+                {q}
+              </button>
+            )}
+          </For>
+        </div>
+      </Show>
+      <label class="text-muted-foreground flex items-center justify-end gap-1.5 px-3 pt-1 text-xs group-data-[zen]/app:hidden">
         Warn above $
         <input
           type="text"
@@ -568,6 +1173,15 @@ function ChatThreadSession(props: {
           }}
         />
       </label>
+      <ChatContextMeter
+        usage={contextMeter}
+        compacting={compacting}
+        canUndo={() => compactUndo() !== null}
+        error={compactError}
+        disabled={() => chat.isLoading()}
+        onCompact={() => void compactChat()}
+        onUndo={undoCompact}
+      />
       <ChatThreadComposer
         supportsImage={supportsImage}
         supportsDocument={supportsDocument}
@@ -585,7 +1199,16 @@ function ChatThreadSession(props: {
         draft={draft}
         onDraftInput={setDraft}
         onSubmit={onSubmit}
+        onPickSlash={(command) => runSlash(command, '')}
+        snippets={props.snippets}
         canSend={canSend}
+        dictationSupported={dictation !== null}
+        dictating={() => dictation?.active() ?? false}
+        onToggleDictation={() => {
+          if (!dictation) return
+          if (dictation.active()) dictation.stop()
+          else dictation.start(draft())
+        }}
         onStop={() => {
           chat.stop()
           scheduleCommitCurrentMessages()

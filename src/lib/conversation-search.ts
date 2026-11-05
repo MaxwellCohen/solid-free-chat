@@ -4,6 +4,8 @@ import type { HistoryConversation } from './harness/chat-history'
 export interface ConversationSearchResult {
   id: string
   title: string
+  /** Message holding the snippet match, when there is one. */
+  messageId?: string
   /** Excerpt split around the first match; absent when only the title matched. */
   snippet?: { before: string; match: string; after: string }
 }
@@ -35,17 +37,24 @@ export function searchSidebarConversations(
   for (const conversation of sorted) {
     const titleMatch = conversation.title.toLowerCase().includes(needle)
     let snippet: ConversationSearchResult['snippet']
+    let messageId: string | undefined
     for (const message of conversation.messages) {
       // Collapse whitespace so snippets stay on one line.
       const text = messageText(message).replace(/\s+/g, ' ')
       const at = text.toLowerCase().indexOf(needle)
       if (at !== -1) {
         snippet = excerpt(text, at, needle.length)
+        messageId = message.id
         break
       }
     }
     if (titleMatch || snippet) {
-      results.push({ id: conversation.id, title: conversation.title, snippet })
+      results.push({
+        id: conversation.id,
+        title: conversation.title,
+        snippet,
+        messageId,
+      })
     }
   }
   return results

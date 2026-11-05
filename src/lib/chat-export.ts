@@ -1,5 +1,7 @@
 import type { ChatAppState, ChatSkill } from '../store/chat.store'
 import { normalizeChatAppState } from '../store/chat.store'
+import { mergeProjects } from './chat-projects'
+import { lookup, maybe } from './nullable'
 
 export const EXPORT_FORMAT = 'solid-free-chat'
 export const EXPORT_VERSION = 1
@@ -7,8 +9,7 @@ export const EXPORT_VERSION = 1
 export const MAX_IMPORT_BYTES = 50 * 1024 * 1024
 
 export type ChatImportResult =
-  | { ok: true; state: ChatAppState }
-  | { ok: false; error: string }
+  { ok: true; state: ChatAppState } | { ok: false; error: string }
 
 function newId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -29,6 +30,7 @@ function serializeState(state: ChatAppState, now: number): string {
       currentConversationId: state.currentConversationId,
       selectedModel: state.selectedModel,
       skills: state.skills,
+      projects: state.projects,
       enabledToolIds: state.enabledToolIds,
     },
     null,
@@ -37,7 +39,10 @@ function serializeState(state: ChatAppState, now: number): string {
 }
 
 /** JSON backup of every chat (and skills). */
-export function serializeAllChats(state: ChatAppState, now = Date.now()): string {
+export function serializeAllChats(
+  state: ChatAppState,
+  now = Date.now(),
+): string {
   return serializeState(state, now)
 }
 
@@ -47,17 +52,22 @@ export function serializeChat(
   id: string,
   now = Date.now(),
 ): string | null {
-  const conversation = state.conversationsById[id]
+  const conversation = lookup(state.conversationsById, id)
   if (!conversation) return null
-  const skills = state.skills.filter((s) => conversation.skillIds.includes(s.id))
+  const skills = state.skills.filter((s) =>
+    conversation.skillIds.includes(s.id),
+  )
   return serializeState(
     {
       ...state,
       conversationOrder: [id],
       conversationsById: { [id]: conversation },
-      messagesByConversationId: { [id]: state.messagesByConversationId[id] ?? [] },
+      messagesByConversationId: {
+        [id]: state.messagesByConversationId[id] ?? [],
+      },
       currentConversationId: id,
       skills,
+      projects: state.projects.filter((p) => p.id === conversation.projectId),
     },
     now,
   )
@@ -65,11 +75,11 @@ export function serializeChat(
 
 /** Markdown transcript of one chat (text parts only); null when the chat does not exist. */
 export function chatToMarkdown(state: ChatAppState, id: string): string | null {
-  const conversation = state.conversationsById[id]
+  const conversation = lookup(state.conversationsById, id)
   if (!conversation) return null
   const lines = [`# ${conversation.title}`, '']
   for (const message of state.messagesByConversationId[id] ?? []) {
-    const text = (message.parts ?? [])
+    const text = (maybe(message.parts) ?? [])
       .flatMap((p) =>
         p.type === 'text' && typeof p.content === 'string' ? [p.content] : [],
       )
@@ -77,7 +87,11 @@ export function chatToMarkdown(state: ChatAppState, id: string): string | null {
       .trim()
     if (!text) continue
     const label =
-      message.role === 'user' ? 'User' : message.role === 'assistant' ? 'Assistant' : 'System'
+      message.role === 'user'
+        ? 'User'
+        : message.role === 'assistant'
+          ? 'Assistant'
+          : 'System'
     lines.push(`## ${label}`, '', text, '')
   }
   return lines.join('\n')
@@ -97,7 +111,8 @@ export function exportFileName(title: string, ext: string): string {
 
 /** Parse + validate + normalize an import file's text. */
 export function parseChatImport(text: string): ChatImportResult {
-  if (text.length > MAX_IMPORT_BYTES) return { ok: false, error: 'File is too large.' }
+  if (text.length > MAX_IMPORT_BYTES)
+    return { ok: false, error: 'File is too large.' }
   let raw: unknown
   try {
     raw = JSON.parse(text)
@@ -152,11 +167,17 @@ export function mergeImportedChats(
     skills.push({ ...skill, id } satisfies ChatSkill)
   }
 
+  const { projects, idMap: projectIdMap } = mergeProjects(
+    current.projects,
+    imported.projects,
+    genId,
+  )
+
   const conversationsById = { ...current.conversationsById }
   const messagesByConversationId = { ...current.messagesByConversationId }
   const addedIds: string[] = []
   for (const oldId of imported.conversationOrder) {
-    const conversation = imported.conversationsById[oldId]
+    const conversation = lookup(imported.conversationsById, oldId)
     if (!conversation) continue
     let id = oldId
     while (id in conversationsById) id = genId()
@@ -165,7 +186,15 @@ export function mergeImportedChats(
       id,
       skillIds: conversation.skillIds.map((s) => skillIdMap.get(s) ?? s),
     }
-    messagesByConversationId[id] = imported.messagesByConversationId[oldId] ?? []
+    if (conversation.projectId) {
+      const projectId =
+        projectIdMap.get(conversation.projectId) ?? conversation.projectId
+      if (projects.some((p) => p.id === projectId)) {
+        conversationsById[id].projectId = projectId
+      } else delete conversationsById[id].projectId
+    }
+    messagesByConversationId[id] =
+      imported.messagesByConversationId[oldId] ?? []
     addedIds.push(id)
   }
 
@@ -174,6 +203,7 @@ export function mergeImportedChats(
     state: {
       ...current,
       skills,
+      projects,
       conversationOrder: [...addedIds, ...current.conversationOrder],
       conversationsById,
       messagesByConversationId,

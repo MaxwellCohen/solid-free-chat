@@ -7,7 +7,8 @@ export interface ModelPricing {
 export const COST_THRESHOLD_STORAGE_KEY = 'solid-free-chat:cost-threshold'
 
 function toNumber(v: unknown): number | null {
-  const n = typeof v === 'number' ? v : typeof v === 'string' ? parseFloat(v) : NaN
+  const n =
+    typeof v === 'number' ? v : typeof v === 'string' ? parseFloat(v) : NaN
   return Number.isFinite(n) && n >= 0 ? n : null
 }
 
@@ -28,7 +29,10 @@ export function computeUsageCost(
   const reported = toNumber(usage.cost)
   if (reported !== null) return reported
   if (!pricing) return undefined
-  return usage.promptTokens * pricing.prompt + usage.completionTokens * pricing.completion
+  return (
+    usage.promptTokens * pricing.prompt +
+    usage.completionTokens * pricing.completion
+  )
 }
 
 export function formatCost(usd: number): string {
@@ -51,13 +55,18 @@ export function totalCost(
 }
 
 /** Parses user input; empty/invalid/non-positive means "no threshold". */
-export function parseCostThreshold(raw: string | null | undefined): number | null {
+export function parseCostThreshold(
+  raw: string | null | undefined,
+): number | null {
   if (!raw) return null
   const n = parseFloat(raw.replace(/^\$/, ''))
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
-export function isOverThreshold(total: number, threshold: number | null): boolean {
+export function isOverThreshold(
+  total: number,
+  threshold: number | null,
+): boolean {
   return threshold !== null && total >= threshold
 }
 

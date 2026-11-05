@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import type { Tool } from '@tanstack/ai'
-import { chatActions, chatStore, createConversationSkillsApi } from '../../store/chat.store'
+import {
+  chatActions,
+  chatStore,
+  createConversationSkillsApi,
+} from '../../store/chat.store'
 import { createEnabledTools } from './tools'
 
 function skillTools(conversationId: string) {
@@ -10,7 +13,7 @@ function skillTools(conversationId: string) {
   })
   const byName = new Map(tools.map((tool) => [tool.name, tool]))
   return (name: string, input: unknown = {}) => {
-    const tool = byName.get(name) as Tool | undefined
+    const tool = byName.get(name)
     if (!tool?.execute) throw new Error(`missing tool ${name}`)
     return tool.execute(input as never, undefined as never)
   }
@@ -83,19 +86,25 @@ describe('skill tools', () => {
     await run('set_skill_attached', { skill_id, attached: false })
     expect(attachedIds()).toEqual([])
 
-    expect(await run('update_skill', { skill_id, name: 'Captain' })).toEqual({ ok: true })
+    expect(await run('update_skill', { skill_id, name: 'Captain' })).toEqual({
+      ok: true,
+    })
     expect(chatStore.state.skills[0].name).toBe('Captain')
   })
 
   it('reports errors for empty input and unknown ids', async () => {
     const run = skillTools(conversationId)
-    expect(await run('create_skill', { name: ' ', instructions: 'x' })).toMatchObject({
+    expect(
+      await run('create_skill', { name: ' ', instructions: 'x' }),
+    ).toMatchObject({
       ok: false,
     })
     expect(
       await run('set_skill_attached', { skill_id: 'nope', attached: true }),
     ).toMatchObject({ ok: false })
-    expect(await run('update_skill', { skill_id: 'nope', name: 'x' })).toMatchObject({
+    expect(
+      await run('update_skill', { skill_id: 'nope', name: 'x' }),
+    ).toMatchObject({
       ok: false,
     })
     expect(chatStore.state.skills).toEqual([])

@@ -1,9 +1,12 @@
 import { For, Show } from 'solid-js'
+import { maybe } from '../../lib/nullable'
 import {
   Keyboard,
+  ListTree,
   LoaderCircle,
   PanelLeft,
   Share2,
+  SlidersHorizontal,
   SquarePen,
   Wrench,
 } from '../icons'
@@ -28,7 +31,12 @@ type ChatAppModelToolbarProps = {
   shareBusy: () => boolean
   shareFeedback: () => string | null
   onShare: () => void
+  outlineOpen: () => boolean
+  onToggleOutline: () => void
   onOpenShortcuts: () => void
+  onOpenTour: () => void
+  onOpenSettings: () => void
+  settingsActive: () => boolean
   tools: readonly HarnessToolDescriptor[]
   enabledToolIds: () => string[]
   toolsSupported: () => boolean
@@ -37,7 +45,10 @@ type ChatAppModelToolbarProps = {
 
 export function ChatAppModelToolbar(props: ChatAppModelToolbarProps) {
   return (
-    <header class="border-border flex shrink-0 flex-col gap-2 border-b px-3 py-2 sm:gap-3 sm:px-6 sm:py-3">
+    <header
+      data-testid="chat-toolbar"
+      class="border-border flex shrink-0 flex-col gap-2 border-b px-3 py-2 sm:gap-3 sm:px-6 sm:py-3"
+    >
       <ToolbarRow props={props} />
       <Show when={props.shareFeedback()} keyed>
         {(message) => (
@@ -61,8 +72,14 @@ function ToolbarRow(props: { props: ChatAppModelToolbarProps }) {
       <NewChatButton onNewChat={props.props.onNewChat} />
       <ModelPicker props={props.props} />
       <ToolsMenu props={props.props} />
+      <SettingsButton props={props.props} />
       <ShareButton props={props.props} />
+      <OutlineButton
+        open={props.props.outlineOpen}
+        onToggle={props.props.onToggleOutline}
+      />
       <ShortcutsButton onOpen={props.props.onOpenShortcuts} />
+      <TourButton onOpen={props.props.onOpenTour} />
       <StreamingIndicator isStreaming={props.props.isStreaming} />
       <ModelStatusMessage props={props.props} />
     </div>
@@ -73,7 +90,7 @@ function ToolsMenu(props: { props: ChatAppModelToolbarProps }) {
   let details: HTMLDetailsElement | undefined
   // Tolerate a missing accessor (e.g. a stale parent after a hot reload) so the
   // toolbar degrades to "no tools enabled" instead of crashing the page.
-  const enabledToolIds = () => props.props.enabledToolIds?.() ?? []
+  const enabledToolIds = () => maybe(props.props.enabledToolIds)?.() ?? []
   const enabledCount = () => enabledToolIds().length
   const isEnabled = (id: string) => enabledToolIds().includes(id)
 
@@ -130,12 +147,60 @@ function ToolsMenu(props: { props: ChatAppModelToolbarProps }) {
                 <span class="text-muted-foreground block text-xs">
                   {tool.summary}
                 </span>
+                <Show when={tool.network}>
+                  <span class="text-muted-foreground block text-xs italic">
+                    {tool.network}
+                  </span>
+                </Show>
               </span>
             </label>
           )}
         </For>
       </div>
     </details>
+  )
+}
+
+function SettingsButton(props: { props: ChatAppModelToolbarProps }) {
+  return (
+    <button
+      type="button"
+      class="text-muted-foreground hover:bg-muted hover:text-foreground relative inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium"
+      onClick={() => props.props.onOpenSettings()}
+      title="Chat settings"
+      aria-label={
+        props.props.settingsActive()
+          ? 'Chat settings (customized)'
+          : 'Chat settings'
+      }
+    >
+      <SlidersHorizontal class="size-4 shrink-0" aria-hidden="true" />
+      <span class="hidden sm:inline">Settings</span>
+      <Show when={props.props.settingsActive()}>
+        <span
+          class="bg-primary absolute top-1 right-1 size-2 rounded-full"
+          aria-hidden="true"
+        />
+      </Show>
+    </button>
+  )
+}
+
+function OutlineButton(props: { open: () => boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      class={[
+        'text-muted-foreground hover:bg-muted hover:text-foreground hidden shrink-0 items-center justify-center rounded-lg p-2 lg:inline-flex',
+        { 'bg-muted text-foreground': props.open() },
+      ]}
+      onClick={() => props.onToggle()}
+      title="Toggle outline"
+      aria-label="Toggle outline"
+      aria-pressed={props.open() ? 'true' : 'false'}
+    >
+      <ListTree class="size-4 shrink-0" aria-hidden="true" />
+    </button>
   )
 }
 
@@ -149,6 +214,20 @@ function ShortcutsButton(props: { onOpen: () => void }) {
       aria-label="Keyboard shortcuts"
     >
       <Keyboard class="size-4 shrink-0" aria-hidden="true" />
+    </button>
+  )
+}
+
+function TourButton(props: { onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      class="text-muted-foreground hover:bg-muted hover:text-foreground hidden shrink-0 items-center justify-center rounded-lg px-2.5 py-1.5 text-sm font-semibold sm:inline-flex"
+      onClick={() => props.onOpen()}
+      title="What's new / Tour"
+      aria-label="What's new / Tour"
+    >
+      ?
     </button>
   )
 }

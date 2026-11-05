@@ -10,7 +10,7 @@ const VERSION = '__SW_VERSION__'
 const PAGES = `pages-${VERSION}`
 const ASSETS = `assets-${VERSION}`
 const STATIC = `static-${VERSION}`
-const PRECACHE = ['/', '/manifest.json', '/favicon.svg', '/logo192.png']
+const PRECACHE = ['/', '/manifest.webmanifest', '/favicon.svg', '/logo192.png']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -27,7 +27,9 @@ self.addEventListener('activate', (event) => {
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((k) => !keep.has(k)).map((k) => caches.delete(k))),
+        Promise.all(
+          keys.filter((k) => !keep.has(k)).map((k) => caches.delete(k)),
+        ),
       )
       .then(() => self.clients.claim()),
   )

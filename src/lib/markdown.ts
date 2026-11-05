@@ -15,18 +15,7 @@ import { renderHtml } from '@tanstack/markdown/html'
 import type { CodeHighlighter } from '@tanstack/markdown'
 
 const highlighter = createHighlighter({
-  languages: [
-    plaintext,
-    htmlLang,
-    css,
-    js,
-    jsx,
-    ts,
-    tsx,
-    shell,
-    json,
-    python,
-  ],
+  languages: [plaintext, htmlLang, css, js, jsx, ts, tsx, shell, json, python],
 })
 
 const highlightMarkdownCode: CodeHighlighter =

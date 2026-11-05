@@ -2,17 +2,40 @@ import { For, Show, createEffect, createSignal, onSettled } from 'solid-js'
 import type { Accessor } from 'solid-js'
 import type { UIMessage } from '@tanstack/ai-client'
 import type { ContentPart } from '@tanstack/ai'
+import {
+  onScrollToMessage,
+  peekPendingScroll,
+} from '../../lib/scroll-to-message'
 import { createVirtualizer } from '../../lib/create-virtualizer'
 import type { VirtualItem, Virtualizer } from '../../lib/create-virtualizer'
-import { Check, Copy, GitBranch, Pencil, RotateCw } from '../icons'
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  GitBranch,
+  Pencil,
+  RotateCw,
+  Square,
+  Star,
+  Volume2,
+} from '../icons'
+import {
+  isSpeechSynthesisSupported,
+  speak,
+  speakingId,
+  stopSpeaking,
+} from '../../lib/speech'
 import type { ChatUIMessage } from '../../store/chat.store'
 import {
   formatReplyTokenLine,
+  formatSpeedLine,
   messageToPlainText,
   userMessageToResendParts,
   withEditedText,
 } from './chat-thread-utils'
 import { MessageParts } from './ChatMessageParts'
+import { STARTER_PROMPTS } from '../../lib/starter-prompts'
 import { classifyChatError } from '../../lib/chat-error'
 
 const MESSAGE_GAP_PX = 16
@@ -27,15 +50,22 @@ type ChatThreadMessageListProps = {
   onResendUserMessage: (message: UIMessage, editedParts?: ContentPart[]) => void
   onRegenerateMessage: (message: UIMessage) => void
   onBranchMessage: (message: UIMessage) => void
+  onToggleBookmark: (message: UIMessage) => void
+  onSwitchVariant: (message: UIMessage, index: number) => void
   failedUserMessage: () => UIMessage | null
   error: () => Error | undefined
   onReconnectOpenRouter?: () => void
+  onOpenPersonas?: () => void
+  needsSignIn?: boolean
   providerName: string
+  onPickStarter: (prompt: string) => void
+  focusedMessageId?: () => string | null
 }
 
 export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
   let scrollContainerRef: HTMLDivElement | undefined
 
+  const hasPendingScroll = peekPendingScroll()
   const virtualizer = createVirtualizer({
     get count() {
       return props.messages().length
@@ -51,7 +81,16 @@ export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
   })
 
   onSettled(() => {
-    virtualizer.scrollToEnd()
+    const stop = onScrollToMessage((id) => {
+      const index = props.messages().findIndex((m) => m.id === id)
+      if (index === -1) return
+      requestAnimationFrame(() =>
+        virtualizer.scrollToIndex(index, { align: 'center' }),
+      )
+    })
+    // A pending search jump replaces the default scroll-to-bottom.
+    if (!hasPendingScroll) virtualizer.scrollToEnd()
+    return stop
   })
 
   // When the user sends a message, pin it to the top so the reply fills the view.
@@ -59,7 +98,7 @@ export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
   createEffect(
     () => props.messages().length,
     (count) => {
-      const last = props.messages()[count - 1]
+      const last = props.messages().at(count - 1)
       if (count > prevCount && last?.role === 'user') {
         requestAnimationFrame(() =>
           virtualizer.scrollToIndex(count - 1, { align: 'start' }),
@@ -75,7 +114,8 @@ export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
     const count = props.messages().length
     let i = count - 1
     while (i >= 0 && props.messages()[i]?.role !== 'user') i--
-    const start = virtualizer.measurementsCache[i]?.start
+    const start =
+      i >= 0 ? virtualizer.measurementsCache.at(i)?.start : undefined
     if (start === undefined || !scrollContainerRef) return 0
     return Math.max(0, scrollContainerRef.clientHeight - 32 - (total - start))
   }
@@ -85,8 +125,71 @@ export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
       ref={(el) => {
         scrollContainerRef = el
       }}
-      class="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6"
+      role="log"
+      aria-label="Conversation"
+      aria-live="polite"
+      class="min-h-0 w-full flex-1 overflow-y-auto px-3 py-4 group-data-[zen]/app:mx-auto group-data-[zen]/app:max-w-3xl group-data-[zen]/app:pt-12 sm:px-6"
     >
+      <Show when={props.messages().length === 0 && !props.isLoading()}>
+        <div class="mx-auto flex max-w-2xl flex-col items-center gap-4 py-8 text-center">
+          <Show when={props.needsSignIn}>
+            <section
+              class="border-border bg-card w-full rounded-xl border p-4 text-left"
+              aria-label="Get started"
+            >
+              <h2 class="text-foreground text-base font-semibold tracking-tight">
+                Welcome — get chatting in 3 steps
+              </h2>
+              <ol class="text-foreground mt-3 flex list-decimal flex-col gap-1.5 pl-5 text-sm">
+                <li>Sign in with OpenRouter (it is free).</li>
+                <li>Pick a free model from the model menu.</li>
+                <li>Say hi!</li>
+              </ol>
+              <button
+                type="button"
+                class="bg-primary text-primary-foreground mt-3 rounded-lg px-3 py-1.5 text-sm font-medium"
+                onClick={() => props.onReconnectOpenRouter?.()}
+              >
+                Sign in with OpenRouter
+              </button>
+              <p class="text-muted-foreground mt-3 text-xs">
+                Every model used here is free, and nothing leaves your browser
+                except requests to OpenRouter.
+              </p>
+            </section>
+          </Show>
+          <h2 class="text-foreground text-lg font-semibold tracking-tight">
+            How can I help today?
+          </h2>
+          <div class="grid w-full gap-2 sm:grid-cols-2">
+            <For each={STARTER_PROMPTS}>
+              {(starter) => (
+                <button
+                  type="button"
+                  class="border-border hover:bg-muted rounded-xl border p-3 text-left"
+                  onClick={() => props.onPickStarter(starter.prompt)}
+                >
+                  <span class="text-foreground block text-sm font-medium">
+                    {starter.title}
+                  </span>
+                  <span class="text-muted-foreground block text-xs">
+                    {starter.description}
+                  </span>
+                </button>
+              )}
+            </For>
+          </div>
+          <Show when={props.onOpenPersonas}>
+            <button
+              type="button"
+              class="text-muted-foreground hover:text-foreground text-sm underline"
+              onClick={() => props.onOpenPersonas?.()}
+            >
+              Browse personas…
+            </button>
+          </Show>
+        </div>
+      </Show>
       <div
         class="relative w-full"
         style={{ height: `${virtualizer.getTotalSize() + trailingSpace()}px` }}
@@ -141,14 +244,22 @@ function VirtualChatMessage(props: {
         >
           <div
             class={[
-              'flex min-w-0 max-w-[min(100%,42rem)] flex-col gap-1',
+              'flex min-w-0 max-w-[min(100%,var(--chat-message-width,42rem))] flex-col gap-1',
               {
                 'items-end': msg().role === 'user',
                 'items-start': msg().role !== 'user',
               },
             ]}
           >
-            <Show when={editing()} fallback={<MessageBubble message={msg()} />}>
+            <Show
+              when={editing()}
+              fallback={
+                <MessageBubble
+                  message={msg()}
+                  focused={props.listProps.focusedMessageId?.() === msg().id}
+                />
+              }
+            >
               <EditMessageForm
                 message={msg()}
                 onCancel={() => setEditing(false)}
@@ -178,6 +289,8 @@ function VirtualChatMessage(props: {
               onEdit={() => setEditing(true)}
               onRegenerate={props.listProps.onRegenerateMessage}
               onBranch={props.listProps.onBranchMessage}
+              onToggleBookmark={props.listProps.onToggleBookmark}
+              onSwitchVariant={props.listProps.onSwitchVariant}
             />
             <UserResendButton
               message={msg()}
@@ -192,12 +305,15 @@ function VirtualChatMessage(props: {
   )
 }
 
-function MessageBubble(props: { message: ChatUIMessage }) {
+function MessageBubble(props: { message: ChatUIMessage; focused?: boolean }) {
   return (
     <div
+      data-message-focused={props.focused ? '' : undefined}
       class={[
-        'max-w-full min-w-0 rounded-2xl px-3 py-2.5 text-sm [overflow-wrap:anywhere] shadow-sm sm:px-4 sm:py-3',
+        'chat-bubble max-w-full min-w-0 rounded-2xl px-3 py-2.5 text-sm [overflow-wrap:anywhere] shadow-sm sm:px-4 sm:py-3',
         {
+          'ring-ring ring-offset-background ring-2 ring-offset-2':
+            props.focused === true,
           'bg-[var(--primary)] text-[var(--primary-foreground)]':
             props.message.role === 'user',
           'border border-[var(--border)] bg-[var(--card)] text-[var(--card-foreground)]':
@@ -217,23 +333,44 @@ function AssistantUsageLine(props: {
   isLastAssistantMessage: boolean
   sessionTotalSuffix: () => string
 }) {
+  const speedLine = () =>
+    props.message.elapsedMs
+      ? formatSpeedLine(
+          props.message.elapsedMs,
+          props.message.tokenUsage?.completionTokens,
+        )
+      : ''
   return (
-    <Show
-      when={
-        props.message.role === 'assistant' ? props.message.tokenUsage : false
-      }
-      keyed
-    >
-      {(usage) => (
-        <p
-          class="text-muted-foreground max-w-full px-0.5 text-xs tabular-nums"
-          title="Context = prompt tokens for this reply. Chat total sums each API-reported run in this conversation."
-        >
-          {formatReplyTokenLine(usage)}
-          {props.isLastAssistantMessage ? props.sessionTotalSuffix() : ''}
-        </p>
-      )}
-    </Show>
+    <>
+      <Show when={props.message.role === 'assistant' && speedLine()}>
+        {(line) => (
+          <p
+            data-usage-line
+            data-speed-line
+            class="text-muted-foreground max-w-full px-0.5 text-xs tabular-nums"
+          >
+            {line()}
+          </p>
+        )}
+      </Show>
+      <Show
+        when={
+          props.message.role === 'assistant' ? props.message.tokenUsage : false
+        }
+        keyed
+      >
+        {(usage) => (
+          <p
+            data-usage-line
+            class="text-muted-foreground max-w-full px-0.5 text-xs tabular-nums"
+            title="Context = prompt tokens for this reply. Chat total sums each API-reported run in this conversation."
+          >
+            {formatReplyTokenLine(usage)}
+            {props.isLastAssistantMessage ? props.sessionTotalSuffix() : ''}
+          </p>
+        )}
+      </Show>
+    </>
   )
 }
 
@@ -279,6 +416,8 @@ function MessageActions(props: {
   onEdit: () => void
   onRegenerate: (message: UIMessage) => void
   onBranch: (message: UIMessage) => void
+  onToggleBookmark: (message: UIMessage) => void
+  onSwitchVariant: (message: UIMessage, index: number) => void
 }) {
   const [copied, setCopied] = createSignal(false)
   const text = () => messageToPlainText(props.message)
@@ -329,6 +468,88 @@ function MessageActions(props: {
             Edit
           </button>
         </Show>
+        <Show
+          when={
+            props.message.role === 'assistant' &&
+            text() &&
+            isSpeechSynthesisSupported()
+          }
+        >
+          <button
+            type="button"
+            class={ACTION_BUTTON_CLASS}
+            aria-label={
+              speakingId() === props.message.id
+                ? 'Stop reading aloud'
+                : 'Read message aloud'
+            }
+            title={
+              speakingId() === props.message.id
+                ? 'Stop reading aloud'
+                : 'Read aloud'
+            }
+            aria-pressed={speakingId() === props.message.id ? 'true' : 'false'}
+            onClick={() =>
+              speakingId() === props.message.id
+                ? stopSpeaking()
+                : speak(props.message.id, text())
+            }
+          >
+            <Show
+              when={speakingId() === props.message.id}
+              fallback={<Volume2 class="size-3 shrink-0" aria-hidden="true" />}
+            >
+              <Square class="size-3 shrink-0" aria-hidden="true" />
+            </Show>
+            {speakingId() === props.message.id ? 'Stop' : 'Listen'}
+          </button>
+        </Show>
+        <Show when={(props.message.variants?.length ?? 0) > 1}>
+          <span
+            class="text-muted-foreground inline-flex items-center text-[11px] tabular-nums"
+            role="group"
+            aria-label="Reply versions"
+          >
+            <button
+              type="button"
+              class={ACTION_BUTTON_CLASS}
+              disabled={
+                props.isLoading() || (props.message.variantIndex ?? 0) <= 0
+              }
+              aria-label="Previous version"
+              onClick={() =>
+                props.onSwitchVariant(
+                  props.message,
+                  (props.message.variantIndex ?? 0) - 1,
+                )
+              }
+            >
+              <ChevronLeft class="size-3" aria-hidden="true" />
+            </button>
+            <span data-testid="variant-position">
+              {(props.message.variantIndex ?? 0) + 1}/
+              {props.message.variants?.length ?? 0}
+            </span>
+            <button
+              type="button"
+              class={ACTION_BUTTON_CLASS}
+              disabled={
+                props.isLoading() ||
+                (props.message.variantIndex ?? 0) >=
+                  (props.message.variants?.length ?? 0) - 1
+              }
+              aria-label="Next version"
+              onClick={() =>
+                props.onSwitchVariant(
+                  props.message,
+                  (props.message.variantIndex ?? 0) + 1,
+                )
+              }
+            >
+              <ChevronRight class="size-3" aria-hidden="true" />
+            </button>
+          </span>
+        </Show>
         <Show when={props.message.role === 'assistant'}>
           <button
             type="button"
@@ -341,6 +562,24 @@ function MessageActions(props: {
             Regenerate
           </button>
         </Show>
+        <button
+          type="button"
+          class={ACTION_BUTTON_CLASS}
+          aria-label={
+            props.message.bookmarked ? 'Remove bookmark' : 'Bookmark message'
+          }
+          aria-pressed={props.message.bookmarked ? 'true' : 'false'}
+          onClick={() => props.onToggleBookmark(props.message)}
+        >
+          <Star
+            class={[
+              'size-3 shrink-0',
+              { 'fill-current': props.message.bookmarked === true },
+            ]}
+            aria-hidden="true"
+          />
+          {props.message.bookmarked ? 'Saved' : 'Save'}
+        </button>
         <button
           type="button"
           class={ACTION_BUTTON_CLASS}

@@ -1,5 +1,15 @@
-import { For, Show } from 'solid-js'
-import { CheckCircle2, FileText, Image as ImageIcon, X } from '../icons'
+import { For, Show, createMemo, createSignal } from 'solid-js'
+import { CheckCircle2, FileText, Image as ImageIcon, Mic, X } from '../icons'
+import { matchSlashCommands } from '../../lib/slash-commands'
+import type { SlashCommand } from '../../lib/slash-commands'
+import {
+  applyExpansion,
+  expandPlaceholders,
+  findTriggerBeforeCaret,
+  findTriggerBeforeSeparator,
+  usesClipboard,
+} from '../../lib/snippets'
+import type { Snippet, TriggerHit } from '../../lib/snippets'
 import type { PendingFile, PendingImage } from './chat-thread-utils'
 
 type ChatThreadComposerProps = {
@@ -21,6 +31,11 @@ type ChatThreadComposerProps = {
   onSubmit: (e: Event) => void
   canSend: () => boolean
   onStop: () => void
+  dictationSupported?: boolean
+  dictating?: () => boolean
+  onToggleDictation?: () => void
+  onPickSlash?: (command: SlashCommand) => void
+  snippets?: () => Snippet[]
 }
 
 export function ChatThreadComposer(props: ChatThreadComposerProps) {
@@ -223,18 +238,148 @@ function PendingFileChip(props: {
 }
 
 function ComposerInputRow(props: { props: ChatThreadComposerProps }) {
+  const [slashIndex, setSlashIndex] = createSignal(0)
+  const [dismissedFor, setDismissedFor] = createSignal<string | null>(null)
+  const slashMatches = createMemo(() =>
+    props.props.onPickSlash ? matchSlashCommands(props.props.draft()) : [],
+  )
+  const slashOpen = () =>
+    slashMatches().length > 0 && dismissedFor() !== props.props.draft()
+  const pick = (command: SlashCommand | undefined) => {
+    if (command) props.props.onPickSlash?.(command)
+  }
+  /** Replaces the trigger word with its expansion; `separator` is the typed space/newline to keep. */
+  async function expand(
+    el: HTMLTextAreaElement,
+    hit: TriggerHit,
+    separator: string,
+  ) {
+    const before = el.value
+    let clipboard = ''
+    if (usesClipboard(hit.snippet.text)) {
+      try {
+        clipboard = await navigator.clipboard.readText()
+      } catch {
+        /* permission denied: expand with an empty clipboard */
+      }
+    }
+    if (el.value !== before) return
+    const expansion = expandPlaceholders(hit.snippet.text, {
+      now: new Date(),
+      clipboard,
+    })
+    const result = applyExpansion(
+      before,
+      hit,
+      expansion + separator,
+      hit.end + separator.length,
+    )
+    el.value = result.value
+    el.setSelectionRange(result.caret, result.caret)
+    props.props.onDraftInput(result.value)
+  }
   return (
-    <div class="flex gap-2">
+    <div class="relative flex gap-2">
+      <Show when={slashOpen()}>
+        <ul
+          id="slash-command-list"
+          role="listbox"
+          aria-label="Slash commands"
+          class="border-border bg-card absolute right-0 bottom-full left-0 z-10 mb-2 max-h-56 overflow-y-auto rounded-xl border p-1 shadow-lg"
+        >
+          <For each={slashMatches()}>
+            {(command, i) => (
+              <li
+                id={`slash-command-${i()}`}
+                role="option"
+                aria-selected={i() === slashIndex() ? 'true' : 'false'}
+                class={[
+                  'flex cursor-pointer items-baseline gap-2 rounded-lg px-3 py-1.5 text-sm',
+                  { 'bg-muted': i() === slashIndex() },
+                ]}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  pick(command)
+                }}
+                onMouseMove={() => setSlashIndex(i())}
+              >
+                <span class="text-foreground font-medium">
+                  /{command.name}
+                  {command.args ? ` ${command.args}` : ''}
+                </span>
+                <span class="text-muted-foreground truncate text-xs">
+                  {command.description}
+                </span>
+              </li>
+            )}
+          </For>
+        </ul>
+      </Show>
       <textarea
         data-chat-composer
         class="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring max-h-40 min-h-11 flex-1 resize-y rounded-xl border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-50"
         placeholder="Message…"
         rows={2}
         value={props.props.draft()}
-        onInput={(e) => props.props.onDraftInput(e.currentTarget.value)}
+        aria-controls={slashOpen() ? 'slash-command-list' : undefined}
+        aria-activedescendant={
+          slashOpen() ? `slash-command-${slashIndex()}` : undefined
+        }
+        onInput={(e) => {
+          setSlashIndex(0)
+          const el = e.currentTarget
+          props.props.onDraftInput(el.value)
+          const snippets = props.props.snippets?.()
+          if (snippets?.length && !slashOpen() && e.data === ' ') {
+            const hit = findTriggerBeforeSeparator(
+              el.value,
+              el.selectionStart,
+              snippets,
+            )
+            if (hit) void expand(el, hit, el.value[hit.end])
+          }
+        }}
         disabled={props.props.isLoading()}
         onKeyDown={(e) => {
+          if (slashOpen() && !e.isComposing) {
+            const n = slashMatches().length
+            if (e.key === 'ArrowDown') {
+              e.preventDefault()
+              setSlashIndex((i) => (i + 1) % n)
+              return
+            }
+            if (e.key === 'ArrowUp') {
+              e.preventDefault()
+              setSlashIndex((i) => (i - 1 + n) % n)
+              return
+            }
+            if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+              e.preventDefault()
+              pick(slashMatches()[slashIndex()])
+              return
+            }
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              e.stopPropagation()
+              setDismissedFor(props.props.draft())
+              return
+            }
+          }
+          if (e.key === 'Escape' && props.props.dictating?.()) {
+            props.props.onToggleDictation?.()
+          }
           if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+            // Enter on a just-typed trigger expands it instead of sending.
+            const snippets = props.props.snippets?.()
+            const el = e.currentTarget
+            const hit = snippets?.length
+              ? findTriggerBeforeCaret(el.value, el.selectionStart, snippets)
+              : null
+            if (hit) {
+              e.preventDefault()
+              void expand(el, hit, '')
+              return
+            }
             e.preventDefault()
             void props.props.onSubmit(e)
           }
@@ -248,6 +393,29 @@ function ComposerInputRow(props: { props: ChatThreadComposerProps }) {
         >
           Send
         </button>
+        <Show when={props.props.dictationSupported}>
+          <button
+            type="button"
+            class={[
+              'border-border hover:bg-muted flex items-center justify-center rounded-xl border px-3 py-1.5 disabled:opacity-50',
+              {
+                'border-destructive text-destructive animate-pulse':
+                  !!props.props.dictating?.(),
+              },
+            ]}
+            aria-label={
+              props.props.dictating?.() ? 'Stop dictation' : 'Start dictation'
+            }
+            title={
+              props.props.dictating?.() ? 'Stop dictation' : 'Dictate message'
+            }
+            aria-pressed={props.props.dictating?.() ? 'true' : 'false'}
+            disabled={props.props.isLoading()}
+            onClick={() => props.props.onToggleDictation?.()}
+          >
+            <Mic class="size-4" aria-hidden="true" />
+          </button>
+        </Show>
         <Show when={props.props.isLoading()}>
           <button
             type="button"

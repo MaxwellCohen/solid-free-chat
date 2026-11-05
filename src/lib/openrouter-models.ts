@@ -59,6 +59,9 @@ function parseUserModelRow(raw: unknown): OpenRouterUserModelRow | null {
     pricing: pricing as Record<string, unknown>,
     architecture: { input_modalities, output_modalities },
     supported_parameters,
+    ...(typeof o.context_length === 'number'
+      ? { context_length: o.context_length }
+      : {}),
   }
 }
 
@@ -89,7 +92,9 @@ async function fetchPublicFreeTextModelOptions(): Promise<ChatModelOption[]> {
   const json: unknown = await res.json().catch(() => null)
   if (!res.ok) {
     const detail = formatOpenRouterErrorBody(json, res.statusText)
-    throw new Error(`OpenRouter public models failed (${res.status}): ${detail}`)
+    throw new Error(
+      `OpenRouter public models failed (${res.status}): ${detail}`,
+    )
   }
   const rows = parseModelsDataArray(json)
   return ensureFreeModelsRouterInOptions(toFreeTextChatOptions(rows))

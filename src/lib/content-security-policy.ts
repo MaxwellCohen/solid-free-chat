@@ -15,8 +15,21 @@ function sentryOrigin(): string | undefined {
   }
 }
 
+/** Keyless public APIs used by the opt-in network tools (see harness/web-tools.ts). */
+export const TOOL_ORIGINS = [
+  'https://en.wikipedia.org',
+  'https://geocoding-api.open-meteo.com',
+  'https://api.open-meteo.com',
+]
+
+/** Image hosts for the generate_image tool (img-src only; never connect-src). */
+export const IMAGE_ORIGINS = [
+  'https://image.pollinations.ai',
+  'https://pollinations.ai',
+]
+
 export function contentSecurityPolicy(): string {
-  const connect = ["'self'", ...providerOrigins()]
+  const connect = ["'self'", ...providerOrigins(), ...TOOL_ORIGINS]
   const sentry = sentryOrigin()
   if (sentry) connect.push(sentry)
   // Vite HMR and TanStack devtools use local websockets / ports.
@@ -29,7 +42,7 @@ export function contentSecurityPolicy(): string {
     "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
     "style-src 'self' 'unsafe-inline'",
     // Model-returned markdown may embed remote images.
-    "img-src 'self' data: blob: https:",
+    `img-src 'self' data: blob: https: ${IMAGE_ORIGINS.join(' ')}`,
     "font-src 'self' data:",
     `connect-src ${connect.join(' ')}`,
     "frame-src 'self'",

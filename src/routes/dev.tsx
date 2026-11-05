@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/solid-router'
+import { maybe } from '../lib/nullable'
 import { Errored, For, Show, createSignal, onSettled } from 'solid-js'
 
 import { ChatErrorFallback } from '../components/chat/ChatErrorFallback'
@@ -9,7 +10,7 @@ import { DevPreviewToolbar } from '../components/dev/DevPreviewToolbar'
 import type { PreviewWidth } from '../components/dev/DevPreviewToolbar'
 import { DevTabs } from '../components/dev/DevTabs'
 import { DevTemplateMenu } from '../components/dev/DevTemplateMenu'
-import { runAgent } from '../lib/harness/run-agent'
+import { runAgent } from '../lib/harness/run-agent-lazy'
 import { ModelSelect } from '../components/ModelSelect'
 import { loadToolModelSelection } from '../lib/model-options'
 import type { ModelSelection } from '../lib/model-options'
@@ -284,7 +285,10 @@ function Dev() {
   const toggleFullscreen = () => {
     const next = !fullscreen()
     setFullscreen(next)
-    if (next) void pane?.requestFullscreen?.().catch(() => {})
+    if (next)
+      void maybe(pane?.requestFullscreen)
+        ?.call(pane)
+        .catch(() => {})
     else if (document.fullscreenElement) void document.exitFullscreen()
   }
 

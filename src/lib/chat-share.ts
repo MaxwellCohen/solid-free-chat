@@ -3,6 +3,7 @@ import type { ChatUIMessage } from '../store/chat.store'
 
 /** Soft cap on the encoded hash body (`#` + payload). Warn when exceeded; still allow copy. */
 export const MAX_SHARE_HASH_BYTES = 1_048_576
+const MAX_SHARE_INFLATED_BYTES = 16 * 1024 * 1024
 
 const SHARE_VERSION_PREFIX = 'v1.'
 
@@ -161,21 +162,17 @@ function sanitizePart(
     return { type: 'thinking', content: part.content }
   }
   if (part.type === 'tool-call') {
+    const args: unknown = part.arguments
     return {
       type: 'tool-call',
       id: part.id,
       name: part.name,
-      arguments:
-        typeof part.arguments === 'string'
-          ? part.arguments
-          : JSON.stringify(part.arguments ?? {}),
+      arguments: typeof args === 'string' ? args : JSON.stringify(args ?? {}),
     }
   }
   if (part.type === 'tool-result') {
-    const content =
-      typeof part.content === 'string'
-        ? part.content
-        : JSON.stringify(part.content ?? null)
+    const raw: unknown = part.content
+    const content = typeof raw === 'string' ? raw : JSON.stringify(raw ?? null)
     return {
       type: 'tool-result',
       toolCallId: part.toolCallId,
@@ -317,11 +314,34 @@ export async function gzipBytes(input: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(await new Response(stream).arrayBuffer())
 }
 
-export async function gunzipBytes(input: Uint8Array): Promise<Uint8Array> {
+export async function gunzipBytes(
+  input: Uint8Array,
+  maxBytes = MAX_SHARE_INFLATED_BYTES,
+): Promise<Uint8Array> {
   const stream = new Blob([blobBytes(input)])
     .stream()
     .pipeThrough(new DecompressionStream('gzip'))
-  return new Uint8Array(await new Response(stream).arrayBuffer())
+  // Cap output so a tiny crafted link cannot inflate into gigabytes (gzip bomb).
+  const reader = stream.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    total += value.length
+    if (total > maxBytes) {
+      await reader.cancel()
+      throw new Error('Shared chat is too large.')
+    }
+    chunks.push(value)
+  }
+  const out = new Uint8Array(total)
+  let at = 0
+  for (const c of chunks) {
+    out.set(c, at)
+    at += c.length
+  }
+  return out
 }
 
 export function bytesToBase64Url(bytes: Uint8Array): string {

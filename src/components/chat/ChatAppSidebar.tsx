@@ -1,22 +1,54 @@
-import { For, Show, createMemo, createSignal, onCleanup } from 'solid-js'
+import {
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+} from 'solid-js'
 import {
   ChevronRight,
   Download,
+  FolderInput,
   KeyRound,
   PanelLeft,
   PanelLeftClose,
+  Pencil,
+  Pin,
   SquarePen,
+  Tag,
   Upload,
 } from '../icons'
-import type { ChatConversation } from '../../store/chat.hooks'
-import { NEW_CHAT_TITLE } from '../../store/chat.store'
+import type { ChatConversation, ChatProject } from '../../store/chat.hooks'
+import { NEW_CHAT_TITLE, chatActions } from '../../store/chat.store'
+import { formatCost } from '../../lib/usage-cost'
+import {
+  addTag,
+  collectTags,
+  filterByTag,
+  removeTag,
+  toggleTagFilter,
+} from '../../lib/chat-tags'
+import { groupConversations } from '../../lib/chat-projects'
+import { requestScrollToMessage } from '../../lib/scroll-to-message'
 import { searchSidebarConversations } from '../../lib/conversation-search'
 import type { HistoryConversation } from '../../lib/harness/chat-history'
+
+const [tagEditRequest, setTagEditRequest] = createSignal<string | null>(null)
+
+/** Opens the tag popover on a sidebar row (used by the command palette). */
+export function requestTagEditor(conversationId: string) {
+  setTagEditRequest(conversationId)
+}
 
 type ChatAppSidebarProps = {
   sidebarOpen: () => boolean
   onToggleSidebar: () => void
   conversations: () => ChatConversation[]
+  projects: () => ChatProject[]
+  onNewProject: () => void
+  onEditProject: (id: string) => void
+  onNewChatInProject: (id: string) => void
   currentConversationId: () => string | null
   onSelectConversation: (id: string) => void
   onCreateConversation: () => void
@@ -30,6 +62,7 @@ type ChatAppSidebarProps = {
   onOpenSkillsLibrary: () => void
   onExportChat: (format: 'md' | 'json') => void
   onExportAll: () => void
+  onPrintChat: () => void
   onImportFile: (file: File) => Promise<string>
 }
 
@@ -146,18 +179,31 @@ function ConversationPane(props: { props: ChatAppSidebarProps }) {
     <div class="order-1 flex min-h-0 flex-1 flex-col sm:order-2">
       <ConversationHeader
         onCreateConversation={props.props.onCreateConversation}
+        onNewProject={props.props.onNewProject}
       />
       <ConversationSearch props={props.props} />
     </div>
   )
 }
 
-function ConversationHeader(props: { onCreateConversation: () => void }) {
+function ConversationHeader(props: {
+  onCreateConversation: () => void
+  onNewProject: () => void
+}) {
   return (
     <div class="flex shrink-0 items-center justify-between gap-2 p-3">
       <h2 class="text-muted-foreground min-w-0 flex-1 truncate text-xs font-semibold tracking-wide uppercase">
         Chats
       </h2>
+      <button
+        type="button"
+        class="border-border hover:bg-muted shrink-0 rounded-lg border px-2.5 py-1.5 text-xs font-medium"
+        onClick={props.onNewProject}
+        title="New project"
+        aria-label="New project"
+      >
+        + Project
+      </button>
       <button
         type="button"
         class="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium"
@@ -189,10 +235,26 @@ function ConversationSearch(props: { props: ChatAppSidebarProps }) {
     setQuery('')
   }
 
+  const [rawTag, setRawTag] = createSignal<string | null>(null)
+  const allTags = createMemo(() => collectTags(props.props.conversations()))
+  // A tag nobody uses anymore stops filtering.
+  const activeTag = createMemo(() => {
+    const t = rawTag()
+    return t && allTags().some((x) => x.tag === t) ? t : null
+  })
+  const tagged = createMemo(
+    () =>
+      new Set(
+        filterByTag(props.props.conversations(), activeTag()).map((c) => c.id),
+      ),
+  )
+
   const results = createMemo(() => {
     const q = query().trim()
     return q
-      ? searchSidebarConversations(props.props.getSearchCorpus(), q)
+      ? searchSidebarConversations(props.props.getSearchCorpus(), q).filter(
+          (hit) => tagged().has(hit.id),
+        )
       : null
   })
 
@@ -215,7 +277,36 @@ function ConversationSearch(props: { props: ChatAppSidebarProps }) {
           }}
         />
       </div>
-      <Show when={results()} fallback={<ConversationNav props={props.props} />}>
+      <Show when={allTags().length > 0}>
+        <div
+          class="flex shrink-0 flex-wrap gap-1 px-3 pb-2"
+          role="group"
+          aria-label="Filter by tag"
+        >
+          <For each={allTags()}>
+            {(entry) => (
+              <button
+                type="button"
+                data-tag-filter={entry.tag}
+                aria-pressed={activeTag() === entry.tag ? 'true' : 'false'}
+                class={[
+                  'max-w-full truncate rounded-full border px-2 py-0.5 text-[11px]',
+                  activeTag() === entry.tag
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground',
+                ]}
+                onClick={() => setRawTag((t) => toggleTagFilter(t, entry.tag))}
+              >
+                #{entry.tag}
+              </button>
+            )}
+          </For>
+        </div>
+      </Show>
+      <Show
+        when={results()}
+        fallback={<ConversationNav props={props.props} tag={activeTag()} />}
+      >
         {(hits) => (
           <nav
             class="min-h-0 flex-1 overflow-y-auto"
@@ -242,7 +333,11 @@ function ConversationSearch(props: { props: ChatAppSidebarProps }) {
                               props.props.currentConversationId() === hit.id,
                           },
                         ]}
-                        onClick={() => props.props.onSelectConversation(hit.id)}
+                        onClick={() => {
+                          props.props.onSelectConversation(hit.id)
+                          if (hit.messageId)
+                            requestScrollToMessage(hit.messageId)
+                        }}
                       >
                         <span class="block truncate font-medium">
                           {hit.title || NEW_CHAT_TITLE}
@@ -271,24 +366,143 @@ function ConversationSearch(props: { props: ChatAppSidebarProps }) {
   )
 }
 
-function ConversationNav(props: { props: ChatAppSidebarProps }) {
+const COLLAPSED_PROJECTS_KEY = 'sidebar-collapsed-projects'
+
+function loadCollapsedProjects(): Set<string> {
+  try {
+    const raw: unknown = JSON.parse(
+      localStorage.getItem(COLLAPSED_PROJECTS_KEY) ?? '[]',
+    )
+    return new Set(
+      Array.isArray(raw) ? raw.filter((x) => typeof x === 'string') : [],
+    )
+  } catch {
+    return new Set()
+  }
+}
+
+function ConversationNav(props: {
+  props: ChatAppSidebarProps
+  tag: string | null
+}) {
+  const [collapsed, setCollapsed] = createSignal<Set<string>>(
+    loadCollapsedProjects(),
+  )
+  const toggleCollapsed = (id: string) => {
+    const next = new Set(collapsed())
+    if (!next.delete(id)) next.add(id)
+    setCollapsed(next)
+    try {
+      localStorage.setItem(COLLAPSED_PROJECTS_KEY, JSON.stringify([...next]))
+    } catch {
+      /* ignore */
+    }
+  }
+  const visible = createMemo(() =>
+    filterByTag(props.props.conversations(), props.tag),
+  )
+  const grouped = createMemo(() =>
+    groupConversations(visible(), props.props.projects(), props.tag === null),
+  )
+  const renderItems = (items: () => ChatConversation[]) => (
+    <For each={items()} keyed={(c) => c.id}>
+      {(conversation) => (
+        <ConversationListItem
+          conversation={conversation()}
+          projects={props.props.projects}
+          currentConversationId={props.props.currentConversationId}
+          onSelectConversation={props.props.onSelectConversation}
+          onDeleteConversation={props.props.onDeleteConversation}
+          onNewProject={props.props.onNewProject}
+        />
+      )}
+    </For>
+  )
   return (
     <nav
       id="sidebar-conversations-nav"
       class="min-h-0 flex-1 overflow-y-auto"
       aria-label="Conversations"
     >
+      <Show when={grouped().pinned.length > 0}>
+        <h3 class="text-muted-foreground px-4 pt-1 pb-1 text-xs font-medium">
+          Pinned
+        </h3>
+        <ul class="space-y-0.5 px-2 pb-2">
+          {renderItems(() => grouped().pinned)}
+        </ul>
+      </Show>
+      <For each={grouped().groups} keyed={(g) => g.project.id}>
+        {(group) => (
+          <section
+            data-testid="project-group"
+            aria-label={`Project: ${group().project.name}`}
+          >
+            <div class="flex items-center gap-0.5 px-2 pt-1">
+              <button
+                type="button"
+                class="hover:bg-muted flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs font-medium"
+                aria-expanded={
+                  collapsed().has(group().project.id) ? 'false' : 'true'
+                }
+                data-testid="project-header"
+                onClick={() => toggleCollapsed(group().project.id)}
+              >
+                <ChevronRight
+                  class={[
+                    'text-muted-foreground size-3.5 shrink-0 transition-transform',
+                    { 'rotate-90': !collapsed().has(group().project.id) },
+                  ]}
+                  aria-hidden="true"
+                />
+                <span aria-hidden="true">{group().project.emoji}</span>
+                <span class="min-w-0 flex-1 truncate">
+                  {group().project.name}
+                </span>
+                <span class="text-muted-foreground shrink-0 font-normal">
+                  {group().chats.length}
+                </span>
+              </button>
+              <button
+                type="button"
+                class="text-muted-foreground hover:text-foreground hover:bg-muted shrink-0 rounded-lg px-2 py-1.5"
+                title="New chat in project"
+                aria-label={`New chat in project: ${group().project.name}`}
+                onClick={() =>
+                  props.props.onNewChatInProject(group().project.id)
+                }
+              >
+                <span class="text-sm leading-none" aria-hidden="true">
+                  +
+                </span>
+              </button>
+              <button
+                type="button"
+                class="text-muted-foreground hover:text-foreground hover:bg-muted shrink-0 rounded-lg px-2 py-1.5"
+                title="Edit project"
+                aria-label={`Edit project: ${group().project.name}`}
+                onClick={() => props.props.onEditProject(group().project.id)}
+              >
+                <Pencil class="size-3.5" aria-hidden="true" />
+              </button>
+            </div>
+            <Show when={!collapsed().has(group().project.id)}>
+              <ul class="space-y-0.5 px-2 pb-2 pl-4">
+                {renderItems(() => group().chats)}
+              </ul>
+            </Show>
+          </section>
+        )}
+      </For>
+      <Show
+        when={grouped().groups.length > 0 && grouped().ungrouped.length > 0}
+      >
+        <h3 class="text-muted-foreground px-4 pt-1 pb-1 text-xs font-medium">
+          Chats
+        </h3>
+      </Show>
       <ul class="space-y-0.5 px-2 pb-3">
-        <For each={props.props.conversations()}>
-          {(conversation) => (
-            <ConversationListItem
-              conversation={conversation}
-              currentConversationId={props.props.currentConversationId}
-              onSelectConversation={props.props.onSelectConversation}
-              onDeleteConversation={props.props.onDeleteConversation}
-            />
-          )}
-        </For>
+        {renderItems(() => grouped().ungrouped)}
       </ul>
     </nav>
   )
@@ -296,31 +510,143 @@ function ConversationNav(props: { props: ChatAppSidebarProps }) {
 
 function ConversationListItem(props: {
   conversation: ChatConversation
+  projects: () => ChatProject[]
+  onNewProject: () => void
   currentConversationId: () => string | null
   onSelectConversation: (id: string) => void
   onDeleteConversation: (id: string) => void
 }) {
   const [confirmingDelete, setConfirmingDelete] = createSignal(false)
+  const [editing, setEditing] = createSignal(false)
+  const [draft, setDraft] = createSignal('')
+  const [tagsOpen, setTagsOpen] = createSignal(false)
+  const [moveOpen, setMoveOpen] = createSignal(false)
+  createEffect(
+    () => tagEditRequest() === props.conversation.id,
+    (hit) => {
+      if (!hit) return
+      setTagEditRequest(null)
+      setTagsOpen(true)
+    },
+  )
+  const startEdit = () => {
+    setDraft(props.conversation.title || NEW_CHAT_TITLE)
+    setEditing(true)
+  }
+  const commit = () => {
+    if (!editing()) return
+    setEditing(false)
+    chatActions.renameConversation(props.conversation.id, draft())
+  }
 
   return (
-    <li class="flex items-stretch gap-0.5">
+    <li class="flex flex-wrap items-stretch gap-0.5">
+      <Show when={editing()}>
+        <input
+          type="text"
+          ref={(el: HTMLInputElement) => queueMicrotask(() => el.select())}
+          autofocus
+          aria-label="Chat title"
+          class="border-border bg-background min-w-0 flex-1 rounded-lg border px-2 py-2 text-sm"
+          value={draft()}
+          onInput={(e) => setDraft(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commit()
+            else if (e.key === 'Escape') setEditing(false)
+          }}
+          onBlur={commit}
+        />
+      </Show>
+      <Show when={!editing()}>
+        <button
+          type="button"
+          class={[
+            'hover:bg-muted min-w-0 flex-1 rounded-lg px-2 py-2.5 text-left text-sm sm:py-2',
+            {
+              'bg-muted font-medium':
+                props.currentConversationId() === props.conversation.id,
+            },
+          ]}
+          onClick={() => {
+            setConfirmingDelete(false)
+            props.onSelectConversation(props.conversation.id)
+          }}
+          onDblClick={startEdit}
+        >
+          <span class="block truncate">
+            {props.conversation.title || NEW_CHAT_TITLE}
+          </span>
+          <Show when={(props.conversation.tags?.length ?? 0) > 0}>
+            <span class="mt-0.5 flex flex-wrap gap-1" data-testid="row-tags">
+              <For each={props.conversation.tags}>
+                {(t) => (
+                  <span class="bg-muted text-muted-foreground max-w-full truncate rounded-full px-1.5 text-[10px] font-normal">
+                    #{t}
+                  </span>
+                )}
+              </For>
+            </span>
+          </Show>
+          <Show when={(props.conversation.sessionTotalCost ?? 0) > 0}>
+            <span class="text-muted-foreground block text-xs">
+              {formatCost(props.conversation.sessionTotalCost ?? 0)}
+            </span>
+          </Show>
+        </button>
+      </Show>
       <button
         type="button"
+        title={props.conversation.pinned ? 'Unpin chat' : 'Pin chat'}
+        aria-label={`${props.conversation.pinned ? 'Unpin' : 'Pin'} chat: ${props.conversation.title || NEW_CHAT_TITLE}`}
+        aria-pressed={props.conversation.pinned ? 'true' : 'false'}
         class={[
-          'hover:bg-muted min-w-0 flex-1 rounded-lg px-2 py-2.5 text-left text-sm sm:py-2',
-          {
-            'bg-muted font-medium':
-              props.currentConversationId() === props.conversation.id,
-          },
+          'hover:bg-muted shrink-0 rounded-lg px-2',
+          props.conversation.pinned
+            ? 'text-primary'
+            : 'text-muted-foreground hover:text-foreground',
         ]}
-        onClick={() => {
-          setConfirmingDelete(false)
-          props.onSelectConversation(props.conversation.id)
-        }}
+        onClick={() => chatActions.togglePinned(props.conversation.id)}
       >
-        <span class="block truncate">
-          {props.conversation.title || NEW_CHAT_TITLE}
-        </span>
+        <Pin class="size-3.5" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        title="Rename chat"
+        aria-label={`Rename chat: ${props.conversation.title || NEW_CHAT_TITLE}`}
+        class="text-muted-foreground hover:text-foreground hover:bg-muted shrink-0 rounded-lg px-2"
+        onClick={startEdit}
+      >
+        <Pencil class="size-3.5" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        title="Edit tags"
+        aria-label={`Edit tags: ${props.conversation.title || NEW_CHAT_TITLE}`}
+        aria-expanded={tagsOpen() ? 'true' : 'false'}
+        class={[
+          'hover:bg-muted shrink-0 rounded-lg px-2',
+          (props.conversation.tags?.length ?? 0) > 0
+            ? 'text-primary'
+            : 'text-muted-foreground hover:text-foreground',
+        ]}
+        onClick={() => setTagsOpen((o) => !o)}
+      >
+        <Tag class="size-3.5" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        title="Move to project…"
+        aria-label={`Move to project: ${props.conversation.title || NEW_CHAT_TITLE}`}
+        aria-expanded={moveOpen() ? 'true' : 'false'}
+        class={[
+          'hover:bg-muted shrink-0 rounded-lg px-2',
+          props.conversation.projectId
+            ? 'text-primary'
+            : 'text-muted-foreground hover:text-foreground',
+        ]}
+        onClick={() => setMoveOpen((o) => !o)}
+      >
+        <FolderInput class="size-3.5" aria-hidden="true" />
       </button>
       <Show
         when={confirmingDelete()}
@@ -350,7 +676,141 @@ function ConversationListItem(props: {
           Delete?
         </button>
       </Show>
+      <Show when={moveOpen()}>
+        <div
+          role="group"
+          aria-label="Move to project"
+          class="border-border bg-card basis-full space-y-0.5 rounded-lg border p-1"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.stopPropagation()
+              setMoveOpen(false)
+            }
+          }}
+        >
+          <For each={props.projects()}>
+            {(p) => (
+              <button
+                type="button"
+                class="hover:bg-muted flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs"
+                aria-pressed={
+                  props.conversation.projectId === p.id ? 'true' : 'false'
+                }
+                onClick={() => {
+                  chatActions.setConversationProject(
+                    props.conversation.id,
+                    p.id,
+                  )
+                  setMoveOpen(false)
+                }}
+              >
+                <span aria-hidden="true">{p.emoji}</span>
+                <span class="min-w-0 flex-1 truncate">{p.name}</span>
+                <Show when={props.conversation.projectId === p.id}>
+                  <span aria-hidden="true">✓</span>
+                </Show>
+              </button>
+            )}
+          </For>
+          <Show when={props.conversation.projectId}>
+            <button
+              type="button"
+              class="hover:bg-muted w-full rounded-md px-2 py-1.5 text-left text-xs"
+              onClick={() => {
+                chatActions.setConversationProject(props.conversation.id, null)
+                setMoveOpen(false)
+              }}
+            >
+              No project
+            </button>
+          </Show>
+          <button
+            type="button"
+            class="text-muted-foreground hover:bg-muted w-full rounded-md px-2 py-1.5 text-left text-xs"
+            onClick={() => {
+              setMoveOpen(false)
+              props.onNewProject()
+            }}
+          >
+            New project…
+          </button>
+        </div>
+      </Show>
+      <Show when={tagsOpen()}>
+        <TagEditor
+          conversationId={props.conversation.id}
+          tags={props.conversation.tags ?? []}
+          onClose={() => setTagsOpen(false)}
+        />
+      </Show>
     </li>
+  )
+}
+
+function TagEditor(props: {
+  conversationId: string
+  tags: string[]
+  onClose: () => void
+}) {
+  const [value, setValue] = createSignal('')
+  const commit = (v = value()) => {
+    if (!v.trim()) return
+    chatActions.setConversationTags(props.conversationId, addTag(props.tags, v))
+    setValue('')
+  }
+  return (
+    <div
+      role="group"
+      aria-label="Chat tags"
+      class="border-border bg-card basis-full space-y-1.5 rounded-lg border p-2"
+    >
+      <div class="flex flex-wrap gap-1">
+        <For each={props.tags}>
+          {(t) => (
+            <button
+              type="button"
+              aria-label={`Remove tag ${t}`}
+              class="bg-muted hover:bg-destructive/20 inline-flex max-w-full items-center gap-1 truncate rounded-full px-2 py-0.5 text-[11px]"
+              onClick={() =>
+                chatActions.setConversationTags(
+                  props.conversationId,
+                  removeTag(props.tags, t),
+                )
+              }
+            >
+              #{t} <span aria-hidden="true">×</span>
+            </button>
+          )}
+        </For>
+      </div>
+      <input
+        type="text"
+        ref={(el: HTMLInputElement) => queueMicrotask(() => el.focus())}
+        aria-label="Add tag"
+        maxlength={20}
+        disabled={props.tags.length >= 5}
+        placeholder={
+          props.tags.length >= 5 ? 'Max 5 tags' : 'Add tag, press Enter'
+        }
+        class="border-border bg-background placeholder:text-muted-foreground w-full rounded-md border px-2 py-1 text-xs"
+        value={value()}
+        onInput={(e) => {
+          const v = e.currentTarget.value
+          if (v.includes(',')) {
+            commit(v)
+          } else setValue(v)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.isComposing) {
+            e.preventDefault()
+            commit()
+          } else if (e.key === 'Escape') {
+            e.stopPropagation()
+            props.onClose()
+          }
+        }}
+      />
+    </div>
   )
 }
 
@@ -417,12 +877,21 @@ function ExportImportMenu(props: { props: ChatAppSidebarProps }) {
             Export chat (JSON)
           </button>
         </Show>
+        <Show when={props.props.currentConversationId()}>
+          <button
+            type="button"
+            class={item}
+            onClick={() => props.props.onPrintChat()}
+          >
+            Print / Save as PDF
+          </button>
+        </Show>
         <button type="button" class={item} onClick={props.props.onExportAll}>
           Export all chats (JSON)
         </button>
         <button type="button" class={item} onClick={() => fileInput?.click()}>
           <Upload class="mr-1 inline size-3" aria-hidden="true" />
-          Import JSON…
+          Import chats…
         </button>
         <input
           ref={fileInput}

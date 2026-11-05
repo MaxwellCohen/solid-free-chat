@@ -16,6 +16,19 @@ export function formatReplyTokenLine(usage: TokenUsageSnapshot): string {
   return `Reply: ${formatTokenCount(usage.promptTokens)} context · ${formatTokenCount(usage.completionTokens)} out${cost}`
 }
 
+/** "4.2s · 38 tok/s"; tokens/sec only when completion tokens are known. '' when elapsed is unusable. */
+export function formatSpeedLine(
+  elapsedMs: number,
+  completionTokens?: number,
+): string {
+  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return ''
+  const sec = elapsedMs / 1000
+  const time = sec >= 100 ? `${Math.round(sec)}s` : `${sec.toFixed(1)}s`
+  if (!completionTokens || completionTokens <= 0) return time
+  const rate = completionTokens / sec
+  return `${time} · ${rate >= 100 ? Math.round(rate) : rate.toFixed(1)} tok/s`
+}
+
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024
 export const MAX_PDF_BYTES = 12 * 1024 * 1024
 
@@ -68,6 +81,34 @@ export function guessImageMimeFromFilename(name: string): string | null {
 
 export function isImageFile(file: File): boolean {
   return file.type.startsWith('image/') || IMAGE_EXT_RE.test(file.name)
+}
+
+/** Splits dropped/pasted files by kind, gated on what the model accepts. */
+export function partitionAttachableFiles(
+  files: File[],
+  caps: { image: boolean; document: boolean },
+): { images: File[]; pdfs: File[]; error: string | null } {
+  const images: File[] = []
+  const pdfs: File[] = []
+  let blocked = false
+  let unsupported = false
+  for (const f of files) {
+    if (isPdfFile(f)) {
+      if (caps.document) pdfs.push(f)
+      else blocked = true
+    } else if (isImageFile(f)) {
+      if (caps.image) images.push(f)
+      else blocked = true
+    } else unsupported = true
+  }
+  let error: string | null = null
+  if (blocked) {
+    error =
+      'This model can’t accept some of those files. Switch models to attach them.'
+  } else if (unsupported) {
+    error = 'Only images and PDFs can be attached.'
+  }
+  return { images, pdfs, error }
 }
 
 export type PendingImage = {
@@ -137,4 +178,33 @@ export function withEditedText(
 ): ContentPart[] {
   const rest = parts.filter((p) => p.type !== 'text')
   return text ? [{ type: 'text', content: text }, ...rest] : rest
+}
+
+export const FINAL_ANSWER_NUDGE =
+  'Please give your final answer using the tool results.'
+
+/** True when a finished run ended on tool activity with no answer text after it, and was not already nudged. */
+export function needsFinalAnswerNudge(messages: UIMessage[]): boolean {
+  const last = messages[messages.length - 1] as UIMessage | undefined
+  if (last?.role !== 'assistant') {
+    return false
+  }
+  let lastToolIdx = -1
+  last.parts.forEach((p, i) => {
+    if (p.type === 'tool-call' || p.type === 'tool-result') lastToolIdx = i
+  })
+  if (lastToolIdx < 0) return false
+  return !last.parts
+    .slice(lastToolIdx + 1)
+    .some((p) => p.type === 'text' && p.content.trim().length > 0)
+}
+
+/** True when the latest user message is the automatic nudge. */
+export function wasNudged(messages: UIMessage[]): boolean {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'user') {
+      return messageToPlainText(messages[i]).trim() === FINAL_ANSWER_NUDGE
+    }
+  }
+  return false
 }

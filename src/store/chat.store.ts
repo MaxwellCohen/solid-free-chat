@@ -1,11 +1,19 @@
+import { mergeSkills } from '../lib/skill-library'
+import type { SkillDraft } from '../lib/skill-library'
 import { Store } from '@tanstack/store'
 import type { UIMessage } from '@tanstack/ai-client'
+import { lookup } from '../lib/nullable'
 import { DEFAULT_CHAT_MODEL } from '../lib/chat-models'
-import {
-  DEFAULT_ENABLED_TOOL_IDS,
-  isKnownToolId,
+import { DEFAULT_ENABLED_TOOL_IDS, isKnownToolId } from '../lib/harness/tools'
+import { normalizeTags } from '../lib/chat-tags'
+import { cleanProjectDraft, normalizeProjects } from '../lib/chat-projects'
+import type { ProjectDraft } from '../lib/chat-projects'
+import { mergeChatSettings, normalizeChatSettings } from '../lib/chat-settings'
+import type { ChatSettings } from '../lib/chat-settings'
+import type {
+  HarnessChatHistoryApi,
+  HarnessSkillsApi,
 } from '../lib/harness/tools'
-import type { HarnessChatHistoryApi, HarnessSkillsApi } from '../lib/harness/tools'
 
 /** Token counts from the provider for one completed model run (see RUN_FINISHED). */
 export interface TokenUsageSnapshot {
@@ -17,9 +25,29 @@ export interface TokenUsageSnapshot {
   recordedAt: number
 }
 
+/** One alternative reply kept after the user regenerated an assistant message. */
+export interface MessageVariant {
+  parts: UIMessage['parts']
+  tokenUsage?: TokenUsageSnapshot
+}
+
+/** Most variants kept per message; the oldest are dropped first. */
+export const MAX_MESSAGE_VARIANTS = 8
+
 /** UIMessage with optional per-reply usage (extension; persisted in local storage). */
 export type ChatUIMessage = UIMessage & {
   tokenUsage?: TokenUsageSnapshot
+  /** User starred this message; listed on the Saved page. */
+  bookmarked?: boolean
+  /** Wall-clock ms the model run took (assistant replies only). */
+  elapsedMs?: number
+  /**
+   * All versions of this reply (oldest first), including the active one.
+   * `parts`/`tokenUsage` always mirror `variants[variantIndex]`, so the active
+   * variant is what is sent as context.
+   */
+  variants?: MessageVariant[]
+  variantIndex?: number
 }
 
 /** Reusable skill: instructions composed into the system prompt when attached. */
@@ -30,12 +58,33 @@ export interface ChatSkill {
   updatedAt: number
 }
 
+/** Groups chats and shares instructions + reference notes with them. */
+export interface ChatProject {
+  id: string
+  name: string
+  emoji: string
+  instructions: string
+  /** Reference text composed into the system prompt (capped). */
+  notes: string
+  createdAt: number
+}
+
 export interface ChatConversation {
   id: string
   title: string
   updatedAt: number
+  /** Pinned chats are listed first in the sidebar. */
+  pinned?: boolean
+  /** Lowercase labels (max 5) used to filter the sidebar. */
+  tags?: string[]
+  /** Set when the user renamed the chat; disables auto-titling. */
+  titleLocked?: boolean
+  /** Project this chat belongs to (live link into `projects`). */
+  projectId?: string
   /** Ordered skill ids attached to this chat (live links into `skills`). */
   skillIds: string[]
+  /** Per-chat overrides; undefined fields use provider defaults. */
+  settings?: ChatSettings
   /** Most recent usage reported by the API for this chat. */
   lastUsage?: TokenUsageSnapshot
   /** Sum of `totalTokens` from each completed run in this chat (approx. session usage). */
@@ -55,6 +104,7 @@ export interface ChatAppState {
   currentConversationId: string | null
   selectedModel: string
   skills: ChatSkill[]
+  projects: ChatProject[]
   /** Browser-local harness tools offered to the model (see `lib/harness/tools`). */
   enabledToolIds: string[]
 }
@@ -80,6 +130,7 @@ type PersistedChatState = {
   selectedModel?: unknown
   savedSystemPrompts?: unknown
   skills?: unknown
+  projects?: unknown
   enabledToolIds?: unknown
 }
 
@@ -92,6 +143,7 @@ const emptyState = (): ChatAppState => ({
   currentConversationId: null,
   selectedModel: DEFAULT_CHAT_MODEL,
   skills: [],
+  projects: [],
   enabledToolIds: [...DEFAULT_ENABLED_TOOL_IDS],
 })
 
@@ -111,7 +163,17 @@ function newSkillId(): string {
   return `sk-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
-function newConversation(now = Date.now(), id = newConversationId()): ChatConversation {
+function newProjectId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID()
+  }
+  return `p-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+}
+
+function newConversation(
+  now = Date.now(),
+  id = newConversationId(),
+): ChatConversation {
   return {
     id,
     title: NEW_CHAT_TITLE,
@@ -144,7 +206,9 @@ export function normalizeTokenUsageSnapshot(
     promptTokens,
     completionTokens,
     totalTokens,
-    ...(typeof cost === 'number' && Number.isFinite(cost) && cost >= 0 ? { cost } : {}),
+    ...(typeof cost === 'number' && Number.isFinite(cost) && cost >= 0
+      ? { cost }
+      : {}),
     recordedAt:
       typeof recordedAt === 'number' && Number.isFinite(recordedAt)
         ? recordedAt
@@ -176,12 +240,12 @@ export function normalizeSkills(
 ): ChatSkill[] {
   if (Array.isArray(skillsRaw)) {
     return skillsRaw
-      .filter((p): p is Record<string, unknown> => p != null && typeof p === 'object')
+      .filter(
+        (p): p is Record<string, unknown> => p != null && typeof p === 'object',
+      )
       .map((p) => ({
         id:
-          typeof p.id === 'string' && p.id.trim()
-            ? p.id.trim()
-            : newSkillId(),
+          typeof p.id === 'string' && p.id.trim() ? p.id.trim() : newSkillId(),
         name:
           typeof p.name === 'string' && p.name.trim()
             ? p.name.trim().slice(0, 120)
@@ -201,12 +265,11 @@ export function normalizeSkills(
 
   if (!Array.isArray(savedSystemPromptsRaw)) return []
   return savedSystemPromptsRaw
-    .filter((p): p is Record<string, unknown> => p != null && typeof p === 'object')
+    .filter(
+      (p): p is Record<string, unknown> => p != null && typeof p === 'object',
+    )
     .map((p) => ({
-      id:
-        typeof p.id === 'string' && p.id.trim()
-          ? p.id.trim()
-          : newSkillId(),
+      id: typeof p.id === 'string' && p.id.trim() ? p.id.trim() : newSkillId(),
       name:
         typeof p.name === 'string' && p.name.trim()
           ? p.name.trim().slice(0, 120)
@@ -247,9 +310,12 @@ function normalizeConversationRecord(
   skills: ChatSkill[],
 ): ConversationNormalizeResult {
   const now = Date.now()
-  const source = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+  const source =
+    raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
   const id =
-    typeof source.id === 'string' && source.id.trim() ? source.id.trim() : fallbackId
+    typeof source.id === 'string' && source.id.trim()
+      ? source.id.trim()
+      : fallbackId
   const title =
     typeof source.title === 'string' && source.title.trim()
       ? source.title
@@ -293,10 +359,35 @@ function normalizeConversationRecord(
       title,
       updatedAt,
       skillIds,
+      ...(normalizeChatSettings(source.settings)
+        ? { settings: normalizeChatSettings(source.settings) }
+        : {}),
+      ...(source.pinned === true ? { pinned: true } : {}),
+      ...(typeof source.projectId === 'string' && source.projectId.trim()
+        ? { projectId: source.projectId.trim() }
+        : {}),
+      ...(normalizeTags(source.tags).length
+        ? { tags: normalizeTags(source.tags) }
+        : {}),
+      ...(source.titleLocked === true ? { titleLocked: true } : {}),
       ...(lastUsage ? { lastUsage } : {}),
       ...(sessionTotalTokens !== undefined ? { sessionTotalTokens } : {}),
       ...(sessionTotalCost !== undefined ? { sessionTotalCost } : {}),
     },
+  }
+}
+
+/** Removes `projectId`s that point at no known project (mutates the map). */
+function dropDanglingProjectIds(
+  conversationsById: Record<string, ChatConversation>,
+  projects: readonly { id: string }[],
+) {
+  const ids = new Set(projects.map((p) => p.id))
+  for (const [id, conversation] of Object.entries(conversationsById)) {
+    if (conversation.projectId && !ids.has(conversation.projectId)) {
+      const { projectId: _projectId, ...rest } = conversation
+      conversationsById[id] = rest
+    }
   }
 }
 
@@ -310,7 +401,7 @@ function normalizeConversationOrder(
   for (const value of raw) {
     if (typeof value !== 'string') continue
     const id = value.trim()
-    if (!id || seen.has(id) || !(id in conversationsById)) continue
+    if (!id || seen.has(id) || !Object.hasOwn(conversationsById, id)) continue
     seen.add(id)
     order.push(id)
   }
@@ -322,12 +413,60 @@ function normalizeConversationOrder(
   return order
 }
 
+function clampVariantIndex(raw: unknown, length: number): number {
+  const n = typeof raw === 'number' && Number.isInteger(raw) ? raw : length - 1
+  return Math.min(Math.max(n, 0), length - 1)
+}
+
+/** Valid variants only; fewer than two is not a choice, so it is dropped. */
+function normalizeVariants(raw: unknown): MessageVariant[] | null {
+  if (!Array.isArray(raw)) return null
+  const out: MessageVariant[] = []
+  for (const item of raw as unknown[]) {
+    if (!item || typeof item !== 'object') continue
+    const { parts, tokenUsage } = item as {
+      parts?: unknown
+      tokenUsage?: unknown
+    }
+    if (!Array.isArray(parts)) continue
+    const usage = normalizeTokenUsageSnapshot(tokenUsage)
+    out.push({
+      parts: parts as UIMessage['parts'],
+      ...(usage ? { tokenUsage: usage } : {}),
+    })
+  }
+  return out.length >= 2 ? out.slice(-MAX_MESSAGE_VARIANTS) : null
+}
+
 function normalizeMessage(raw: unknown): ChatUIMessage | null {
   if (!raw || typeof raw !== 'object') return null
-  const message = raw as UIMessage & { tokenUsage?: unknown }
+  const { bookmarked, variants, variantIndex, elapsedMs, ...message } =
+    raw as UIMessage & {
+      elapsedMs?: unknown
+      tokenUsage?: unknown
+      bookmarked?: unknown
+      variants?: unknown
+      variantIndex?: unknown
+    }
   const tokenUsage = normalizeTokenUsageSnapshot(message.tokenUsage)
+  const normalizedVariants = normalizeVariants(variants)
   return {
     ...message,
+    ...(normalizedVariants
+      ? {
+          variants: normalizedVariants,
+          variantIndex: clampVariantIndex(
+            variantIndex,
+            normalizedVariants.length,
+          ),
+        }
+      : {}),
+    ...(bookmarked === true ? { bookmarked: true } : {}),
+    ...(typeof elapsedMs === 'number' &&
+    Number.isFinite(elapsedMs) &&
+    elapsedMs > 0
+      ? { elapsedMs }
+      : {}),
     createdAt:
       message.createdAt != null
         ? new Date(message.createdAt as unknown as string | number)
@@ -369,11 +508,16 @@ function normalizePersistedChatState(raw: unknown): ChatAppState | null {
   for (const [key, value] of Object.entries(rawConversationsById)) {
     const result = normalizeConversationRecord(value, key, skills)
     skills = result.skills
+    // `__proto__` as a record key would swap the map's prototype.
+    if (result.conversation.id === '__proto__') continue
     conversationsById[result.conversation.id] = result.conversation
     messagesByConversationId[result.conversation.id] = normalizeMessages(
       rawMessagesByConversationId[result.conversation.id],
     )
   }
+
+  const projects = normalizeProjects(source.projects, newProjectId)
+  dropDanglingProjectIds(conversationsById, projects)
 
   const conversationOrder = normalizeConversationOrder(
     source.conversationOrder,
@@ -381,9 +525,9 @@ function normalizePersistedChatState(raw: unknown): ChatAppState | null {
   )
   const currentConversationId =
     typeof source.currentConversationId === 'string' &&
-    source.currentConversationId in conversationsById
+    Object.hasOwn(conversationsById, source.currentConversationId)
       ? source.currentConversationId
-      : conversationOrder[0] ?? null
+      : (conversationOrder[0] ?? null)
 
   return {
     conversationOrder,
@@ -395,6 +539,7 @@ function normalizePersistedChatState(raw: unknown): ChatAppState | null {
         ? source.selectedModel
         : DEFAULT_CHAT_MODEL,
     skills,
+    projects,
     enabledToolIds: normalizeEnabledToolIds(source.enabledToolIds),
   }
 }
@@ -408,8 +553,12 @@ function normalizeEnabledToolIds(raw: unknown): string[] {
   return [...new Set(ids)]
 }
 
-function normalizeLegacyChatState(raw: LegacyChatAppState): ChatAppState | null {
-  const legacyConversations = Array.isArray(raw.conversations) ? raw.conversations : null
+function normalizeLegacyChatState(
+  raw: LegacyChatAppState,
+): ChatAppState | null {
+  const legacyConversations = Array.isArray(raw.conversations)
+    ? raw.conversations
+    : null
   if (!legacyConversations) return null
 
   let skills = normalizeSkills(raw.skills, raw.savedSystemPrompts)
@@ -418,9 +567,17 @@ function normalizeLegacyChatState(raw: LegacyChatAppState): ChatAppState | null 
   const conversationOrder: string[] = []
 
   for (const value of legacyConversations) {
-    const result = normalizeConversationRecord(value, newConversationId(), skills)
+    const result = normalizeConversationRecord(
+      value,
+      newConversationId(),
+      skills,
+    )
     skills = result.skills
-    if (result.conversation.id in conversationsById) continue
+    if (
+      result.conversation.id === '__proto__' ||
+      Object.hasOwn(conversationsById, result.conversation.id)
+    )
+      continue
     conversationsById[result.conversation.id] = result.conversation
     messagesByConversationId[result.conversation.id] = normalizeMessages(
       value.messages,
@@ -430,9 +587,9 @@ function normalizeLegacyChatState(raw: LegacyChatAppState): ChatAppState | null 
 
   const currentConversationId =
     typeof raw.currentConversationId === 'string' &&
-    raw.currentConversationId in conversationsById
+    Object.hasOwn(conversationsById, raw.currentConversationId)
       ? raw.currentConversationId
-      : conversationOrder[0] ?? null
+      : (conversationOrder[0] ?? null)
 
   return {
     conversationOrder,
@@ -444,6 +601,7 @@ function normalizeLegacyChatState(raw: LegacyChatAppState): ChatAppState | null 
         ? raw.selectedModel
         : DEFAULT_CHAT_MODEL,
     skills,
+    projects: [],
     enabledToolIds: [...DEFAULT_ENABLED_TOOL_IDS],
   }
 }
@@ -468,11 +626,14 @@ function getConversation(
   state: ChatAppState,
   conversationId: string,
 ): ChatConversation | undefined {
-  if (!(conversationId in state.conversationsById)) return undefined
+  if (!Object.hasOwn(state.conversationsById, conversationId)) return undefined
   return state.conversationsById[conversationId]
 }
 
-function getConversationMessages(state: ChatAppState, conversationId: string): ChatUIMessage[] {
+function getConversationMessages(
+  state: ChatAppState,
+  conversationId: string,
+): ChatUIMessage[] {
   return state.messagesByConversationId[conversationId] ?? []
 }
 
@@ -491,6 +652,10 @@ function getConversationWithMessages(
 export const chatActions = {
   resetToEmpty() {
     chatStore.setState(() => emptyState())
+  },
+
+  isEmpty() {
+    return chatStore.state.conversationOrder.length === 0
   },
 
   hydrate(state: unknown) {
@@ -560,6 +725,7 @@ export const chatActions = {
             ...conversation,
             title: titleHint ? truncate(titleHint, 52) : conversation.title,
             skillIds: [...(source?.skillIds ?? [])],
+            ...(source?.projectId ? { projectId: source.projectId } : {}),
           },
         },
         messagesByConversationId: {
@@ -614,6 +780,19 @@ export const chatActions = {
     return id
   },
 
+  /** Merge skills by name; returns how many were added / updated. */
+  importSkills(incoming: SkillDraft[]) {
+    let result = { added: 0, updated: 0 }
+    chatStore.setState((s) => {
+      const merged = mergeSkills(s.skills, incoming, newSkillId)
+      result = { added: merged.added, updated: merged.updated }
+      return merged.added || merged.updated
+        ? { ...s, skills: merged.skills }
+        : s
+    })
+    return result
+  },
+
   updateSkill(
     skillId: string,
     patch: { name?: string; instructions?: string },
@@ -623,7 +802,9 @@ export const chatActions = {
       if (index < 0) return s
       const current = s.skills[index]
       const nextName =
-        patch.name !== undefined ? patch.name.trim().slice(0, 120) : current.name
+        patch.name !== undefined
+          ? patch.name.trim().slice(0, 120)
+          : current.name
       const nextInstructions =
         patch.instructions !== undefined
           ? patch.instructions.trim()
@@ -653,6 +834,24 @@ export const chatActions = {
         ...s,
         skills: s.skills.filter((skill) => skill.id !== skillId),
         conversationsById,
+      }
+    })
+  },
+
+  setConversationSettings(
+    conversationId: string,
+    patch: Partial<Record<keyof ChatSettings, unknown>> | null,
+  ) {
+    chatStore.setState((s) => {
+      const current = getConversation(s, conversationId)
+      if (!current) return s
+      const settings =
+        patch === null ? undefined : mergeChatSettings(current.settings, patch)
+      const next: ChatConversation = { ...current, settings }
+      if (!settings) delete next.settings
+      return {
+        ...s,
+        conversationsById: { ...s.conversationsById, [conversationId]: next },
       }
     })
   },
@@ -699,10 +898,140 @@ export const chatActions = {
     })
   },
 
+  togglePinned(id: string) {
+    chatStore.setState((s) => {
+      const conversation = getConversation(s, id)
+      if (!conversation) return s
+      const { pinned: _pinned, ...rest } = conversation
+      return {
+        ...s,
+        conversationsById: {
+          ...s.conversationsById,
+          [id]: conversation.pinned ? rest : { ...rest, pinned: true },
+        },
+      }
+    })
+  },
+
+  createProject(draft: ProjectDraft): string | undefined {
+    const clean = cleanProjectDraft(draft)
+    if (!clean) return undefined
+    const id = newProjectId()
+    chatStore.setState((s) => ({
+      ...s,
+      projects: [...s.projects, { id, ...clean, createdAt: Date.now() }],
+    }))
+    return id
+  },
+
+  updateProject(id: string, draft: ProjectDraft) {
+    const clean = cleanProjectDraft(draft)
+    if (!clean) return
+    chatStore.setState((s) => ({
+      ...s,
+      projects: s.projects.map((p) => (p.id === id ? { ...p, ...clean } : p)),
+    }))
+  },
+
+  /** Removes the project; its chats are ungrouped, never deleted. */
+  deleteProject(id: string) {
+    chatStore.setState((s) => {
+      const conversationsById = { ...s.conversationsById }
+      for (const [cid, c] of Object.entries(conversationsById)) {
+        if (c.projectId === id) {
+          const { projectId: _projectId, ...rest } = c
+          conversationsById[cid] = rest
+        }
+      }
+      return {
+        ...s,
+        projects: s.projects.filter((p) => p.id !== id),
+        conversationsById,
+      }
+    })
+  },
+
+  /** Moves a chat into a project, or out of any project when `projectId` is null. */
+  setConversationProject(id: string, projectId: string | null) {
+    chatStore.setState((s) => {
+      const conversation = getConversation(s, id)
+      if (!conversation) return s
+      const { projectId: _projectId, ...rest } = conversation
+      const valid =
+        projectId != null && s.projects.some((p) => p.id === projectId)
+      return {
+        ...s,
+        conversationsById: {
+          ...s.conversationsById,
+          [id]: valid ? { ...rest, projectId } : rest,
+        },
+      }
+    })
+  },
+
+  /** New chat inside `projectId`; returns the chat id. */
+  createConversationInProject(projectId: string) {
+    const id = chatActions.createConversation()
+    chatActions.setConversationProject(id, projectId)
+    return id
+  },
+
+  setConversationTags(id: string, tags: string[]) {
+    chatStore.setState((s) => {
+      const conversation = getConversation(s, id)
+      if (!conversation) return s
+      const { tags: _tags, ...rest } = conversation
+      const next = normalizeTags(tags)
+      return {
+        ...s,
+        conversationsById: {
+          ...s.conversationsById,
+          [id]: next.length ? { ...rest, tags: next } : rest,
+        },
+      }
+    })
+  },
+
+  renameConversation(id: string, title: string) {
+    chatStore.setState((s) => {
+      const conversation = getConversation(s, id)
+      if (!conversation) return s
+      const trimmed = title.trim()
+      return {
+        ...s,
+        conversationsById: {
+          ...s.conversationsById,
+          [id]: {
+            ...conversation,
+            title: trimmed || NEW_CHAT_TITLE,
+            ...(trimmed ? { titleLocked: true } : {}),
+          },
+        },
+      }
+    })
+  },
+
+  /** Model-generated title; unlike rename it does not lock the title. */
+  setAutoTitle(id: string, title: string) {
+    chatStore.setState((s) => {
+      const conversation = getConversation(s, id)
+      const next = truncate(title.trim(), 52)
+      if (!conversation || conversation.titleLocked || !next) return s
+      return {
+        ...s,
+        conversationsById: {
+          ...s.conversationsById,
+          [id]: { ...conversation, title: next },
+        },
+      }
+    })
+  },
+
   deleteConversation(id: string) {
     chatStore.setState((s) => {
       if (!(id in s.conversationsById)) return s
-      const { [id]: _removedConversation, ...conversationsById } = s.conversationsById
+      const { [id]: _removedConversation, ...conversationsById } =
+        s.conversationsById
       const { [id]: _removedMessages, ...messagesByConversationId } =
         s.messagesByConversationId
       const conversationOrder = s.conversationOrder.filter(
@@ -741,10 +1070,43 @@ export const chatActions = {
             lastUsage: { ...usage, recordedAt },
             sessionTotalTokens: prevSession + usage.totalTokens,
             ...(usage.cost !== undefined
-              ? { sessionTotalCost: (conversation.sessionTotalCost ?? 0) + usage.cost }
+              ? {
+                  sessionTotalCost:
+                    (conversation.sessionTotalCost ?? 0) + usage.cost,
+                }
               : {}),
             updatedAt: Date.now(),
           },
+        },
+      }
+    })
+  },
+
+  /** Show another stored version of a regenerated reply. */
+  setMessageVariant(conversationId: string, messageId: string, index: number) {
+    chatStore.setState((s) => {
+      const messages = lookup(s.messagesByConversationId, conversationId)
+      if (!messages?.some((m) => m.id === messageId)) return s
+      return {
+        ...s,
+        messagesByConversationId: {
+          ...s.messagesByConversationId,
+          [conversationId]: switchVariantInMessages(messages, messageId, index),
+        },
+      }
+    })
+  },
+
+  /** Flip the bookmark flag on one message. */
+  toggleMessageBookmark(conversationId: string, messageId: string) {
+    chatStore.setState((s) => {
+      const messages = lookup(s.messagesByConversationId, conversationId)
+      if (!messages?.some((m) => m.id === messageId)) return s
+      return {
+        ...s,
+        messagesByConversationId: {
+          ...s.messagesByConversationId,
+          [conversationId]: toggleBookmarkInMessages(messages, messageId),
         },
       }
     })
@@ -757,7 +1119,11 @@ export const chatActions = {
       if (!conversation) return s
       const titleHint = deriveTitleFromMessages(messages)
       let title = conversation.title
-      if (conversation.title === NEW_CHAT_TITLE && titleHint) {
+      if (
+        conversation.title === NEW_CHAT_TITLE &&
+        !conversation.titleLocked &&
+        titleHint
+      ) {
         title = truncate(titleHint, 52)
       }
       return {
@@ -780,16 +1146,22 @@ export const chatActions = {
 }
 
 export const chatSelectors = {
-  currentConversation(state: ChatAppState): ChatConversationWithMessages | undefined {
+  currentConversation(
+    state: ChatAppState,
+  ): ChatConversationWithMessages | undefined {
     const id = state.currentConversationId
     if (!id) return undefined
     return getConversationWithMessages(state, id)
   },
 
   conversationList(state: ChatAppState): ChatConversation[] {
-    return state.conversationOrder
+    const all = state.conversationOrder
       .map((id) => getConversation(state, id))
-      .filter((conversation): conversation is ChatConversation => conversation != null)
+      .filter(
+        (conversation): conversation is ChatConversation =>
+          conversation != null,
+      )
+    return [...all.filter((c) => c.pinned), ...all.filter((c) => !c.pinned)]
   },
 
   conversationMessages(
@@ -799,10 +1171,7 @@ export const chatSelectors = {
     return getConversationMessages(state, conversationId)
   },
 
-  attachedSkills(
-    state: ChatAppState,
-    conversationId: string,
-  ): ChatSkill[] {
+  attachedSkills(state: ChatAppState, conversationId: string): ChatSkill[] {
     const conversation = getConversation(state, conversationId)
     if (!conversation) return []
     const byId = new Map(state.skills.map((skill) => [skill.id, skill]))
@@ -833,6 +1202,86 @@ export function attachTokenUsageToLastAssistantMessage(
   return next
 }
 
+/** Attach run duration to the last assistant message. */
+export function attachElapsedToLastAssistantMessage(
+  messages: ChatUIMessage[],
+  elapsedMs: number,
+): ChatUIMessage[] {
+  const next = messages.slice()
+  for (let i = next.length - 1; i >= 0; i--) {
+    if (next[i].role === 'assistant') {
+      next[i] = { ...next[i], elapsedMs }
+      break
+    }
+  }
+  return next
+}
+
+/** The message's variant list and active index, with the active entry refreshed from the message. */
+export function snapshotVariants(message: ChatUIMessage): {
+  variants: MessageVariant[]
+  index: number
+} {
+  const current: MessageVariant = {
+    parts: message.parts,
+    ...(message.tokenUsage ? { tokenUsage: message.tokenUsage } : {}),
+  }
+  if (!message.variants?.length) return { variants: [current], index: 0 }
+  const index = clampVariantIndex(message.variantIndex, message.variants.length)
+  const variants = message.variants.slice()
+  variants[index] = current
+  return { variants, index }
+}
+
+/** Attach earlier versions (`prev`) to a freshly regenerated reply, which becomes the active one. */
+export function withRegeneratedVariants(
+  message: ChatUIMessage,
+  prev: { variants: MessageVariant[] },
+): ChatUIMessage {
+  const variants = [
+    ...prev.variants,
+    {
+      parts: message.parts,
+      ...(message.tokenUsage ? { tokenUsage: message.tokenUsage } : {}),
+    },
+  ].slice(-MAX_MESSAGE_VARIANTS)
+  return { ...message, variants, variantIndex: variants.length - 1 }
+}
+
+/** Make variant `index` the active content of one message. */
+export function switchVariantInMessages(
+  messages: ChatUIMessage[],
+  messageId: string,
+  index: number,
+): ChatUIMessage[] {
+  return messages.map((m) => {
+    if (m.id !== messageId) return m
+    const { variants } = snapshotVariants(m)
+    if (variants.length < 2 || index < 0 || index >= variants.length) return m
+    const { tokenUsage: _drop, elapsedMs: _elapsed, ...rest } = m
+    const target = variants[index]
+    return {
+      ...rest,
+      parts: target.parts,
+      ...(target.tokenUsage ? { tokenUsage: target.tokenUsage } : {}),
+      variants,
+      variantIndex: index,
+    }
+  })
+}
+
+/** Toggle `bookmarked` on one message, dropping the key when cleared. */
+export function toggleBookmarkInMessages(
+  messages: ChatUIMessage[],
+  messageId: string,
+): ChatUIMessage[] {
+  return messages.map((m) => {
+    if (m.id !== messageId) return m
+    const { bookmarked, ...rest } = m
+    return bookmarked ? rest : { ...rest, bookmarked: true }
+  })
+}
+
 function deriveTitleFromMessages(messages: UIMessage[]): string | null {
   for (const m of messages) {
     if (m.role !== 'user') continue
@@ -847,9 +1296,11 @@ function deriveTitleFromMessages(messages: UIMessage[]): string | null {
 }
 
 /** Skill operations for harness tools, scoped to one conversation's attachments. */
-export function createConversationSkillsApi(conversationId: string): HarnessSkillsApi {
+export function createConversationSkillsApi(
+  conversationId: string,
+): HarnessSkillsApi {
   const attachedIds = () =>
-    chatStore.state.conversationsById[conversationId]?.skillIds ?? []
+    lookup(chatStore.state.conversationsById, conversationId)?.skillIds ?? []
   const exists = (skillId: string) =>
     chatStore.state.skills.some((skill) => skill.id === skillId)
   return {
@@ -865,9 +1316,13 @@ export function createConversationSkillsApi(conversationId: string): HarnessSkil
     create: (name, instructions) => chatActions.addSkill(name, instructions),
     update: (skillId, patch) => {
       if (!exists(skillId)) return false
-      const before = chatStore.state.skills.find((skill) => skill.id === skillId)
+      const before = chatStore.state.skills.find(
+        (skill) => skill.id === skillId,
+      )
       chatActions.updateSkill(skillId, patch)
-      return chatStore.state.skills.find((skill) => skill.id === skillId) !== before
+      return (
+        chatStore.state.skills.find((skill) => skill.id === skillId) !== before
+      )
     },
     setAttached: (skillId, attached) => {
       if (!exists(skillId)) return false
@@ -881,7 +1336,9 @@ export function createConversationSkillsApi(conversationId: string): HarnessSkil
 }
 
 /** Read-only access to every saved chat except `conversationId`, for the history tools. */
-export function createChatHistoryApi(conversationId: string): HarnessChatHistoryApi {
+export function createChatHistoryApi(
+  conversationId: string,
+): HarnessChatHistoryApi {
   return {
     list: () =>
       chatSelectors

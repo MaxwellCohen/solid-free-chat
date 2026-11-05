@@ -58,9 +58,14 @@ function replaceWithSvg(pre: Element, svg: string) {
  * streaming). Blocks that fail to parse — e.g. still streaming — stay as code.
  * Returns a cancel function.
  */
-export function enhanceMermaidBlocks(root: HTMLElement, delayMs = 300): () => void {
+export function enhanceMermaidBlocks(
+  root: HTMLElement,
+  delayMs = 300,
+): () => void {
   const pending: HTMLElement[] = []
-  for (const pre of root.querySelectorAll<HTMLElement>('pre[data-lang="mermaid"]')) {
+  for (const pre of root.querySelectorAll<HTMLElement>(
+    'pre[data-lang="mermaid"]',
+  )) {
     const svg = svgCache.get(pre.textContent)
     if (svg) replaceWithSvg(pre, svg)
     else pending.push(pre)
@@ -68,13 +73,14 @@ export function enhanceMermaidBlocks(root: HTMLElement, delayMs = 300): () => vo
   if (pending.length === 0) return () => {}
 
   let cancelled = false
+  const isCancelled = () => cancelled
   const timer = setTimeout(() => {
     void (async () => {
       for (const pre of pending) {
         if (cancelled) return
         try {
           const svg = await renderMermaidSvg(pre.textContent)
-          if (!cancelled && pre.isConnected) replaceWithSvg(pre, svg)
+          if (!isCancelled() && pre.isConnected) replaceWithSvg(pre, svg)
         } catch {
           // Invalid or incomplete diagram: leave the source visible.
         }

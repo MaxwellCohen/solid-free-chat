@@ -3,18 +3,25 @@ import type { Accessor } from 'solid-js'
 
 import type { ThemeContextValue } from './theme-context'
 import {
+  ACCENT_STORAGE_KEY,
+  readStoredAccent,
   readStoredPreference,
   resolveEffectiveTheme,
   THEME_STORAGE_KEY,
+  writeStoredAccent,
   writeStoredPreference,
 } from './theme-preference'
-import type { ThemePreference } from './theme-preference'
+import type { AccentPreference, ThemePreference } from './theme-preference'
 
 export function createThemeController(): ThemeContextValue & {
   htmlClass: Accessor<string>
 } {
   const [preference, setPreferenceState] = createSignal<ThemePreference>(
     typeof window === 'undefined' ? 'system' : readStoredPreference(),
+  )
+
+  const [accent, setAccentState] = createSignal<AccentPreference>(
+    typeof window === 'undefined' ? 'default' : readStoredAccent(),
   )
 
   const [systemDark, setSystemDark] = createSignal(
@@ -33,6 +40,11 @@ export function createThemeController(): ThemeContextValue & {
     writeStoredPreference(pref)
   }
 
+  const setAccent = (a: AccentPreference) => {
+    setAccentState(a)
+    writeStoredAccent(a)
+  }
+
   onSettled(() => {
     if (typeof window === 'undefined') return
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
@@ -45,8 +57,14 @@ export function createThemeController(): ThemeContextValue & {
     }
 
     const onStorage = (e: StorageEvent) => {
-      if (e.key !== null && e.key !== THEME_STORAGE_KEY) return
+      if (
+        e.key !== null &&
+        e.key !== THEME_STORAGE_KEY &&
+        e.key !== ACCENT_STORAGE_KEY
+      )
+        return
       setPreferenceState(readStoredPreference())
+      setAccentState(readStoredAccent())
     }
     window.addEventListener('storage', onStorage)
 
@@ -64,7 +82,15 @@ export function createThemeController(): ThemeContextValue & {
     },
   )
 
+  createEffect(accent, (a) => {
+    if (typeof document === 'undefined') return
+    if (a === 'default') document.documentElement.removeAttribute('data-accent')
+    else document.documentElement.setAttribute('data-accent', a)
+  })
+
   return {
+    accent,
+    setAccent,
     preference,
     setPreference,
     effective,

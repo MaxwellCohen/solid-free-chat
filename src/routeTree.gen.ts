@@ -11,10 +11,15 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
+import { Route as ArenaRouteImport } from './routes/arena'
 import { Route as DevRouteImport } from './routes/dev'
 import { Route as HarnessSandboxRouteImport } from './routes/harness-sandbox'
+import { Route as InsightsRouteImport } from './routes/insights'
 import { Route as ReviewRouteImport } from './routes/review'
+import { Route as RoundtableRouteImport } from './routes/roundtable'
+import { Route as SavedRouteImport } from './routes/saved'
 import { Route as ShareRouteImport } from './routes/share'
+import { Route as StudyRouteImport } from './routes/study'
 import { Route as ApiFreeModelsRouteImport } from './routes/api.free-models'
 import { Route as ExampleChatRouteImport } from './routes/example.chat'
 
@@ -28,6 +33,11 @@ const AboutRoute = AboutRouteImport.update({
   path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ArenaRoute = ArenaRouteImport.update({
+  id: '/arena',
+  path: '/arena',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DevRoute = DevRouteImport.update({
   id: '/dev',
   path: '/dev',
@@ -38,14 +48,34 @@ const HarnessSandboxRoute = HarnessSandboxRouteImport.update({
   path: '/harness-sandbox',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InsightsRoute = InsightsRouteImport.update({
+  id: '/insights',
+  path: '/insights',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ReviewRoute = ReviewRouteImport.update({
   id: '/review',
   path: '/review',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RoundtableRoute = RoundtableRouteImport.update({
+  id: '/roundtable',
+  path: '/roundtable',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SavedRoute = SavedRouteImport.update({
+  id: '/saved',
+  path: '/saved',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ShareRoute = ShareRouteImport.update({
   id: '/share',
   path: '/share',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudyRoute = StudyRouteImport.update({
+  id: '/study',
+  path: '/study',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiFreeModelsRoute = ApiFreeModelsRouteImport.update({
@@ -62,20 +92,30 @@ const ExampleChatRoute = ExampleChatRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/arena': typeof ArenaRoute
   '/dev': typeof DevRoute
   '/harness-sandbox': typeof HarnessSandboxRoute
+  '/insights': typeof InsightsRoute
   '/review': typeof ReviewRoute
+  '/roundtable': typeof RoundtableRoute
+  '/saved': typeof SavedRoute
   '/share': typeof ShareRoute
+  '/study': typeof StudyRoute
   '/api/free-models': typeof ApiFreeModelsRoute
   '/example/chat': typeof ExampleChatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/arena': typeof ArenaRoute
   '/dev': typeof DevRoute
   '/harness-sandbox': typeof HarnessSandboxRoute
+  '/insights': typeof InsightsRoute
   '/review': typeof ReviewRoute
+  '/roundtable': typeof RoundtableRoute
+  '/saved': typeof SavedRoute
   '/share': typeof ShareRoute
+  '/study': typeof StudyRoute
   '/api/free-models': typeof ApiFreeModelsRoute
   '/example/chat': typeof ExampleChatRoute
 }
@@ -83,10 +123,15 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/arena': typeof ArenaRoute
   '/dev': typeof DevRoute
   '/harness-sandbox': typeof HarnessSandboxRoute
+  '/insights': typeof InsightsRoute
   '/review': typeof ReviewRoute
+  '/roundtable': typeof RoundtableRoute
+  '/saved': typeof SavedRoute
   '/share': typeof ShareRoute
+  '/study': typeof StudyRoute
   '/api/free-models': typeof ApiFreeModelsRoute
   '/example/chat': typeof ExampleChatRoute
 }
@@ -95,30 +140,45 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/about'
+    | '/arena'
     | '/dev'
     | '/harness-sandbox'
+    | '/insights'
     | '/review'
+    | '/roundtable'
+    | '/saved'
     | '/share'
+    | '/study'
     | '/api/free-models'
     | '/example/chat'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/about'
+    | '/arena'
     | '/dev'
     | '/harness-sandbox'
+    | '/insights'
     | '/review'
+    | '/roundtable'
+    | '/saved'
     | '/share'
+    | '/study'
     | '/api/free-models'
     | '/example/chat'
   id:
     | '__root__'
     | '/'
     | '/about'
+    | '/arena'
     | '/dev'
     | '/harness-sandbox'
+    | '/insights'
     | '/review'
+    | '/roundtable'
+    | '/saved'
     | '/share'
+    | '/study'
     | '/api/free-models'
     | '/example/chat'
   fileRoutesById: FileRoutesById
@@ -126,10 +186,15 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
+  ArenaRoute: typeof ArenaRoute
   DevRoute: typeof DevRoute
   HarnessSandboxRoute: typeof HarnessSandboxRoute
+  InsightsRoute: typeof InsightsRoute
   ReviewRoute: typeof ReviewRoute
+  RoundtableRoute: typeof RoundtableRoute
+  SavedRoute: typeof SavedRoute
   ShareRoute: typeof ShareRoute
+  StudyRoute: typeof StudyRoute
   ApiFreeModelsRoute: typeof ApiFreeModelsRoute
   ExampleChatRoute: typeof ExampleChatRoute
 }
@@ -150,6 +215,13 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/arena': {
+      id: '/arena'
+      path: '/arena'
+      fullPath: '/arena'
+      preLoaderRoute: typeof ArenaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dev': {
       id: '/dev'
       path: '/dev'
@@ -164,6 +236,13 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof HarnessSandboxRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/insights': {
+      id: '/insights'
+      path: '/insights'
+      fullPath: '/insights'
+      preLoaderRoute: typeof InsightsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/review': {
       id: '/review'
       path: '/review'
@@ -171,11 +250,32 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof ReviewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/roundtable': {
+      id: '/roundtable'
+      path: '/roundtable'
+      fullPath: '/roundtable'
+      preLoaderRoute: typeof RoundtableRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/saved': {
+      id: '/saved'
+      path: '/saved'
+      fullPath: '/saved'
+      preLoaderRoute: typeof SavedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/share': {
       id: '/share'
       path: '/share'
       fullPath: '/share'
       preLoaderRoute: typeof ShareRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/study': {
+      id: '/study'
+      path: '/study'
+      fullPath: '/study'
+      preLoaderRoute: typeof StudyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/free-models': {
@@ -198,10 +298,15 @@ declare module '@tanstack/solid-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
+  ArenaRoute: ArenaRoute,
   DevRoute: DevRoute,
   HarnessSandboxRoute: HarnessSandboxRoute,
+  InsightsRoute: InsightsRoute,
   ReviewRoute: ReviewRoute,
+  RoundtableRoute: RoundtableRoute,
+  SavedRoute: SavedRoute,
   ShareRoute: ShareRoute,
+  StudyRoute: StudyRoute,
   ApiFreeModelsRoute: ApiFreeModelsRoute,
   ExampleChatRoute: ExampleChatRoute,
 }

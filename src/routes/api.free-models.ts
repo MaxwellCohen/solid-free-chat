@@ -2,8 +2,8 @@ import { createFileRoute } from '@tanstack/solid-router'
 import {
   MODELS_DEV_URL,
   buildFreeModelsCatalog,
-  type FreeModelsCatalog,
 } from '../lib/free-models-catalog'
+import type { FreeModelsCatalog } from '../lib/free-models-catalog'
 
 const FRESH_MS = 60 * 60_000
 let memo: { body: string; fetchedAt: number } | undefined

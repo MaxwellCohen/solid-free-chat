@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/solid-router'
 import { For, Show, createMemo, createSignal, onSettled } from 'solid-js'
 
-import { runAgent } from '../lib/harness/run-agent'
+import { runAgent } from '../lib/harness/run-agent-lazy'
 import { ModelSelect } from '../components/ModelSelect'
 import { loadToolModelSelection } from '../lib/model-options'
 import type { ModelSelection } from '../lib/model-options'
@@ -12,9 +12,8 @@ import {
   buildReviewSystemPrompt,
   parseReviewComments,
   segmentText,
-  type ReviewComment,
-  type ReviewFocus,
 } from '../lib/writing-review'
+import type { ReviewComment, ReviewFocus } from '../lib/writing-review'
 
 export const Route = createFileRoute('/review')({
   component: Review,
