@@ -75,11 +75,12 @@ The app serves at `http://localhost:3000`.
 - **Per-chat settings** (system prompt, parameters) and **starter prompts** on empty chats
 - **Insights:** usage and cost stats across your chats; optional spend warning
 - **Arena:** compare two models side by side on one prompt
+- **Study (`/study`):** generate 5-12 flashcards from the current chat or pasted text with the selected free model, review with spaced repetition (Space flips, 1/2/3 = Again/Good/Easy), decks stored locally, export as JSON or Anki TSV
 - **Accent color themes** alongside light / dark
 - **Follow-up suggestions** after each reply
 - **Attachments:** drag-and-drop or paste images and PDFs (gated by what the model accepts)
 - **Find in chat** (Mod+F): highlights matches, Enter / Shift+Enter to step, Esc to close
-- **Personas**, **Roundtable** (personas discuss a topic), **Saved messages**, chat **tags**, **reply variants**, **quote reply**, message **keyboard navigation**, a **context meter** with compact, free **calculate / Wikipedia / weather** tools, and **print / PDF export**
+- **Personas**, **Roundtable** (personas discuss a topic), **Saved messages**, chat **tags**, **reply variants**, **quote reply**, message **keyboard navigation**, a **context meter** with compact, free **calculate / Wikipedia / weather / image generation** tools, and **print / PDF export**
 - **What's new / Tour:** a feature tour (command palette entry or the `?` toolbar button), shown once to returning users
 - **Installable PWA:** works offline for the app shell and saved chats, with an offline indicator (model calls still need a network)
 
@@ -122,6 +123,7 @@ Limits: whatever JavaScript this site serves can read the key while you use it â
 | `random`                                                            | on      | Dice (`2d6+1`), coin flip, or pick from a list                                                           |
 | `wikipedia_lookup`                                                  | off     | Article summary + URL from en.wikipedia.org (keyless; sends the query to Wikipedia)                      |
 | `get_weather`                                                       | off     | Current + 3-day forecast via Open-Meteo (keyless; sends the place name to Open-Meteo)                    |
+| `generate_image`                                                    | off     | Image card from a Pollinations URL (keyless; sends the prompt to image.pollinations.ai, no referrer)     |
 
 Code tools run inside a `sandbox="allow-scripts"` iframe (opaque origin), so they cannot read the app's localStorage, API key, or DOM. To add a tool, define it with `toolDefinition(...)` in `src/lib/harness/tools.ts` and append a descriptor to `HARNESS_TOOLS`; because `chat()` runs in the browser, `.server(execute)` tools execute locally.
 

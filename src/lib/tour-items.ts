@@ -3,6 +3,7 @@ export type TourAction =
   | 'composer'
   | 'personas'
   | 'arena'
+  | 'study'
   | 'roundtable'
   | 'insights'
   | 'saved'
@@ -56,6 +57,15 @@ export const TOUR_ITEMS: readonly TourItem[] = [
     description: 'Compare two models side by side and vote on the winner.',
     how: 'Command palette: Open arena',
     action: 'arena',
+  },
+  {
+    id: 'study',
+    emoji: '🎓',
+    title: 'Study mode',
+    description:
+      'Turn a chat or notes into flashcards and review them with spaced repetition.',
+    how: 'Command palette: Open study mode',
+    action: 'study',
   },
   {
     id: 'roundtable',
@@ -139,7 +149,8 @@ export const TOUR_ITEMS: readonly TourItem[] = [
     id: 'tools',
     emoji: '🧮',
     title: 'Free tools',
-    description: 'Models can calculate, look up Wikipedia and check weather.',
+    description:
+      'Models can calculate, look up Wikipedia, check weather and draw images.',
     how: 'Toolbar Tools menu',
     action: 'composer',
     actionLabel: 'Back to chat',

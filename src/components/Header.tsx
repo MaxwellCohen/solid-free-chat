@@ -56,6 +56,7 @@ const NAV_LINKS = [
   { to: '/saved', label: 'Saved' },
   { to: '/insights', label: 'Insights' },
   { to: '/arena', label: 'Arena' },
+  { to: '/study', label: 'Study' },
   { to: '/roundtable', label: 'Roundtable' },
   { to: '/dev', label: 'Dev' },
   { to: '/about', label: 'About' },

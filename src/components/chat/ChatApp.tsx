@@ -184,6 +184,9 @@ export default function ChatApp() {
       case 'arena':
         void navigate({ to: '/arena' })
         break
+      case 'study':
+        void navigate({ to: '/study' })
+        break
       case 'roundtable':
         void navigate({ to: '/roundtable' })
         break
@@ -745,6 +748,12 @@ export default function ChatApp() {
         label: 'Open arena',
         keywords: 'compare models side by side vote leaderboard',
         run: () => void navigate({ to: '/arena' }),
+      },
+      {
+        id: 'openStudy',
+        label: 'Open study mode',
+        keywords: 'flashcards spaced repetition quiz learn review anki',
+        run: () => void navigate({ to: '/study' }),
       },
       {
         id: 'openRoundtable',

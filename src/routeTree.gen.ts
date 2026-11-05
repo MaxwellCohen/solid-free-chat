@@ -19,6 +19,7 @@ import { Route as ReviewRouteImport } from './routes/review'
 import { Route as RoundtableRouteImport } from './routes/roundtable'
 import { Route as SavedRouteImport } from './routes/saved'
 import { Route as ShareRouteImport } from './routes/share'
+import { Route as StudyRouteImport } from './routes/study'
 import { Route as ApiFreeModelsRouteImport } from './routes/api.free-models'
 import { Route as ExampleChatRouteImport } from './routes/example.chat'
 
@@ -72,6 +73,11 @@ const ShareRoute = ShareRouteImport.update({
   path: '/share',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StudyRoute = StudyRouteImport.update({
+  id: '/study',
+  path: '/study',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiFreeModelsRoute = ApiFreeModelsRouteImport.update({
   id: '/api/free-models',
   path: '/api/free-models',
@@ -94,6 +100,7 @@ export interface FileRoutesByFullPath {
   '/roundtable': typeof RoundtableRoute
   '/saved': typeof SavedRoute
   '/share': typeof ShareRoute
+  '/study': typeof StudyRoute
   '/api/free-models': typeof ApiFreeModelsRoute
   '/example/chat': typeof ExampleChatRoute
 }
@@ -108,6 +115,7 @@ export interface FileRoutesByTo {
   '/roundtable': typeof RoundtableRoute
   '/saved': typeof SavedRoute
   '/share': typeof ShareRoute
+  '/study': typeof StudyRoute
   '/api/free-models': typeof ApiFreeModelsRoute
   '/example/chat': typeof ExampleChatRoute
 }
@@ -123,6 +131,7 @@ export interface FileRoutesById {
   '/roundtable': typeof RoundtableRoute
   '/saved': typeof SavedRoute
   '/share': typeof ShareRoute
+  '/study': typeof StudyRoute
   '/api/free-models': typeof ApiFreeModelsRoute
   '/example/chat': typeof ExampleChatRoute
 }
@@ -139,6 +148,7 @@ export interface FileRouteTypes {
     | '/roundtable'
     | '/saved'
     | '/share'
+    | '/study'
     | '/api/free-models'
     | '/example/chat'
   fileRoutesByTo: FileRoutesByTo
@@ -153,6 +163,7 @@ export interface FileRouteTypes {
     | '/roundtable'
     | '/saved'
     | '/share'
+    | '/study'
     | '/api/free-models'
     | '/example/chat'
   id:
@@ -167,6 +178,7 @@ export interface FileRouteTypes {
     | '/roundtable'
     | '/saved'
     | '/share'
+    | '/study'
     | '/api/free-models'
     | '/example/chat'
   fileRoutesById: FileRoutesById
@@ -182,6 +194,7 @@ export interface RootRouteChildren {
   RoundtableRoute: typeof RoundtableRoute
   SavedRoute: typeof SavedRoute
   ShareRoute: typeof ShareRoute
+  StudyRoute: typeof StudyRoute
   ApiFreeModelsRoute: typeof ApiFreeModelsRoute
   ExampleChatRoute: typeof ExampleChatRoute
 }
@@ -258,6 +271,13 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof ShareRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/study': {
+      id: '/study'
+      path: '/study'
+      fullPath: '/study'
+      preLoaderRoute: typeof StudyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/free-models': {
       id: '/api/free-models'
       path: '/api/free-models'
@@ -286,6 +306,7 @@ const rootRouteChildren: RootRouteChildren = {
   RoundtableRoute: RoundtableRoute,
   SavedRoute: SavedRoute,
   ShareRoute: ShareRoute,
+  StudyRoute: StudyRoute,
   ApiFreeModelsRoute: ApiFreeModelsRoute,
   ExampleChatRoute: ExampleChatRoute,
 }
