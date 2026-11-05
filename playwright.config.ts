@@ -5,6 +5,9 @@ const prodPort = port + 1
 
 export default defineConfig({
   testDir: './e2e',
+  // The dev server compiles routes lazily, so the first hit of a cold run is slow.
+  timeout: 60_000,
+  retries: 1,
   projects: [
     {
       name: 'dev',
