@@ -15,6 +15,7 @@ import keyRound from 'lucide/dist/esm/icons/key-round.mjs'
 import keyboard from 'lucide/dist/esm/icons/keyboard.mjs'
 import loaderCircle from 'lucide/dist/esm/icons/loader-circle.mjs'
 import monitor from 'lucide/dist/esm/icons/monitor.mjs'
+import mic from 'lucide/dist/esm/icons/mic.mjs'
 import moon from 'lucide/dist/esm/icons/moon.mjs'
 import panelLeftClose from 'lucide/dist/esm/icons/panel-left-close.mjs'
 import panelLeft from 'lucide/dist/esm/icons/panel-left.mjs'
@@ -23,8 +24,10 @@ import pin from 'lucide/dist/esm/icons/pin.mjs'
 import rotateCw from 'lucide/dist/esm/icons/rotate-cw.mjs'
 import share2 from 'lucide/dist/esm/icons/share-2.mjs'
 import squarePen from 'lucide/dist/esm/icons/square-pen.mjs'
+import square from 'lucide/dist/esm/icons/square.mjs'
 import sun from 'lucide/dist/esm/icons/sun.mjs'
 import wrench from 'lucide/dist/esm/icons/wrench.mjs'
+import volume2 from 'lucide/dist/esm/icons/volume-2.mjs'
 import upload from 'lucide/dist/esm/icons/upload.mjs'
 import x from 'lucide/dist/esm/icons/x.mjs'
 
@@ -73,6 +76,7 @@ export const Image = createIcon(image)
 export const KeyRound = createIcon(keyRound)
 export const Keyboard = createIcon(keyboard)
 export const LoaderCircle = createIcon(loaderCircle)
+export const Mic = createIcon(mic)
 export const Moon = createIcon(moon)
 export const PanelLeft = createIcon(panelLeft)
 export const PanelLeftClose = createIcon(panelLeftClose)
@@ -81,7 +85,9 @@ export const Pin = createIcon(pin)
 export const RotateCw = createIcon(rotateCw)
 export const Share2 = createIcon(share2)
 export const SquarePen = createIcon(squarePen)
+export const Square = createIcon(square)
 export const Sun = createIcon(sun)
+export const Volume2 = createIcon(volume2)
 export const Wrench = createIcon(wrench)
 export const Upload = createIcon(upload)
 export const X = createIcon(x)

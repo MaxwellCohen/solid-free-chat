@@ -8,7 +8,21 @@ import {
 } from '../../lib/scroll-to-message'
 import { createVirtualizer } from '../../lib/create-virtualizer'
 import type { VirtualItem, Virtualizer } from '../../lib/create-virtualizer'
-import { Check, Copy, GitBranch, Pencil, RotateCw } from '../icons'
+import {
+  Check,
+  Copy,
+  GitBranch,
+  Pencil,
+  RotateCw,
+  Square,
+  Volume2,
+} from '../icons'
+import {
+  isSpeechSynthesisSupported,
+  speak,
+  speakingId,
+  stopSpeaking,
+} from '../../lib/speech'
 import type { ChatUIMessage } from '../../store/chat.store'
 import {
   formatReplyTokenLine,
@@ -344,6 +358,42 @@ function MessageActions(props: {
           >
             <Pencil class="size-3 shrink-0" aria-hidden="true" />
             Edit
+          </button>
+        </Show>
+        <Show
+          when={
+            props.message.role === 'assistant' &&
+            text() &&
+            isSpeechSynthesisSupported()
+          }
+        >
+          <button
+            type="button"
+            class={ACTION_BUTTON_CLASS}
+            aria-label={
+              speakingId() === props.message.id
+                ? 'Stop reading aloud'
+                : 'Read message aloud'
+            }
+            title={
+              speakingId() === props.message.id
+                ? 'Stop reading aloud'
+                : 'Read aloud'
+            }
+            aria-pressed={speakingId() === props.message.id ? 'true' : 'false'}
+            onClick={() =>
+              speakingId() === props.message.id
+                ? stopSpeaking()
+                : speak(props.message.id, text())
+            }
+          >
+            <Show
+              when={speakingId() === props.message.id}
+              fallback={<Volume2 class="size-3 shrink-0" aria-hidden="true" />}
+            >
+              <Square class="size-3 shrink-0" aria-hidden="true" />
+            </Show>
+            {speakingId() === props.message.id ? 'Stop' : 'Listen'}
           </button>
         </Show>
         <Show when={props.message.role === 'assistant'}>

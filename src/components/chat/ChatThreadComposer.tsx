@@ -1,5 +1,5 @@
 import { For, Show } from 'solid-js'
-import { CheckCircle2, FileText, Image as ImageIcon, X } from '../icons'
+import { CheckCircle2, FileText, Image as ImageIcon, Mic, X } from '../icons'
 import type { PendingFile, PendingImage } from './chat-thread-utils'
 
 type ChatThreadComposerProps = {
@@ -21,6 +21,9 @@ type ChatThreadComposerProps = {
   onSubmit: (e: Event) => void
   canSend: () => boolean
   onStop: () => void
+  dictationSupported?: boolean
+  dictating?: () => boolean
+  onToggleDictation?: () => void
 }
 
 export function ChatThreadComposer(props: ChatThreadComposerProps) {
@@ -234,6 +237,9 @@ function ComposerInputRow(props: { props: ChatThreadComposerProps }) {
         onInput={(e) => props.props.onDraftInput(e.currentTarget.value)}
         disabled={props.props.isLoading()}
         onKeyDown={(e) => {
+          if (e.key === 'Escape' && props.props.dictating?.()) {
+            props.props.onToggleDictation?.()
+          }
           if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
             e.preventDefault()
             void props.props.onSubmit(e)
@@ -248,6 +254,29 @@ function ComposerInputRow(props: { props: ChatThreadComposerProps }) {
         >
           Send
         </button>
+        <Show when={props.props.dictationSupported}>
+          <button
+            type="button"
+            class={[
+              'border-border hover:bg-muted flex items-center justify-center rounded-xl border px-3 py-1.5 disabled:opacity-50',
+              {
+                'border-destructive text-destructive animate-pulse':
+                  !!props.props.dictating?.(),
+              },
+            ]}
+            aria-label={
+              props.props.dictating?.() ? 'Stop dictation' : 'Start dictation'
+            }
+            title={
+              props.props.dictating?.() ? 'Stop dictation' : 'Dictate message'
+            }
+            aria-pressed={props.props.dictating?.() ? 'true' : 'false'}
+            disabled={props.props.isLoading()}
+            onClick={() => props.props.onToggleDictation?.()}
+          >
+            <Mic class="size-4" aria-hidden="true" />
+          </button>
+        </Show>
         <Show when={props.props.isLoading()}>
           <button
             type="button"

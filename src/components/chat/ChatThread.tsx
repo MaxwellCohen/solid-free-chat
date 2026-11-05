@@ -35,6 +35,7 @@ import {
 } from '../../store/chat.store'
 import type { ChatUIMessage, TokenUsageSnapshot } from '../../store/chat.store'
 import { useChatStore } from '../../store/chat.hooks'
+import { createDictation, stopSpeaking } from '../../lib/speech'
 import { ChatThreadComposer } from './ChatThreadComposer'
 import { ChatThreadMessageList } from './ChatThreadMessageList'
 import type { PendingFile, PendingImage } from './chat-thread-utils'
@@ -103,6 +104,8 @@ function ChatThreadSession(props: {
   const conversationId = untrack(() => props.conversationId)
   const initialMessages = untrack(() => props.initialMessages)
   const [draft, setDraft] = createSignal('')
+  const dictation = createDictation((text) => setDraft(text))
+  const stopDictation = () => dictation?.stop()
   const [pendingImages, setPendingImages] = createSignal<PendingImage[]>([])
   const [pendingFiles, setPendingFiles] = createSignal<PendingFile[]>([])
   const [attachError, setAttachError] = createSignal<string | null>(null)
@@ -348,6 +351,8 @@ function ChatThreadSession(props: {
     props.onRegisterStop?.(stop)
     return () => {
       props.onRegisterStop?.(null)
+      stopDictation()
+      stopSpeaking()
       props.onLoadingChange(false)
       if (imageAttachNoticeTimer != null) {
         clearTimeout(imageAttachNoticeTimer)
@@ -480,6 +485,7 @@ function ChatThreadSession(props: {
   async function onSubmit(e: Event) {
     e.preventDefault()
     if (!canSend()) return
+    stopDictation()
 
     const text = draft().trim()
     const imgs = pendingImages()
@@ -586,6 +592,13 @@ function ChatThreadSession(props: {
         onDraftInput={setDraft}
         onSubmit={onSubmit}
         canSend={canSend}
+        dictationSupported={dictation !== null}
+        dictating={() => dictation?.active() ?? false}
+        onToggleDictation={() => {
+          if (!dictation) return
+          if (dictation.active()) dictation.stop()
+          else dictation.start(draft())
+        }}
         onStop={() => {
           chat.stop()
           scheduleCommitCurrentMessages()
