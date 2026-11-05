@@ -24,6 +24,7 @@ export interface OpenRouterUserModelRow {
   architecture: OpenRouterModelArchitecture
   /** OpenRouter request params the model accepts (e.g. `tools`). */
   supported_parameters?: string[]
+  context_length?: number
 }
 
 export interface ChatModelOption {
@@ -37,6 +38,8 @@ export interface ChatModelOption {
   supportsTools?: boolean
   /** From OpenRouter `pricing`; used to estimate cost when the API reports none. */
   pricing?: ModelPricing
+  /** Context window in tokens, when the provider reports it. */
+  contextLength?: number
 }
 
 function coercePricingScalar(v: unknown): number | null {
@@ -94,6 +97,7 @@ export function toFreeTextChatOptions(
     supportsTools: m.supported_parameters
       ? m.supported_parameters.includes('tools')
       : undefined,
+    ...(m.context_length ? { contextLength: m.context_length } : {}),
   }))
   options.sort((a, b) =>
     a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),

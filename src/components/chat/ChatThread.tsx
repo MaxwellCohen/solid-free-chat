@@ -45,6 +45,15 @@ import { useChatStore } from '../../store/chat.hooks'
 import { lookup } from '../../lib/nullable'
 import { createDictation, stopSpeaking } from '../../lib/speech'
 import { ChatThreadComposer } from './ChatThreadComposer'
+import { ChatContextMeter } from './ChatContextMeter'
+import {
+  COMPACT_SYSTEM_PROMPT,
+  buildCompactMessages,
+  contextUsage,
+  estimateConversationTokens,
+  splitForCompact,
+  summaryMessageText,
+} from '../../lib/context-meter'
 import { parseSlash } from '../../lib/slash-commands'
 import type { SlashCommand } from '../../lib/slash-commands'
 import { ChatFindBar } from './ChatFindBar'
@@ -81,6 +90,7 @@ export default function ChatThread(props: {
   supportsTools: boolean
   /** Selected model pricing, for estimating cost when the API reports none. */
   modelPricing?: ModelPricing
+  contextLength?: number
   /** Committed key from the client (after blur); optional proxy env only for local dev. */
   openRouterApiKey: string
   providerId: string
@@ -98,6 +108,7 @@ export default function ChatThread(props: {
           inputModalities={props.inputModalities}
           supportsTools={props.supportsTools}
           modelPricing={props.modelPricing}
+          contextLength={props.contextLength}
           openRouterApiKey={props.openRouterApiKey}
           providerId={props.providerId}
           onLoadingChange={props.onLoadingChange}
@@ -116,6 +127,7 @@ function ChatThreadSession(props: {
   inputModalities?: string[]
   supportsTools: boolean
   modelPricing?: ModelPricing
+  contextLength?: number
   /** Committed key from the client (after blur); optional proxy env only for local dev. */
   openRouterApiKey: string
   providerId: string
@@ -379,6 +391,85 @@ function ChatThreadSession(props: {
       }
     },
   )
+
+  const [compacting, setCompacting] = createSignal(false)
+  const [compactError, setCompactError] = createSignal<string | null>(null)
+  const [compactUndo, setCompactUndo] = createSignal<UIMessage[] | null>(null)
+  let compactAbort: AbortController | undefined
+  onCleanup(() => compactAbort?.abort())
+
+  const contextMeter = createMemo(() =>
+    contextUsage(
+      estimateConversationTokens(
+        chat.messages().map((m) => messageToPlainText(m)),
+      ),
+      props.contextLength,
+    ),
+  )
+
+  async function compactChat() {
+    if (chat.isLoading() || compacting()) return
+    const msgs = chat.messages() as ChatUIMessage[]
+    const split = splitForCompact(msgs)
+    if (!split) {
+      setCompactError('Nothing to compact yet.')
+      return
+    }
+    setCompactError(null)
+    setCompacting(true)
+    const ctrl = new AbortController()
+    compactAbort = ctrl
+    try {
+      let out = ''
+      for await (const chunk of runAgent({
+        apiKey: props.openRouterApiKey.trim(),
+        providerId: props.providerId,
+        model: selectedModel(),
+        messages: buildCompactMessages(
+          split.older.map((m) => ({
+            role: m.role,
+            text: messageToPlainText(m),
+          })),
+        ),
+        systemPrompt: COMPACT_SYSTEM_PROMPT,
+        temperature: 0.2,
+        maxTokens: 1200,
+        tools: [],
+        abortSignal: ctrl.signal,
+      })) {
+        if (ctrl.signal.aborted) return
+        if (chunk.type === 'TEXT_MESSAGE_CONTENT') out += chunk.delta
+        else if (chunk.type === 'RUN_ERROR') throw new Error(chunk.message)
+      }
+      if (!out.trim()) throw new Error('Empty summary')
+      const summary = {
+        id: `compact-${Date.now()}`,
+        role: 'user',
+        parts: [{ type: 'text', content: summaryMessageText(out) }],
+        createdAt: new Date(),
+      } as UIMessage
+      const next = [summary, ...split.recent] as UIMessage[]
+      setCompactUndo(msgs as UIMessage[])
+      chat.setMessages(next)
+      commitConversationMessages(next as ChatUIMessage[])
+    } catch (error) {
+      if (!ctrl.signal.aborted) {
+        setCompactError(
+          `Compact failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+        )
+      }
+    } finally {
+      setCompacting(false)
+    }
+  }
+
+  function undoCompact() {
+    const prev = compactUndo()
+    if (!prev || chat.isLoading()) return
+    chat.setMessages(prev)
+    commitConversationMessages(prev as ChatUIMessage[])
+    setCompactUndo(null)
+  }
 
   const lastAssistantMessageIndex = createMemo(() => {
     const msgs = chat.messages()
@@ -830,6 +921,15 @@ function ChatThreadSession(props: {
           }}
         />
       </label>
+      <ChatContextMeter
+        usage={contextMeter}
+        compacting={compacting}
+        canUndo={() => compactUndo() !== null}
+        error={compactError}
+        disabled={() => chat.isLoading()}
+        onCompact={() => void compactChat()}
+        onUndo={undoCompact}
+      />
       <ChatThreadComposer
         supportsImage={supportsImage}
         supportsDocument={supportsDocument}

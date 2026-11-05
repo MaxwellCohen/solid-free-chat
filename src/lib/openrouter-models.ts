@@ -59,6 +59,9 @@ function parseUserModelRow(raw: unknown): OpenRouterUserModelRow | null {
     pricing: pricing as Record<string, unknown>,
     architecture: { input_modalities, output_modalities },
     supported_parameters,
+    ...(typeof o.context_length === 'number'
+      ? { context_length: o.context_length }
+      : {}),
   }
 }
 

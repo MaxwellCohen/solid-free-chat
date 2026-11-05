@@ -830,6 +830,7 @@ export default function ChatApp() {
                     inputModalities={selectedModelMeta()?.inputModalities}
                     supportsTools={modelSupportsTools(selectedModelMeta())}
                     modelPricing={selectedModelMeta()?.pricing}
+                    contextLength={selectedModelMeta()?.contextLength}
                     openRouterApiKey={
                       loadStoredApiKey(selectedProviderId()).key
                     }
