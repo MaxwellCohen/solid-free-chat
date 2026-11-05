@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as DevRouteImport } from './routes/dev'
 import { Route as HarnessSandboxRouteImport } from './routes/harness-sandbox'
+import { Route as InsightsRouteImport } from './routes/insights'
 import { Route as ReviewRouteImport } from './routes/review'
 import { Route as ShareRouteImport } from './routes/share'
 import { Route as ApiFreeModelsRouteImport } from './routes/api.free-models'
@@ -36,6 +37,11 @@ const DevRoute = DevRouteImport.update({
 const HarnessSandboxRoute = HarnessSandboxRouteImport.update({
   id: '/harness-sandbox',
   path: '/harness-sandbox',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InsightsRoute = InsightsRouteImport.update({
+  id: '/insights',
+  path: '/insights',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReviewRoute = ReviewRouteImport.update({
@@ -64,6 +70,7 @@ export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
   '/dev': typeof DevRoute
   '/harness-sandbox': typeof HarnessSandboxRoute
+  '/insights': typeof InsightsRoute
   '/review': typeof ReviewRoute
   '/share': typeof ShareRoute
   '/api/free-models': typeof ApiFreeModelsRoute
@@ -74,6 +81,7 @@ export interface FileRoutesByTo {
   '/about': typeof AboutRoute
   '/dev': typeof DevRoute
   '/harness-sandbox': typeof HarnessSandboxRoute
+  '/insights': typeof InsightsRoute
   '/review': typeof ReviewRoute
   '/share': typeof ShareRoute
   '/api/free-models': typeof ApiFreeModelsRoute
@@ -85,6 +93,7 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/dev': typeof DevRoute
   '/harness-sandbox': typeof HarnessSandboxRoute
+  '/insights': typeof InsightsRoute
   '/review': typeof ReviewRoute
   '/share': typeof ShareRoute
   '/api/free-models': typeof ApiFreeModelsRoute
@@ -97,6 +106,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/dev'
     | '/harness-sandbox'
+    | '/insights'
     | '/review'
     | '/share'
     | '/api/free-models'
@@ -107,6 +117,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/dev'
     | '/harness-sandbox'
+    | '/insights'
     | '/review'
     | '/share'
     | '/api/free-models'
@@ -117,6 +128,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/dev'
     | '/harness-sandbox'
+    | '/insights'
     | '/review'
     | '/share'
     | '/api/free-models'
@@ -128,6 +140,7 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   DevRoute: typeof DevRoute
   HarnessSandboxRoute: typeof HarnessSandboxRoute
+  InsightsRoute: typeof InsightsRoute
   ReviewRoute: typeof ReviewRoute
   ShareRoute: typeof ShareRoute
   ApiFreeModelsRoute: typeof ApiFreeModelsRoute
@@ -162,6 +175,13 @@ declare module '@tanstack/solid-router' {
       path: '/harness-sandbox'
       fullPath: '/harness-sandbox'
       preLoaderRoute: typeof HarnessSandboxRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/insights': {
+      id: '/insights'
+      path: '/insights'
+      fullPath: '/insights'
+      preLoaderRoute: typeof InsightsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/review': {
@@ -200,6 +220,7 @@ const rootRouteChildren: RootRouteChildren = {
   AboutRoute: AboutRoute,
   DevRoute: DevRoute,
   HarnessSandboxRoute: HarnessSandboxRoute,
+  InsightsRoute: InsightsRoute,
   ReviewRoute: ReviewRoute,
   ShareRoute: ShareRoute,
   ApiFreeModelsRoute: ApiFreeModelsRoute,

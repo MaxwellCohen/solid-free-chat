@@ -7,6 +7,7 @@ import {
   onSettled,
 } from 'solid-js'
 import { isServer } from '@solidjs/web'
+import { useNavigate } from '@tanstack/solid-router'
 import {
   loadChatStateAsync,
   onPersistenceStatus,
@@ -123,6 +124,7 @@ export default function ChatApp() {
   const [openRouterApiKeyModalOpen, setOpenRouterApiKeyModalOpen] =
     createSignal(false)
   const [shortcutsHelpOpen, setShortcutsHelpOpen] = createSignal(false)
+  const navigate = useNavigate()
   const [paletteOpen, setPaletteOpen] = createSignal(false)
   const [paletteQuery, setPaletteQuery] = createSignal('')
   const [shareBusy, setShareBusy] = createSignal(false)
@@ -583,6 +585,12 @@ export default function ChatApp() {
         label: 'Open skills',
         hint: hint('openSkills'),
         run: () => setSkillsLibraryOpen(true),
+      },
+      {
+        id: 'openInsights',
+        label: 'Open insights',
+        keywords: 'stats usage tokens cost streak dashboard',
+        run: () => void navigate({ to: '/insights' }),
       },
       {
         id: 'showHelp',
