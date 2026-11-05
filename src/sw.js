@@ -10,7 +10,7 @@ const VERSION = '__SW_VERSION__'
 const PAGES = `pages-${VERSION}`
 const ASSETS = `assets-${VERSION}`
 const STATIC = `static-${VERSION}`
-const PRECACHE = ['/', '/manifest.json', '/favicon.svg', '/logo192.png']
+const PRECACHE = ['/', '/manifest.webmanifest', '/favicon.svg', '/logo192.png']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

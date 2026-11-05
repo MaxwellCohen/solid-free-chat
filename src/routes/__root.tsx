@@ -11,6 +11,7 @@ import { HydrationScript } from '@solidjs/web'
 import { Loading } from 'solid-js'
 
 import Header from '../components/Header'
+import OfflineBanner from '../components/OfflineBanner'
 import { ThemeProvider } from '../lib/theme-context'
 import { createThemeController } from '../lib/create-theme-controller'
 import { THEME_INLINE_INIT_SCRIPT } from '../lib/theme-preference'
@@ -32,7 +33,16 @@ export const Route = createRootRouteWithContext()({
         content: 'width=device-width, initial-scale=1, viewport-fit=cover',
       },
       { title: 'Solid Free Chat' },
-      { name: 'theme-color', content: '#18181b' },
+      {
+        name: 'theme-color',
+        content: '#ffffff',
+        media: '(prefers-color-scheme: light)',
+      },
+      {
+        name: 'theme-color',
+        content: '#18181b',
+        media: '(prefers-color-scheme: dark)',
+      },
       // iOS "Add to Home Screen": launch full-screen with its own name.
       { name: 'mobile-web-app-capable', content: 'yes' },
       { name: 'apple-mobile-web-app-capable', content: 'yes' },
@@ -43,7 +53,7 @@ export const Route = createRootRouteWithContext()({
       { rel: 'icon', href: '/favicon.ico', sizes: '48x48' },
       { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
       { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
-      { rel: 'manifest', href: '/manifest.json' },
+      { rel: 'manifest', href: '/manifest.webmanifest' },
     ],
   }),
   shellComponent: RootComponent,
@@ -93,6 +103,7 @@ function RootComponent() {
         <Loading>
           <ThemeProvider value={theme}>
             <Header />
+            <OfflineBanner />
             <Outlet />
           </ThemeProvider>
         </Loading>
