@@ -57,7 +57,7 @@ import {
   exportFileName,
   serializeChat,
 } from '../../lib/chat-export'
-import { ChatAppSidebar } from './ChatAppSidebar'
+import { ChatAppSidebar, requestTagEditor } from './ChatAppSidebar'
 import { ChatAppSettingsModal } from './ChatAppSettingsModal'
 import { ChatAppSkillsModal } from './ChatAppSkillsModal'
 import { ChatAppPersonasModal } from './ChatAppPersonasModal'
@@ -718,6 +718,15 @@ export default function ChatApp() {
         id: 'pin',
         label: current.pinned ? 'Unpin current chat' : 'Pin current chat',
         run: () => actions.togglePinned(current.id),
+      })
+      items.push({
+        id: 'tagChat',
+        label: 'Tag current chat…',
+        keywords: 'label tags organize filter',
+        run: () => {
+          setSidebarOpen(true)
+          requestAnimationFrame(() => requestTagEditor(current.id))
+        },
       })
     }
     for (const c of conversations()) {

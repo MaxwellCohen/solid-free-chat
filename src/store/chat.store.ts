@@ -5,6 +5,7 @@ import type { UIMessage } from '@tanstack/ai-client'
 import { lookup } from '../lib/nullable'
 import { DEFAULT_CHAT_MODEL } from '../lib/chat-models'
 import { DEFAULT_ENABLED_TOOL_IDS, isKnownToolId } from '../lib/harness/tools'
+import { normalizeTags } from '../lib/chat-tags'
 import { mergeChatSettings, normalizeChatSettings } from '../lib/chat-settings'
 import type { ChatSettings } from '../lib/chat-settings'
 import type {
@@ -59,6 +60,8 @@ export interface ChatConversation {
   updatedAt: number
   /** Pinned chats are listed first in the sidebar. */
   pinned?: boolean
+  /** Lowercase labels (max 5) used to filter the sidebar. */
+  tags?: string[]
   /** Set when the user renamed the chat; disables auto-titling. */
   titleLocked?: boolean
   /** Ordered skill ids attached to this chat (live links into `skills`). */
@@ -333,6 +336,9 @@ function normalizeConversationRecord(
         ? { settings: normalizeChatSettings(source.settings) }
         : {}),
       ...(source.pinned === true ? { pinned: true } : {}),
+      ...(normalizeTags(source.tags).length
+        ? { tags: normalizeTags(source.tags) }
+        : {}),
       ...(source.titleLocked === true ? { titleLocked: true } : {}),
       ...(lastUsage ? { lastUsage } : {}),
       ...(sessionTotalTokens !== undefined ? { sessionTotalTokens } : {}),
@@ -840,6 +846,22 @@ export const chatActions = {
         conversationsById: {
           ...s.conversationsById,
           [id]: conversation.pinned ? rest : { ...rest, pinned: true },
+        },
+      }
+    })
+  },
+
+  setConversationTags(id: string, tags: string[]) {
+    chatStore.setState((s) => {
+      const conversation = getConversation(s, id)
+      if (!conversation) return s
+      const { tags: _tags, ...rest } = conversation
+      const next = normalizeTags(tags)
+      return {
+        ...s,
+        conversationsById: {
+          ...s.conversationsById,
+          [id]: next.length ? { ...rest, tags: next } : rest,
         },
       }
     })

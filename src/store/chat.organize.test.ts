@@ -75,3 +75,32 @@ describe('pin and rename', () => {
     expect(state?.conversationsById.y.pinned).toBeUndefined()
   })
 })
+
+describe('conversation tags', () => {
+  it('setConversationTags normalizes, clears, and survives load', () => {
+    chatActions.resetToEmpty()
+    chatActions.createConversation()
+    const [id] = chatStore.state.conversationOrder
+    chatActions.setConversationTags(id, [
+      'Work',
+      'work',
+      ' Ideas ',
+      'x'.repeat(40),
+    ])
+    expect(chatStore.state.conversationsById[id].tags).toEqual([
+      'work',
+      'ideas',
+      'x'.repeat(20),
+    ])
+    const reloaded = normalizeChatAppState(
+      JSON.parse(JSON.stringify(chatStore.state)),
+    )
+    expect(reloaded?.conversationsById[id].tags).toEqual([
+      'work',
+      'ideas',
+      'x'.repeat(20),
+    ])
+    chatActions.setConversationTags(id, [])
+    expect(chatStore.state.conversationsById[id].tags).toBeUndefined()
+  })
+})

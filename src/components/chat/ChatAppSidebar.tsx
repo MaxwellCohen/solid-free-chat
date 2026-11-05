@@ -1,4 +1,11 @@
-import { For, Show, createMemo, createSignal, onCleanup } from 'solid-js'
+import {
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+} from 'solid-js'
 import {
   ChevronRight,
   Download,
@@ -8,14 +15,29 @@ import {
   Pencil,
   Pin,
   SquarePen,
+  Tag,
   Upload,
 } from '../icons'
 import type { ChatConversation } from '../../store/chat.hooks'
 import { NEW_CHAT_TITLE, chatActions } from '../../store/chat.store'
 import { formatCost } from '../../lib/usage-cost'
+import {
+  addTag,
+  collectTags,
+  filterByTag,
+  removeTag,
+  toggleTagFilter,
+} from '../../lib/chat-tags'
 import { requestScrollToMessage } from '../../lib/scroll-to-message'
 import { searchSidebarConversations } from '../../lib/conversation-search'
 import type { HistoryConversation } from '../../lib/harness/chat-history'
+
+const [tagEditRequest, setTagEditRequest] = createSignal<string | null>(null)
+
+/** Opens the tag popover on a sidebar row (used by the command palette). */
+export function requestTagEditor(conversationId: string) {
+  setTagEditRequest(conversationId)
+}
 
 type ChatAppSidebarProps = {
   sidebarOpen: () => boolean
@@ -193,10 +215,26 @@ function ConversationSearch(props: { props: ChatAppSidebarProps }) {
     setQuery('')
   }
 
+  const [rawTag, setRawTag] = createSignal<string | null>(null)
+  const allTags = createMemo(() => collectTags(props.props.conversations()))
+  // A tag nobody uses anymore stops filtering.
+  const activeTag = createMemo(() => {
+    const t = rawTag()
+    return t && allTags().some((x) => x.tag === t) ? t : null
+  })
+  const tagged = createMemo(
+    () =>
+      new Set(
+        filterByTag(props.props.conversations(), activeTag()).map((c) => c.id),
+      ),
+  )
+
   const results = createMemo(() => {
     const q = query().trim()
     return q
-      ? searchSidebarConversations(props.props.getSearchCorpus(), q)
+      ? searchSidebarConversations(props.props.getSearchCorpus(), q).filter(
+          (hit) => tagged().has(hit.id),
+        )
       : null
   })
 
@@ -219,7 +257,36 @@ function ConversationSearch(props: { props: ChatAppSidebarProps }) {
           }}
         />
       </div>
-      <Show when={results()} fallback={<ConversationNav props={props.props} />}>
+      <Show when={allTags().length > 0}>
+        <div
+          class="flex shrink-0 flex-wrap gap-1 px-3 pb-2"
+          role="group"
+          aria-label="Filter by tag"
+        >
+          <For each={allTags()}>
+            {(entry) => (
+              <button
+                type="button"
+                data-tag-filter={entry.tag}
+                aria-pressed={activeTag() === entry.tag ? 'true' : 'false'}
+                class={[
+                  'max-w-full truncate rounded-full border px-2 py-0.5 text-[11px]',
+                  activeTag() === entry.tag
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground',
+                ]}
+                onClick={() => setRawTag((t) => toggleTagFilter(t, entry.tag))}
+              >
+                #{entry.tag}
+              </button>
+            )}
+          </For>
+        </div>
+      </Show>
+      <Show
+        when={results()}
+        fallback={<ConversationNav props={props.props} tag={activeTag()} />}
+      >
         {(hits) => (
           <nav
             class="min-h-0 flex-1 overflow-y-auto"
@@ -279,18 +346,20 @@ function ConversationSearch(props: { props: ChatAppSidebarProps }) {
   )
 }
 
-function ConversationNav(props: { props: ChatAppSidebarProps }) {
-  const pinned = createMemo(() =>
-    props.props.conversations().filter((c) => c.pinned),
+function ConversationNav(props: {
+  props: ChatAppSidebarProps
+  tag: string | null
+}) {
+  const visible = createMemo(() =>
+    filterByTag(props.props.conversations(), props.tag),
   )
-  const unpinned = createMemo(() =>
-    props.props.conversations().filter((c) => !c.pinned),
-  )
-  const renderItems = (items: ChatConversation[]) => (
-    <For each={items}>
+  const pinned = createMemo(() => visible().filter((c) => c.pinned))
+  const unpinned = createMemo(() => visible().filter((c) => !c.pinned))
+  const renderItems = (items: () => ChatConversation[]) => (
+    <For each={items()} keyed={(c) => c.id}>
       {(conversation) => (
         <ConversationListItem
-          conversation={conversation}
+          conversation={conversation()}
           currentConversationId={props.props.currentConversationId}
           onSelectConversation={props.props.onSelectConversation}
           onDeleteConversation={props.props.onDeleteConversation}
@@ -308,9 +377,9 @@ function ConversationNav(props: { props: ChatAppSidebarProps }) {
         <h3 class="text-muted-foreground px-4 pt-1 pb-1 text-xs font-medium">
           Pinned
         </h3>
-        <ul class="space-y-0.5 px-2 pb-2">{renderItems(pinned())}</ul>
+        <ul class="space-y-0.5 px-2 pb-2">{renderItems(pinned)}</ul>
       </Show>
-      <ul class="space-y-0.5 px-2 pb-3">{renderItems(unpinned())}</ul>
+      <ul class="space-y-0.5 px-2 pb-3">{renderItems(unpinned)}</ul>
     </nav>
   )
 }
@@ -324,6 +393,15 @@ function ConversationListItem(props: {
   const [confirmingDelete, setConfirmingDelete] = createSignal(false)
   const [editing, setEditing] = createSignal(false)
   const [draft, setDraft] = createSignal('')
+  const [tagsOpen, setTagsOpen] = createSignal(false)
+  createEffect(
+    () => tagEditRequest() === props.conversation.id,
+    (hit) => {
+      if (!hit) return
+      setTagEditRequest(null)
+      setTagsOpen(true)
+    },
+  )
   const startEdit = () => {
     setDraft(props.conversation.title || NEW_CHAT_TITLE)
     setEditing(true)
@@ -335,7 +413,7 @@ function ConversationListItem(props: {
   }
 
   return (
-    <li class="flex items-stretch gap-0.5">
+    <li class="flex flex-wrap items-stretch gap-0.5">
       <Show when={editing()}>
         <input
           type="text"
@@ -371,6 +449,17 @@ function ConversationListItem(props: {
           <span class="block truncate">
             {props.conversation.title || NEW_CHAT_TITLE}
           </span>
+          <Show when={(props.conversation.tags?.length ?? 0) > 0}>
+            <span class="mt-0.5 flex flex-wrap gap-1" data-testid="row-tags">
+              <For each={props.conversation.tags}>
+                {(t) => (
+                  <span class="bg-muted text-muted-foreground max-w-full truncate rounded-full px-1.5 text-[10px] font-normal">
+                    #{t}
+                  </span>
+                )}
+              </For>
+            </span>
+          </Show>
           <Show when={(props.conversation.sessionTotalCost ?? 0) > 0}>
             <span class="text-muted-foreground block text-xs">
               {formatCost(props.conversation.sessionTotalCost ?? 0)}
@@ -402,6 +491,21 @@ function ConversationListItem(props: {
       >
         <Pencil class="size-3.5" aria-hidden="true" />
       </button>
+      <button
+        type="button"
+        title="Edit tags"
+        aria-label={`Edit tags: ${props.conversation.title || NEW_CHAT_TITLE}`}
+        aria-expanded={tagsOpen() ? 'true' : 'false'}
+        class={[
+          'hover:bg-muted shrink-0 rounded-lg px-2',
+          (props.conversation.tags?.length ?? 0) > 0
+            ? 'text-primary'
+            : 'text-muted-foreground hover:text-foreground',
+        ]}
+        onClick={() => setTagsOpen((o) => !o)}
+      >
+        <Tag class="size-3.5" aria-hidden="true" />
+      </button>
       <Show
         when={confirmingDelete()}
         fallback={
@@ -430,7 +534,81 @@ function ConversationListItem(props: {
           Delete?
         </button>
       </Show>
+      <Show when={tagsOpen()}>
+        <TagEditor
+          conversationId={props.conversation.id}
+          tags={props.conversation.tags ?? []}
+          onClose={() => setTagsOpen(false)}
+        />
+      </Show>
     </li>
+  )
+}
+
+function TagEditor(props: {
+  conversationId: string
+  tags: string[]
+  onClose: () => void
+}) {
+  const [value, setValue] = createSignal('')
+  const commit = (v = value()) => {
+    if (!v.trim()) return
+    chatActions.setConversationTags(props.conversationId, addTag(props.tags, v))
+    setValue('')
+  }
+  return (
+    <div
+      role="group"
+      aria-label="Chat tags"
+      class="border-border bg-card basis-full space-y-1.5 rounded-lg border p-2"
+    >
+      <div class="flex flex-wrap gap-1">
+        <For each={props.tags}>
+          {(t) => (
+            <button
+              type="button"
+              aria-label={`Remove tag ${t}`}
+              class="bg-muted hover:bg-destructive/20 inline-flex max-w-full items-center gap-1 truncate rounded-full px-2 py-0.5 text-[11px]"
+              onClick={() =>
+                chatActions.setConversationTags(
+                  props.conversationId,
+                  removeTag(props.tags, t),
+                )
+              }
+            >
+              #{t} <span aria-hidden="true">×</span>
+            </button>
+          )}
+        </For>
+      </div>
+      <input
+        type="text"
+        ref={(el: HTMLInputElement) => queueMicrotask(() => el.focus())}
+        aria-label="Add tag"
+        maxlength={20}
+        disabled={props.tags.length >= 5}
+        placeholder={
+          props.tags.length >= 5 ? 'Max 5 tags' : 'Add tag, press Enter'
+        }
+        class="border-border bg-background placeholder:text-muted-foreground w-full rounded-md border px-2 py-1 text-xs"
+        value={value()}
+        onInput={(e) => {
+          const v = e.currentTarget.value
+          if (v.includes(',')) {
+            commit(v)
+          } else setValue(v)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.isComposing) {
+            e.preventDefault()
+            commit()
+          } else if (e.key === 'Escape') {
+            e.stopPropagation()
+            props.onClose()
+          }
+        }}
+      />
+    </div>
   )
 }
 
