@@ -59,6 +59,7 @@ type ChatThreadMessageListProps = {
   needsSignIn?: boolean
   providerName: string
   onPickStarter: (prompt: string) => void
+  focusedMessageId?: () => string | null
 }
 
 export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
@@ -250,7 +251,15 @@ function VirtualChatMessage(props: {
               },
             ]}
           >
-            <Show when={editing()} fallback={<MessageBubble message={msg()} />}>
+            <Show
+              when={editing()}
+              fallback={
+                <MessageBubble
+                  message={msg()}
+                  focused={props.listProps.focusedMessageId?.() === msg().id}
+                />
+              }
+            >
               <EditMessageForm
                 message={msg()}
                 onCancel={() => setEditing(false)}
@@ -296,12 +305,15 @@ function VirtualChatMessage(props: {
   )
 }
 
-function MessageBubble(props: { message: ChatUIMessage }) {
+function MessageBubble(props: { message: ChatUIMessage; focused?: boolean }) {
   return (
     <div
+      data-message-focused={props.focused ? '' : undefined}
       class={[
         'chat-bubble max-w-full min-w-0 rounded-2xl px-3 py-2.5 text-sm [overflow-wrap:anywhere] shadow-sm sm:px-4 sm:py-3',
         {
+          'ring-ring ring-offset-background ring-2 ring-offset-2':
+            props.focused === true,
           'bg-[var(--primary)] text-[var(--primary-foreground)]':
             props.message.role === 'user',
           'border border-[var(--border)] bg-[var(--card)] text-[var(--card-foreground)]':

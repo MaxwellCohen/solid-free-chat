@@ -77,6 +77,15 @@ export const CHAT_SHORTCUTS: readonly ShortcutDefinition[] = [
   },
 ] as const
 
+/** Bare-key shortcuts for the message thread; ignored while typing (see message-nav.ts). */
+export const THREAD_SHORTCUTS: ReadonlyArray<{ label: string; key: string }> = [
+  { label: 'Next message', key: 'j' },
+  { label: 'Previous message', key: 'k' },
+  { label: 'Copy focused message', key: 'c' },
+  { label: 'Bookmark focused message', key: 'b' },
+  { label: 'Clear message focus', key: 'Esc' },
+]
+
 export function isMacPlatform(): boolean {
   if (typeof navigator === 'undefined') return false
   const uaData = (

@@ -70,7 +70,13 @@ import {
 import { parseSlash } from '../../lib/slash-commands'
 import type { SlashCommand } from '../../lib/slash-commands'
 import { ChatFindBar } from './ChatFindBar'
-import { CHAT_SHORTCUTS, matchesShortcut } from '../../lib/keyboard-shortcuts'
+import {
+  CHAT_SHORTCUTS,
+  isEditableTarget,
+  matchesShortcut,
+} from '../../lib/keyboard-shortcuts'
+import { stepMessageIndex, threadKeyAction } from '../../lib/message-nav'
+import { requestScrollToMessage } from '../../lib/scroll-to-message'
 import { ChatQuoteButton } from './ChatQuoteButton'
 import { appendQuoteToDraft, selectionToBlockquote } from '../../lib/quote'
 import { ChatThreadMessageList } from './ChatThreadMessageList'
@@ -654,6 +660,54 @@ function ChatThreadSession(props: {
     commitConversationMessages(next)
   }
 
+  const [focusedMessageId, setFocusedMessageId] = createSignal<string | null>(
+    null,
+  )
+  onSettled(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target
+      const typing =
+        isEditableTarget(target) ||
+        (target instanceof Element &&
+          target.closest('[role="dialog"]') !== null)
+      const action = threadKeyAction(event, typing)
+      if (!action) return
+      const msgs = chat.messages() as ChatUIMessage[]
+      const current = focusedMessageId()
+      const index = msgs.findIndex((m) => m.id === current)
+      if (action === 'clear') {
+        if (current === null) return
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        setFocusedMessageId(null)
+        return
+      }
+      if (action === 'next' || action === 'prev') {
+        const next = stepMessageIndex(
+          index === -1 ? null : index,
+          msgs.length,
+          action === 'next' ? 1 : -1,
+        )
+        if (next === null) return
+        event.preventDefault()
+        setFocusedMessageId(msgs[next].id)
+        requestScrollToMessage(msgs[next].id)
+        return
+      }
+      const msg = index === -1 ? undefined : msgs[index]
+      if (!msg) return
+      event.preventDefault()
+      if (action === 'bookmark') toggleBookmark(msg)
+      else if (action === 'copy') {
+        navigator.clipboard
+          ?.writeText(messageToPlainText(msg))
+          .catch(() => undefined)
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  })
+
   function toggleBookmark(message: UIMessage) {
     const next = toggleBookmarkInMessages(
       chat.messages() as ChatUIMessage[],
@@ -1041,6 +1095,7 @@ function ChatThreadSession(props: {
         needsSignIn={!props.openRouterApiKey.trim()}
         providerName={getProvider(props.providerId).name}
         onPickStarter={(prompt) => setDraft(prompt)}
+        focusedMessageId={focusedMessageId}
       />
       <ChatQuoteButton
         onQuote={(text) => {
