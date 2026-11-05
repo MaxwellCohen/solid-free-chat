@@ -126,6 +126,25 @@ function SettingsModalDialog(props: {
             }}
           />
         </label>
+        <label class="flex items-start gap-2 text-xs font-semibold">
+          <input
+            type="checkbox"
+            class="mt-0.5"
+            checked={props.settings()?.followUps === true}
+            onChange={(e) =>
+              props.onChange({
+                followUps: e.currentTarget.checked ? true : undefined,
+              })
+            }
+          />
+          <span>
+            Suggest follow-up questions
+            <span class="text-muted-foreground block font-normal">
+              Makes one extra small request to the selected model after each
+              reply. Off by default.
+            </span>
+          </span>
+        </label>
         <div>
           <button
             type="button"

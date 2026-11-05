@@ -2,6 +2,8 @@ export interface ChatSettings {
   systemPrompt?: string
   temperature?: number
   maxTokens?: number
+  /** Opt-in: suggest follow-up questions after each reply (extra call). */
+  followUps?: boolean
 }
 
 export const MIN_TEMPERATURE = 0
@@ -31,10 +33,12 @@ export function normalizeChatSettings(raw: unknown): ChatSettings | undefined {
       : undefined
   const temperature = clampTemperature(o.temperature)
   const maxTokens = clampMaxTokens(o.maxTokens)
+  const followUps = o.followUps === true ? true : undefined
   if (
     systemPrompt === undefined &&
     temperature === undefined &&
-    maxTokens === undefined
+    maxTokens === undefined &&
+    followUps === undefined
   ) {
     return undefined
   }
@@ -42,6 +46,7 @@ export function normalizeChatSettings(raw: unknown): ChatSettings | undefined {
     ...(systemPrompt !== undefined ? { systemPrompt } : {}),
     ...(temperature !== undefined ? { temperature } : {}),
     ...(maxTokens !== undefined ? { maxTokens } : {}),
+    ...(followUps !== undefined ? { followUps } : {}),
   }
 }
 

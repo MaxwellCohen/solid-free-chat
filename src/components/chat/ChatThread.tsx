@@ -2,6 +2,8 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  For,
+  onCleanup,
   onSettled,
   Show,
   untrack,
@@ -12,6 +14,11 @@ import { useChat } from '../../lib/use-chat'
 import type { ContentPart, StreamChunk } from '@tanstack/ai'
 import { getProvider } from '../../lib/providers'
 import { runAgent } from '../../lib/harness/run-agent'
+import {
+  FOLLOW_UP_SYSTEM_PROMPT,
+  buildFollowUpMessages,
+  parseFollowUps,
+} from '../../lib/follow-ups'
 import { createEnabledTools } from '../../lib/harness/tools'
 import {
   modelSupportsDocumentInput,
@@ -50,6 +57,7 @@ import {
   parseDataUrl,
   readFileAsDataUrl,
   guessImageMimeFromFilename,
+  messageToPlainText,
   messagesBefore,
   userMessageToResendParts,
 } from './chat-thread-utils'
@@ -303,6 +311,66 @@ function ChatThreadSession(props: {
     () => chat.error(),
     (error) => {
       if (error) scheduleCommitCurrentMessages()
+    },
+  )
+
+  const [followUps, setFollowUps] = createSignal<string[]>([])
+  let followUpAbort: AbortController | undefined
+  function cancelFollowUps() {
+    followUpAbort?.abort()
+    followUpAbort = undefined
+    setFollowUps([])
+  }
+  onCleanup(() => followUpAbort?.abort())
+
+  async function fetchFollowUps() {
+    const msgs = chat.messages() as ChatUIMessage[]
+    const last = msgs[msgs.length - 1] as ChatUIMessage | undefined
+    if (last?.role !== 'assistant') return
+    let userText = ''
+    for (let i = msgs.length - 2; i >= 0; i--) {
+      if (msgs[i].role === 'user') {
+        userText = messageToPlainText(msgs[i])
+        break
+      }
+    }
+    const assistantText = messageToPlainText(last)
+    if (!userText || !assistantText) return
+    const ctrl = new AbortController()
+    followUpAbort = ctrl
+    try {
+      let out = ''
+      for await (const chunk of runAgent({
+        apiKey: props.openRouterApiKey.trim(),
+        providerId: props.providerId,
+        model: selectedModel(),
+        messages: buildFollowUpMessages(userText, assistantText),
+        systemPrompt: FOLLOW_UP_SYSTEM_PROMPT,
+        temperature: 0.7,
+        maxTokens: 200,
+        tools: [],
+        abortSignal: ctrl.signal,
+      })) {
+        if (ctrl.signal.aborted) return
+        if (chunk.type === 'TEXT_MESSAGE_CONTENT') out += chunk.delta
+        else if (chunk.type === 'RUN_ERROR') return
+      }
+      if (!ctrl.signal.aborted) setFollowUps(parseFollowUps(out))
+    } catch {
+      /* follow-ups are best-effort */
+    }
+  }
+
+  createEffect(
+    () => chat.isLoading(),
+    (loading, prevLoading) => {
+      if (loading) {
+        cancelFollowUps()
+        return
+      }
+      if (prevLoading === true && !chat.error() && chatSettings()?.followUps) {
+        void fetchFollowUps()
+      }
     },
   )
 
@@ -620,6 +688,30 @@ function ChatThreadSession(props: {
         providerName={getProvider(props.providerId).name}
         onPickStarter={(prompt) => setDraft(prompt)}
       />
+      <Show when={followUps().length > 0 && !chat.isLoading()}>
+        <div
+          class="mx-auto flex w-full max-w-3xl flex-wrap gap-2 px-3 pt-1"
+          aria-label="Suggested follow-up questions"
+        >
+          <For each={followUps()}>
+            {(q) => (
+              <button
+                type="button"
+                class="border-border text-muted-foreground hover:bg-muted hover:text-foreground rounded-full border px-3 py-1 text-left text-xs"
+                onClick={() => {
+                  setDraft(q)
+                  setFollowUps([])
+                  document
+                    .querySelector<HTMLTextAreaElement>('[data-chat-composer]')
+                    ?.focus()
+                }}
+              >
+                {q}
+              </button>
+            )}
+          </For>
+        </div>
+      </Show>
       <label class="text-muted-foreground flex items-center justify-end gap-1.5 px-3 pt-1 text-xs">
         Warn above $
         <input
