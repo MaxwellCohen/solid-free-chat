@@ -60,7 +60,7 @@ export default function ThemeSwitcher() {
         </For>
       </div>
       <div
-        class="inline-flex items-center gap-1"
+        class="inline-flex items-center gap-1 max-sm:hidden"
         role="group"
         aria-label="Accent color"
       >

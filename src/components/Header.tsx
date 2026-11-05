@@ -67,7 +67,7 @@ export default function Header() {
           </Link>
         </h2>
 
-        <div class="flex min-w-0 flex-1 items-center gap-x-1 text-sm font-medium sm:justify-center sm:px-2">
+        <div class="flex min-w-0 flex-1 items-center gap-x-1 overflow-x-auto text-sm font-medium whitespace-nowrap [scrollbar-width:none] sm:justify-center sm:px-2 [&>a]:shrink-0 [&::-webkit-scrollbar]:hidden">
           <Link
             to="/"
             class="text-muted-foreground hover:text-foreground rounded-md px-2.5 py-1.5 no-underline transition-colors"
