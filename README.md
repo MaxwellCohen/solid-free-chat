@@ -69,6 +69,17 @@ The app serves at `http://localhost:3000`.
 - Markdown in messages with syntax highlighting
 - Light / dark / system theme, stored in the browser
 - Optional Sentry browser init
+- **Chat management:** pin and rename chats, import chats from a backup, export/share
+- **Voice:** dictate into the composer and read replies aloud (browser speech APIs)
+- **Command palette** (Mod+K) and **slash commands** in the composer
+- **Per-chat settings** (system prompt, parameters) and **starter prompts** on empty chats
+- **Insights:** usage and cost stats across your chats; optional spend warning
+- **Arena:** compare two models side by side on one prompt
+- **Accent color themes** alongside light / dark
+- **Follow-up suggestions** after each reply
+- **Attachments:** drag-and-drop or paste images and PDFs (gated by what the model accepts)
+- **Find in chat** (Mod+F): highlights matches, Enter / Shift+Enter to step, Esc to close
+- **Installable PWA:** works offline for the app shell and saved chats, with an offline indicator (model calls still need a network)
 
 ## Architecture
 
@@ -110,21 +121,21 @@ Code tools run inside a `sandbox="allow-scripts"` iframe (opaque origin), so the
 ## Project layout
 
 - `src/components/chat` — Chat UI (`ChatApp`, `ChatThread`, skills / API key modals)
-- `src/routes/api/openrouter/$.ts` — The only backend: `/api/openrouter/v1/*` → `https://openrouter.ai/api/v1/*`
-- `src/lib/harness/run-agent.ts` — Browser agent loop (`chat()` from TanStack AI) pointed at the proxy
+- `src/lib/harness/run-agent.ts` — Browser agent loop (`chat()` from TanStack AI) calling OpenRouter directly
 - `src/lib/harness/tools.ts` — Tool registry; add new browser tools here
 - `src/lib/harness/sandbox.ts` — Isolated code sandbox (opaque-origin iframe + Web Worker)
-- `src/lib/openrouter-models.ts` — Model list filtering and caching (via the proxy)
+- `src/lib/openrouter-models.ts` — Model list filtering and caching (fetched directly from OpenRouter)
 - `src/lib/compose-system-prompt.ts` — Baseline + skills composition
 - `src/lib/chat-persistence.ts` — Browser storage for conversations
 - `src/store` — Chat state (`chat.store`, `chat.hooks`)
-- `src/routes` — Routes (`/`, `/about`, …)
+- `src/routes` — Routes (`/`, `/arena`, `/insights`, `/about`, …)
+- `src/sw.js` + `public/manifest.webmanifest` — PWA service worker and manifest
 - `src/integrations/tanstack-query` — TanStack Query provider and SSR wiring
 
 ## Notes
 
 - Without a valid key (from the app or optional `.env.local` for local dev), model loading and chat show clear errors.
-- The free-model filter is a UI default, not a server-side gate: with a dumb proxy, any request your key allows can be sent.
-- Conversation data stays in the browser; the proxy forwards requests to OpenRouter and keeps nothing.
+- The free-model filter is a UI default, not a server-side gate: any request your key allows can be sent.
+- Conversation data stays in the browser; there is no backend that sees your chats or key.
 - There is no Anthropic sidecar or separate model host — only OpenRouter.
 - The API key in localStorage is a XSS risk by design (BYOK); keep the app origin trusted.
