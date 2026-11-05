@@ -296,3 +296,58 @@ test('skills library: add a built-in skill', async ({ page }) => {
   ).toHaveCount(0)
   expect(errors).toEqual([])
 })
+
+test.describe('personas and onboarding', () => {
+  test('picking a persona starts a new chat with its settings', async ({
+    page,
+  }) => {
+    const errors = trackErrors(page)
+    await openChat(page)
+    await page.keyboard.press('ControlOrMeta+k')
+    await page
+      .getByRole('combobox', { name: /Type a command/ })
+      .fill('Personas')
+    await page.keyboard.press('Enter')
+    const dialog = page.getByRole('dialog', { name: 'Personas' })
+    await expect(dialog).toBeVisible()
+    await dialog
+      .getByRole('button', { name: 'Start chat with Pirate Captain' })
+      .click()
+    await expect(dialog).toBeHidden()
+    await expect(page.getByLabel('Active persona')).toContainText(
+      'Pirate Captain',
+    )
+    await page
+      .getByRole('button', { name: /settings/i })
+      .first()
+      .click()
+    await expect(
+      page.getByPlaceholder(/Added to the system prompt/),
+    ).toHaveValue(/pirate captain/i)
+    expect(errors).toEqual([])
+  })
+
+  test('first run shows the onboarding card without a key', async ({
+    page,
+  }) => {
+    const errors = trackErrors(page)
+    await page.goto('/')
+    const modal = page.getByRole('dialog').first()
+    await expect(modal).toBeVisible({ timeout: 20_000 })
+    await page.keyboard.press('Escape')
+    const card = page.getByRole('region', { name: 'Get started' })
+    await expect(card).toBeVisible()
+    await expect(card).toContainText('Sign in with OpenRouter')
+    await expect(card).toContainText('free')
+    await card.getByRole('button', { name: 'Sign in with OpenRouter' }).click()
+    await expect(page.getByRole('dialog').first()).toBeVisible()
+    expect(errors).toEqual([])
+  })
+
+  test('seeded key hides the onboarding card', async ({ page }) => {
+    await openChat(page)
+    await expect(page.getByRole('region', { name: 'Get started' })).toHaveCount(
+      0,
+    )
+  })
+})

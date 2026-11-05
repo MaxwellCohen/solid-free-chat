@@ -4,6 +4,8 @@ export interface ChatSettings {
   maxTokens?: number
   /** Opt-in: suggest follow-up questions after each reply (extra call). */
   followUps?: boolean
+  /** Persona this chat was started from (display only; prompt is in systemPrompt). */
+  persona?: { name: string; emoji: string }
 }
 
 export const MIN_TEMPERATURE = 0
@@ -34,11 +36,21 @@ export function normalizeChatSettings(raw: unknown): ChatSettings | undefined {
   const temperature = clampTemperature(o.temperature)
   const maxTokens = clampMaxTokens(o.maxTokens)
   const followUps = o.followUps === true ? true : undefined
+  const p = o.persona as Record<string, unknown> | undefined
+  const persona =
+    p &&
+    typeof p === 'object' &&
+    typeof p.name === 'string' &&
+    p.name.trim() &&
+    typeof p.emoji === 'string'
+      ? { name: p.name.trim().slice(0, 60), emoji: p.emoji.slice(0, 8) }
+      : undefined
   if (
     systemPrompt === undefined &&
     temperature === undefined &&
     maxTokens === undefined &&
-    followUps === undefined
+    followUps === undefined &&
+    persona === undefined
   ) {
     return undefined
   }
@@ -47,6 +59,7 @@ export function normalizeChatSettings(raw: unknown): ChatSettings | undefined {
     ...(temperature !== undefined ? { temperature } : {}),
     ...(maxTokens !== undefined ? { maxTokens } : {}),
     ...(followUps !== undefined ? { followUps } : {}),
+    ...(persona !== undefined ? { persona } : {}),
   }
 }
 

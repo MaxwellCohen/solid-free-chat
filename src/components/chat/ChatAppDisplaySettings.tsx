@@ -7,6 +7,7 @@ import {
   writeDisplayPrefs,
 } from '../../lib/display-prefs'
 import type { DisplayPrefs } from '../../lib/display-prefs'
+import { readSmartTitles, writeSmartTitles } from '../../lib/auto-title'
 import { useTheme } from '../../lib/theme-context'
 import { ACCENTS, ACCENT_SWATCH } from '../../lib/theme-preference'
 
@@ -17,6 +18,7 @@ const SELECT_CLASS =
 /** Display preferences: saved in localStorage and applied to <html> immediately. */
 export function ChatAppDisplaySettings() {
   const theme = useTheme()
+  const [smartTitles, setSmartTitles] = createSignal(readSmartTitles())
   const [prefs, setPrefs] = createSignal(readDisplayPrefs())
 
   function update(patch: Partial<DisplayPrefs>) {
@@ -103,6 +105,24 @@ export function ChatAppDisplaySettings() {
           onChange={(e) => update({ hideUsage: e.currentTarget.checked })}
         />
         Hide token and cost badges
+      </label>
+      <label class="flex items-start gap-2 text-xs font-semibold">
+        <input
+          type="checkbox"
+          class="mt-0.5"
+          checked={smartTitles()}
+          onChange={(e) => {
+            setSmartTitles(e.currentTarget.checked)
+            writeSmartTitles(e.currentTarget.checked)
+          }}
+        />
+        <span>
+          Smart chat titles
+          <span class="text-muted-foreground block font-normal">
+            One tiny extra request names a new chat after the first reply. Off
+            by default; titles always fall back to your first words.
+          </span>
+        </span>
       </label>
     </fieldset>
   )

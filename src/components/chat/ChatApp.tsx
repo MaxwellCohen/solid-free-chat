@@ -60,6 +60,16 @@ import {
 import { ChatAppSidebar } from './ChatAppSidebar'
 import { ChatAppSettingsModal } from './ChatAppSettingsModal'
 import { ChatAppSkillsModal } from './ChatAppSkillsModal'
+import { ChatAppPersonasModal } from './ChatAppPersonasModal'
+import {
+  BUILT_IN_PERSONAS,
+  createCustomPersona,
+  deleteCustomPersona,
+  loadCustomPersonas,
+  personaChatSetup,
+  saveCustomPersonas,
+} from '../../lib/personas'
+import type { Persona } from '../../lib/personas'
 import { ChatAppCommandPalette } from './ChatAppCommandPalette'
 import type { PaletteCommand } from './ChatAppCommandPalette'
 import { useTheme } from '../../lib/theme-context'
@@ -118,6 +128,21 @@ export default function ChatApp() {
     createSignal(false)
   const [skillsLibraryOpen, setSkillsLibraryOpen] = createSignal(false)
   const [chatSettingsOpen, setChatSettingsOpen] = createSignal(false)
+  const [personasOpen, setPersonasOpen] = createSignal(false)
+  const [customPersonas, setCustomPersonas] = createSignal<Persona[]>([])
+  onSettled(() => {
+    setCustomPersonas(loadCustomPersonas())
+  })
+  const allPersonas = () => [...BUILT_IN_PERSONAS, ...customPersonas()]
+  function startPersonaChat(persona: Persona) {
+    const setup = personaChatSetup(persona)
+    setCurrentConversationLoading(false)
+    const id = actions.createConversation()
+    actions.setConversationSettings(id, setup.settings)
+    actions.renameConversation(id, setup.title)
+    setPersonasOpen(false)
+    collapseSidebarIfNarrow()
+  }
   const currentChatSettings = useChatStore((state) => {
     const id = state.currentConversationId
     return id ? lookup(state.conversationsById, id)?.settings : undefined
@@ -488,6 +513,11 @@ export default function ChatApp() {
         setChatSettingsOpen(false)
         return
       }
+      if (personasOpen()) {
+        event.preventDefault()
+        setPersonasOpen(false)
+        return
+      }
       if (skillsLibraryOpen()) {
         event.preventDefault()
         setSkillsLibraryOpen(false)
@@ -606,6 +636,12 @@ export default function ChatApp() {
         label: 'Open skills',
         hint: hint('openSkills'),
         run: () => setSkillsLibraryOpen(true),
+      },
+      {
+        id: 'openPersonas',
+        label: 'Personas…',
+        keywords: 'character roleplay tutor pirate system prompt',
+        run: () => setPersonasOpen(true),
       },
       {
         id: 'importChats',
@@ -827,6 +863,19 @@ export default function ChatApp() {
                       : 'Could not save chats to this browser.'}
                   </p>
                 </Show>
+                <Show when={currentChatSettings()?.persona}>
+                  {(persona) => (
+                    <div
+                      class="border-border bg-muted/40 text-foreground flex min-w-0 items-center gap-2 border-b px-3 py-1 text-xs"
+                      aria-label="Active persona"
+                    >
+                      <span aria-hidden="true">{persona().emoji}</span>
+                      <span class="min-w-0 truncate font-medium">
+                        {persona().name}
+                      </span>
+                    </div>
+                  )}
+                </Show>
                 <Errored
                   fallback={(err, reset) => (
                     <ChatErrorFallback
@@ -850,6 +899,7 @@ export default function ChatApp() {
                     onLoadingChange={setCurrentConversationLoading}
                     onSlashAction={handleSlashAction}
                     onReconnectOpenRouter={openOpenRouterApiKeyModal}
+                    onOpenPersonas={() => setPersonasOpen(true)}
                     onRegisterStop={(stop) => {
                       stopStreaming = stop
                     }}
@@ -888,6 +938,23 @@ export default function ChatApp() {
             if (id) actions.setConversationSettings(id, null)
           }}
           onClose={() => setChatSettingsOpen(false)}
+        />
+
+        <ChatAppPersonasModal
+          open={personasOpen}
+          personas={allPersonas}
+          onPick={startPersonaChat}
+          onCreate={(draft) => {
+            const next = createCustomPersona(draft, customPersonas())
+            setCustomPersonas(next)
+            saveCustomPersonas(next)
+          }}
+          onDelete={(id) => {
+            const next = deleteCustomPersona(id, customPersonas())
+            setCustomPersonas(next)
+            saveCustomPersonas(next)
+          }}
+          onClose={() => setPersonasOpen(false)}
         />
 
         <ChatAppSkillsModal

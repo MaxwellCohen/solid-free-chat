@@ -54,6 +54,8 @@ type ChatThreadMessageListProps = {
   failedUserMessage: () => UIMessage | null
   error: () => Error | undefined
   onReconnectOpenRouter?: () => void
+  onOpenPersonas?: () => void
+  needsSignIn?: boolean
   providerName: string
   onPickStarter: (prompt: string) => void
 }
@@ -128,6 +130,32 @@ export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
     >
       <Show when={props.messages().length === 0 && !props.isLoading()}>
         <div class="mx-auto flex max-w-2xl flex-col items-center gap-4 py-8 text-center">
+          <Show when={props.needsSignIn}>
+            <section
+              class="border-border bg-card w-full rounded-xl border p-4 text-left"
+              aria-label="Get started"
+            >
+              <h2 class="text-foreground text-base font-semibold tracking-tight">
+                Welcome — get chatting in 3 steps
+              </h2>
+              <ol class="text-foreground mt-3 flex list-decimal flex-col gap-1.5 pl-5 text-sm">
+                <li>Sign in with OpenRouter (it is free).</li>
+                <li>Pick a free model from the model menu.</li>
+                <li>Say hi!</li>
+              </ol>
+              <button
+                type="button"
+                class="bg-primary text-primary-foreground mt-3 rounded-lg px-3 py-1.5 text-sm font-medium"
+                onClick={() => props.onReconnectOpenRouter?.()}
+              >
+                Sign in with OpenRouter
+              </button>
+              <p class="text-muted-foreground mt-3 text-xs">
+                Every model used here is free, and nothing leaves your browser
+                except requests to OpenRouter.
+              </p>
+            </section>
+          </Show>
           <h2 class="text-foreground text-lg font-semibold tracking-tight">
             How can I help today?
           </h2>
@@ -149,6 +177,15 @@ export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
               )}
             </For>
           </div>
+          <Show when={props.onOpenPersonas}>
+            <button
+              type="button"
+              class="text-muted-foreground hover:text-foreground text-sm underline"
+              onClick={() => props.onOpenPersonas?.()}
+            >
+              Browse personas…
+            </button>
+          </Show>
         </div>
       </Show>
       <div

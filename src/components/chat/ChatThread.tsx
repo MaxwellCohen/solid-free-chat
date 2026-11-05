@@ -19,6 +19,13 @@ import {
   buildFollowUpMessages,
   parseFollowUps,
 } from '../../lib/follow-ups'
+import {
+  AUTO_TITLE_SYSTEM_PROMPT,
+  buildAutoTitleMessages,
+  parseAutoTitle,
+  readSmartTitles,
+  shouldGenerateTitle,
+} from '../../lib/auto-title'
 import { createEnabledTools } from '../../lib/harness/tools'
 import {
   modelSupportsDocumentInput,
@@ -37,6 +44,7 @@ import { composeSystemPrompt } from '../../lib/compose-system-prompt'
 import {
   attachTokenUsageToLastAssistantMessage,
   chatActions,
+  chatStore,
   snapshotVariants,
   switchVariantInMessages,
   toggleBookmarkInMessages,
@@ -101,6 +109,7 @@ export default function ChatThread(props: {
   onLoadingChange: (isLoading: boolean) => void
   onRegisterStop?: (stop: (() => void) | null) => void
   onReconnectOpenRouter?: () => void
+  onOpenPersonas?: () => void
   onSlashAction?: (action: SlashAction) => void
 }) {
   return (
@@ -118,6 +127,7 @@ export default function ChatThread(props: {
           onLoadingChange={props.onLoadingChange}
           onRegisterStop={props.onRegisterStop}
           onReconnectOpenRouter={props.onReconnectOpenRouter}
+          onOpenPersonas={props.onOpenPersonas}
           onSlashAction={props.onSlashAction}
         />
       )}
@@ -138,6 +148,7 @@ function ChatThreadSession(props: {
   onLoadingChange: (isLoading: boolean) => void
   onRegisterStop?: (stop: (() => void) | null) => void
   onReconnectOpenRouter?: () => void
+  onOpenPersonas?: () => void
   onSlashAction?: (action: SlashAction) => void
 }) {
   // The parent remounts this session per conversation, so these are snapshots.
@@ -402,6 +413,57 @@ function ChatThreadSession(props: {
     }
   }
 
+  let titleAbort: AbortController | undefined
+  onCleanup(() => titleAbort?.abort())
+
+  /** Optional one-shot model title after the first exchange; failures are ignored. */
+  async function generateSmartTitle() {
+    const msgs = chat.messages() as ChatUIMessage[]
+    const conversation = lookup(
+      chatStore.state.conversationsById,
+      conversationId,
+    )
+    if (
+      !conversation ||
+      !shouldGenerateTitle({
+        enabled: readSmartTitles(),
+        titleLocked: conversation.titleLocked === true,
+        messageCount: msgs.length,
+      })
+    ) {
+      return
+    }
+    const userText = messageToPlainText(msgs[0])
+    const assistantText = messageToPlainText(msgs[1])
+    if (msgs[0].role !== 'user' || !userText || !assistantText) return
+    const ctrl = new AbortController()
+    titleAbort = ctrl
+    try {
+      let out = ''
+      for await (const chunk of runAgent({
+        apiKey: props.openRouterApiKey.trim(),
+        providerId: props.providerId,
+        model: selectedModel(),
+        messages: buildAutoTitleMessages(userText, assistantText),
+        systemPrompt: AUTO_TITLE_SYSTEM_PROMPT,
+        temperature: 0.3,
+        maxTokens: 24,
+        tools: [],
+        abortSignal: ctrl.signal,
+      })) {
+        if (ctrl.signal.aborted) return
+        if (chunk.type === 'TEXT_MESSAGE_CONTENT') out += chunk.delta
+        else if (chunk.type === 'RUN_ERROR') return
+      }
+      const title = parseAutoTitle(out)
+      if (title && !ctrl.signal.aborted) {
+        chatActions.setAutoTitle(conversationId, title)
+      }
+    } catch {
+      /* titles are best-effort */
+    }
+  }
+
   createEffect(
     () => chat.isLoading(),
     (loading, prevLoading) => {
@@ -409,6 +471,7 @@ function ChatThreadSession(props: {
         cancelFollowUps()
         return
       }
+      if (prevLoading === true && !chat.error()) void generateSmartTitle()
       if (prevLoading === true && !chat.error() && chatSettings()?.followUps) {
         void fetchFollowUps()
       }
@@ -930,6 +993,8 @@ function ChatThreadSession(props: {
         failedUserMessage={failedUserMessage}
         error={() => chat.error()}
         onReconnectOpenRouter={props.onReconnectOpenRouter}
+        onOpenPersonas={props.onOpenPersonas}
+        needsSignIn={!props.openRouterApiKey.trim()}
         providerName={getProvider(props.providerId).name}
         onPickStarter={(prompt) => setDraft(prompt)}
       />

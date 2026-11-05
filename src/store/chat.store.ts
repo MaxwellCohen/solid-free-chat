@@ -864,6 +864,22 @@ export const chatActions = {
     })
   },
 
+  /** Model-generated title; unlike rename it does not lock the title. */
+  setAutoTitle(id: string, title: string) {
+    chatStore.setState((s) => {
+      const conversation = getConversation(s, id)
+      const next = truncate(title.trim(), 52)
+      if (!conversation || conversation.titleLocked || !next) return s
+      return {
+        ...s,
+        conversationsById: {
+          ...s.conversationsById,
+          [id]: { ...conversation, title: next },
+        },
+      }
+    })
+  },
+
   deleteConversation(id: string) {
     chatStore.setState((s) => {
       if (!(id in s.conversationsById)) return s
