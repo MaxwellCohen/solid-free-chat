@@ -70,6 +70,8 @@ import { parseSlash } from '../../lib/slash-commands'
 import type { SlashCommand } from '../../lib/slash-commands'
 import { ChatFindBar } from './ChatFindBar'
 import { CHAT_SHORTCUTS, matchesShortcut } from '../../lib/keyboard-shortcuts'
+import { ChatQuoteButton } from './ChatQuoteButton'
+import { appendQuoteToDraft, selectionToBlockquote } from '../../lib/quote'
 import { ChatThreadMessageList } from './ChatThreadMessageList'
 import type { PendingFile, PendingImage } from './chat-thread-utils'
 import {
@@ -1015,6 +1017,18 @@ function ChatThreadSession(props: {
         needsSignIn={!props.openRouterApiKey.trim()}
         providerName={getProvider(props.providerId).name}
         onPickStarter={(prompt) => setDraft(prompt)}
+      />
+      <ChatQuoteButton
+        onQuote={(text) => {
+          setDraft((d) => appendQuoteToDraft(d, selectionToBlockquote(text)))
+          const el = document.querySelector<HTMLTextAreaElement>(
+            '[data-chat-composer]',
+          )
+          el?.focus()
+          queueMicrotask(() => {
+            if (el) el.setSelectionRange(el.value.length, el.value.length)
+          })
+        }}
       />
       <Show when={followUps().length > 0 && !chat.isLoading()}>
         <div
