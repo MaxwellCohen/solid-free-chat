@@ -697,12 +697,13 @@ function ChatThreadSession(props: {
       const msg = index === -1 ? undefined : msgs[index]
       if (!msg) return
       event.preventDefault()
-      if (action === 'bookmark') toggleBookmark(msg)
-      else if (action === 'copy') {
-        navigator.clipboard
-          ?.writeText(messageToPlainText(msg))
-          .catch(() => undefined)
+      if (action === 'bookmark') {
+        toggleBookmark(msg)
+        return
       }
+      navigator.clipboard
+        .writeText(messageToPlainText(msg))
+        .catch(() => undefined)
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
