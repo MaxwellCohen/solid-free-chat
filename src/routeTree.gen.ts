@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
+import { Route as ArenaRouteImport } from './routes/arena'
 import { Route as DevRouteImport } from './routes/dev'
 import { Route as HarnessSandboxRouteImport } from './routes/harness-sandbox'
 import { Route as InsightsRouteImport } from './routes/insights'
@@ -27,6 +28,11 @@ const IndexRoute = IndexRouteImport.update({
 const AboutRoute = AboutRouteImport.update({
   id: '/about',
   path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ArenaRoute = ArenaRouteImport.update({
+  id: '/arena',
+  path: '/arena',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DevRoute = DevRouteImport.update({
@@ -68,6 +74,7 @@ const ExampleChatRoute = ExampleChatRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/arena': typeof ArenaRoute
   '/dev': typeof DevRoute
   '/harness-sandbox': typeof HarnessSandboxRoute
   '/insights': typeof InsightsRoute
@@ -79,6 +86,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/arena': typeof ArenaRoute
   '/dev': typeof DevRoute
   '/harness-sandbox': typeof HarnessSandboxRoute
   '/insights': typeof InsightsRoute
@@ -91,6 +99,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/arena': typeof ArenaRoute
   '/dev': typeof DevRoute
   '/harness-sandbox': typeof HarnessSandboxRoute
   '/insights': typeof InsightsRoute
@@ -104,6 +113,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/about'
+    | '/arena'
     | '/dev'
     | '/harness-sandbox'
     | '/insights'
@@ -115,6 +125,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/about'
+    | '/arena'
     | '/dev'
     | '/harness-sandbox'
     | '/insights'
@@ -126,6 +137,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/about'
+    | '/arena'
     | '/dev'
     | '/harness-sandbox'
     | '/insights'
@@ -138,6 +150,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
+  ArenaRoute: typeof ArenaRoute
   DevRoute: typeof DevRoute
   HarnessSandboxRoute: typeof HarnessSandboxRoute
   InsightsRoute: typeof InsightsRoute
@@ -161,6 +174,13 @@ declare module '@tanstack/solid-router' {
       path: '/about'
       fullPath: '/about'
       preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/arena': {
+      id: '/arena'
+      path: '/arena'
+      fullPath: '/arena'
+      preLoaderRoute: typeof ArenaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dev': {
@@ -218,6 +238,7 @@ declare module '@tanstack/solid-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
+  ArenaRoute: ArenaRoute,
   DevRoute: DevRoute,
   HarnessSandboxRoute: HarnessSandboxRoute,
   InsightsRoute: InsightsRoute,

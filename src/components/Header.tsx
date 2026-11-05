@@ -100,6 +100,16 @@ export default function Header() {
             Insights
           </Link>
           <Link
+            to="/arena"
+            class="text-muted-foreground hover:text-foreground rounded-md px-2.5 py-1.5 no-underline transition-colors"
+            activeProps={{
+              class:
+                'text-foreground bg-muted rounded-md px-2.5 py-1.5 no-underline transition-colors',
+            }}
+          >
+            Arena
+          </Link>
+          <Link
             to="/dev"
             class="text-muted-foreground hover:text-foreground rounded-md px-2.5 py-1.5 no-underline transition-colors"
             activeProps={{

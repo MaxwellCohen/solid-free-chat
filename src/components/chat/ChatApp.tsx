@@ -593,6 +593,12 @@ export default function ChatApp() {
         run: () => void navigate({ to: '/insights' }),
       },
       {
+        id: 'openArena',
+        label: 'Open arena',
+        keywords: 'compare models side by side vote leaderboard',
+        run: () => void navigate({ to: '/arena' }),
+      },
+      {
         id: 'showHelp',
         label: 'Keyboard shortcuts',
         hint: hint('showHelp'),
