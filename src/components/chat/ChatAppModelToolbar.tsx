@@ -135,6 +135,11 @@ function ToolsMenu(props: { props: ChatAppModelToolbarProps }) {
                 <span class="text-muted-foreground block text-xs">
                   {tool.summary}
                 </span>
+                <Show when={tool.network}>
+                  <span class="text-muted-foreground block text-xs italic">
+                    {tool.network}
+                  </span>
+                </Show>
               </span>
             </label>
           )}

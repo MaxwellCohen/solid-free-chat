@@ -115,6 +115,11 @@ Limits: whatever JavaScript this site serves can read the key while you use it â
 | `list_skills`, `create_skill`, `update_skill`, `set_skill_attached` | on      | Lets the model manage your skill library and this chat's attached skills (takes effect next message) |
 | `get_current_datetime`                                              | on      | Local date, time, timezone, locale                                                                   |
 | `run_javascript`                                                    | on      | Runs JS in an isolated Web Worker (bare expressions or async function bodies; 15s timeout)           |
+| `calculate`                                                         | on      | Safe local math evaluator (no `eval`): `+ - * / ^ %`, parentheses, `sqrt`/`sin`/`log`/`min`/â€¦, `pi`, `e` |
+| `convert_units`                                                     | on      | Local length, mass, temperature, volume, time, and data unit conversion                              |
+| `random`                                                            | on      | Dice (`2d6+1`), coin flip, or pick from a list                                                       |
+| `wikipedia_lookup`                                                  | off     | Article summary + URL from en.wikipedia.org (keyless; sends the query to Wikipedia)                  |
+| `get_weather`                                                       | off     | Current + 3-day forecast via Open-Meteo (keyless; sends the place name to Open-Meteo)                |
 
 Code tools run inside a `sandbox="allow-scripts"` iframe (opaque origin), so they cannot read the app's localStorage, API key, or DOM. To add a tool, define it with `toolDefinition(...)` in `src/lib/harness/tools.ts` and append a descriptor to `HARNESS_TOOLS`; because `chat()` runs in the browser, `.server(execute)` tools execute locally.
 

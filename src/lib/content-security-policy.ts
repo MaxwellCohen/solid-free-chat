@@ -15,8 +15,15 @@ function sentryOrigin(): string | undefined {
   }
 }
 
+/** Keyless public APIs used by the opt-in network tools (see harness/web-tools.ts). */
+export const TOOL_ORIGINS = [
+  'https://en.wikipedia.org',
+  'https://geocoding-api.open-meteo.com',
+  'https://api.open-meteo.com',
+]
+
 export function contentSecurityPolicy(): string {
-  const connect = ["'self'", ...providerOrigins()]
+  const connect = ["'self'", ...providerOrigins(), ...TOOL_ORIGINS]
   const sentry = sentryOrigin()
   if (sentry) connect.push(sentry)
   // Vite HMR and TanStack devtools use local websockets / ports.
