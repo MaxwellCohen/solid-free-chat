@@ -34,6 +34,10 @@ export interface ChatConversation {
   id: string
   title: string
   updatedAt: number
+  /** Pinned chats are listed first in the sidebar. */
+  pinned?: boolean
+  /** Set when the user renamed the chat; disables auto-titling. */
+  titleLocked?: boolean
   /** Ordered skill ids attached to this chat (live links into `skills`). */
   skillIds: string[]
   /** Most recent usage reported by the API for this chat. */
@@ -293,6 +297,8 @@ function normalizeConversationRecord(
       title,
       updatedAt,
       skillIds,
+      ...(source.pinned === true ? { pinned: true } : {}),
+      ...(source.titleLocked === true ? { titleLocked: true } : {}),
       ...(lastUsage ? { lastUsage } : {}),
       ...(sessionTotalTokens !== undefined ? { sessionTotalTokens } : {}),
       ...(sessionTotalCost !== undefined ? { sessionTotalCost } : {}),
@@ -699,6 +705,40 @@ export const chatActions = {
     })
   },
 
+  togglePinned(id: string) {
+    chatStore.setState((s) => {
+      const conversation = getConversation(s, id)
+      if (!conversation) return s
+      const { pinned: _pinned, ...rest } = conversation
+      return {
+        ...s,
+        conversationsById: {
+          ...s.conversationsById,
+          [id]: conversation.pinned ? rest : { ...rest, pinned: true },
+        },
+      }
+    })
+  },
+
+  renameConversation(id: string, title: string) {
+    chatStore.setState((s) => {
+      const conversation = getConversation(s, id)
+      if (!conversation) return s
+      const trimmed = title.trim()
+      return {
+        ...s,
+        conversationsById: {
+          ...s.conversationsById,
+          [id]: {
+            ...conversation,
+            title: trimmed || NEW_CHAT_TITLE,
+            ...(trimmed ? { titleLocked: true } : {}),
+          },
+        },
+      }
+    })
+  },
+
   deleteConversation(id: string) {
     chatStore.setState((s) => {
       if (!(id in s.conversationsById)) return s
@@ -757,7 +797,11 @@ export const chatActions = {
       if (!conversation) return s
       const titleHint = deriveTitleFromMessages(messages)
       let title = conversation.title
-      if (conversation.title === NEW_CHAT_TITLE && titleHint) {
+      if (
+        conversation.title === NEW_CHAT_TITLE &&
+        !conversation.titleLocked &&
+        titleHint
+      ) {
         title = truncate(titleHint, 52)
       }
       return {
@@ -787,9 +831,10 @@ export const chatSelectors = {
   },
 
   conversationList(state: ChatAppState): ChatConversation[] {
-    return state.conversationOrder
+    const all = state.conversationOrder
       .map((id) => getConversation(state, id))
       .filter((conversation): conversation is ChatConversation => conversation != null)
+    return [...all.filter((c) => c.pinned), ...all.filter((c) => !c.pinned)]
   },
 
   conversationMessages(

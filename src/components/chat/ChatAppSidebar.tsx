@@ -5,11 +5,13 @@ import {
   KeyRound,
   PanelLeft,
   PanelLeftClose,
+  Pencil,
+  Pin,
   SquarePen,
   Upload,
 } from '../icons'
 import type { ChatConversation } from '../../store/chat.hooks'
-import { NEW_CHAT_TITLE } from '../../store/chat.store'
+import { NEW_CHAT_TITLE, chatActions } from '../../store/chat.store'
 import { formatCost } from '../../lib/usage-cost'
 import { requestScrollToMessage } from '../../lib/scroll-to-message'
 import { searchSidebarConversations } from '../../lib/conversation-search'
@@ -278,24 +280,33 @@ function ConversationSearch(props: { props: ChatAppSidebarProps }) {
 }
 
 function ConversationNav(props: { props: ChatAppSidebarProps }) {
+  const pinned = createMemo(() => props.props.conversations().filter((c) => c.pinned))
+  const unpinned = createMemo(() => props.props.conversations().filter((c) => !c.pinned))
+  const renderItems = (items: ChatConversation[]) => (
+    <For each={items}>
+      {(conversation) => (
+        <ConversationListItem
+          conversation={conversation}
+          currentConversationId={props.props.currentConversationId}
+          onSelectConversation={props.props.onSelectConversation}
+          onDeleteConversation={props.props.onDeleteConversation}
+        />
+      )}
+    </For>
+  )
   return (
     <nav
       id="sidebar-conversations-nav"
       class="min-h-0 flex-1 overflow-y-auto"
       aria-label="Conversations"
     >
-      <ul class="space-y-0.5 px-2 pb-3">
-        <For each={props.props.conversations()}>
-          {(conversation) => (
-            <ConversationListItem
-              conversation={conversation}
-              currentConversationId={props.props.currentConversationId}
-              onSelectConversation={props.props.onSelectConversation}
-              onDeleteConversation={props.props.onDeleteConversation}
-            />
-          )}
-        </For>
-      </ul>
+      <Show when={pinned().length > 0}>
+        <h3 class="text-muted-foreground px-4 pt-1 pb-1 text-xs font-medium">
+          Pinned
+        </h3>
+        <ul class="space-y-0.5 px-2 pb-2">{renderItems(pinned())}</ul>
+      </Show>
+      <ul class="space-y-0.5 px-2 pb-3">{renderItems(unpinned())}</ul>
     </nav>
   )
 }
@@ -307,9 +318,37 @@ function ConversationListItem(props: {
   onDeleteConversation: (id: string) => void
 }) {
   const [confirmingDelete, setConfirmingDelete] = createSignal(false)
+  const [editing, setEditing] = createSignal(false)
+  const [draft, setDraft] = createSignal('')
+  const startEdit = () => {
+    setDraft(props.conversation.title || NEW_CHAT_TITLE)
+    setEditing(true)
+  }
+  const commit = () => {
+    if (!editing()) return
+    setEditing(false)
+    chatActions.renameConversation(props.conversation.id, draft())
+  }
 
   return (
     <li class="flex items-stretch gap-0.5">
+      <Show when={editing()}>
+        <input
+          type="text"
+          ref={(el: HTMLInputElement) => queueMicrotask(() => el.select())}
+          autofocus
+          aria-label="Chat title"
+          class="border-border bg-background min-w-0 flex-1 rounded-lg border px-2 py-2 text-sm"
+          value={draft()}
+          onInput={(e) => setDraft(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commit()
+            else if (e.key === 'Escape') setEditing(false)
+          }}
+          onBlur={commit}
+        />
+      </Show>
+      <Show when={!editing()}>
       <button
         type="button"
         class={[
@@ -323,6 +362,7 @@ function ConversationListItem(props: {
           setConfirmingDelete(false)
           props.onSelectConversation(props.conversation.id)
         }}
+        onDblClick={startEdit}
       >
         <span class="block truncate">
           {props.conversation.title || NEW_CHAT_TITLE}
@@ -332,6 +372,31 @@ function ConversationListItem(props: {
             {formatCost(props.conversation.sessionTotalCost ?? 0)}
           </span>
         </Show>
+      </button>
+      </Show>
+      <button
+        type="button"
+        title={props.conversation.pinned ? 'Unpin chat' : 'Pin chat'}
+        aria-label={`${props.conversation.pinned ? 'Unpin' : 'Pin'} chat: ${props.conversation.title || NEW_CHAT_TITLE}`}
+        aria-pressed={props.conversation.pinned ? 'true' : 'false'}
+        class={[
+          'hover:bg-muted shrink-0 rounded-lg px-2',
+          props.conversation.pinned
+            ? 'text-primary'
+            : 'text-muted-foreground hover:text-foreground',
+        ]}
+        onClick={() => chatActions.togglePinned(props.conversation.id)}
+      >
+        <Pin class="size-3.5" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        title="Rename chat"
+        aria-label={`Rename chat: ${props.conversation.title || NEW_CHAT_TITLE}`}
+        class="text-muted-foreground hover:text-foreground hover:bg-muted shrink-0 rounded-lg px-2"
+        onClick={startEdit}
+      >
+        <Pencil class="size-3.5" aria-hidden="true" />
       </button>
       <Show
         when={confirmingDelete()}
