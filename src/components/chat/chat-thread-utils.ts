@@ -16,6 +16,19 @@ export function formatReplyTokenLine(usage: TokenUsageSnapshot): string {
   return `Reply: ${formatTokenCount(usage.promptTokens)} context · ${formatTokenCount(usage.completionTokens)} out${cost}`
 }
 
+/** "4.2s · 38 tok/s"; tokens/sec only when completion tokens are known. '' when elapsed is unusable. */
+export function formatSpeedLine(
+  elapsedMs: number,
+  completionTokens?: number,
+): string {
+  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return ''
+  const sec = elapsedMs / 1000
+  const time = sec >= 100 ? `${Math.round(sec)}s` : `${sec.toFixed(1)}s`
+  if (!completionTokens || completionTokens <= 0) return time
+  const rate = completionTokens / sec
+  return `${time} · ${rate >= 100 ? Math.round(rate) : rate.toFixed(1)} tok/s`
+}
+
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024
 export const MAX_PDF_BYTES = 12 * 1024 * 1024
 

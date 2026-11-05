@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { UIMessage } from '@tanstack/ai-client'
 import {
   FINAL_ANSWER_NUDGE,
+  formatSpeedLine,
   messageToPlainText,
   needsFinalAnswerNudge,
   wasNudged,
@@ -112,5 +113,21 @@ describe('needsFinalAnswerNudge', () => {
     expect(
       wasNudged([nudge, msg('user', [{ type: 'text', content: 'ok' }])]),
     ).toBe(false)
+  })
+})
+
+describe('formatSpeedLine', () => {
+  it('shows seconds and tokens per second', () => {
+    expect(formatSpeedLine(4200, 168)).toBe('4.2s · 40.0 tok/s')
+    expect(formatSpeedLine(2000, 400)).toBe('2.0s · 200 tok/s')
+  })
+  it('omits tok/s without completion tokens', () => {
+    expect(formatSpeedLine(1500)).toBe('1.5s')
+    expect(formatSpeedLine(1500, 0)).toBe('1.5s')
+  })
+  it('rounds long runs and rejects bad input', () => {
+    expect(formatSpeedLine(125_400, 10)).toBe('125s · 0.1 tok/s')
+    expect(formatSpeedLine(0, 5)).toBe('')
+    expect(formatSpeedLine(Number.NaN)).toBe('')
   })
 })

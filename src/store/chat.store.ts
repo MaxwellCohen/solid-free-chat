@@ -37,6 +37,8 @@ export type ChatUIMessage = UIMessage & {
   tokenUsage?: TokenUsageSnapshot
   /** User starred this message; listed on the Saved page. */
   bookmarked?: boolean
+  /** Wall-clock ms the model run took (assistant replies only). */
+  elapsedMs?: number
   /**
    * All versions of this reply (oldest first), including the active one.
    * `parts`/`tokenUsage` always mirror `variants[variantIndex]`, so the active
@@ -396,8 +398,9 @@ function normalizeVariants(raw: unknown): MessageVariant[] | null {
 
 function normalizeMessage(raw: unknown): ChatUIMessage | null {
   if (!raw || typeof raw !== 'object') return null
-  const { bookmarked, variants, variantIndex, ...message } =
+  const { bookmarked, variants, variantIndex, elapsedMs, ...message } =
     raw as UIMessage & {
+      elapsedMs?: unknown
       tokenUsage?: unknown
       bookmarked?: unknown
       variants?: unknown
@@ -417,6 +420,11 @@ function normalizeMessage(raw: unknown): ChatUIMessage | null {
         }
       : {}),
     ...(bookmarked === true ? { bookmarked: true } : {}),
+    ...(typeof elapsedMs === 'number' &&
+    Number.isFinite(elapsedMs) &&
+    elapsedMs > 0
+      ? { elapsedMs }
+      : {}),
     createdAt:
       message.createdAt != null
         ? new Date(message.createdAt as unknown as string | number)
@@ -1077,6 +1085,21 @@ export function attachTokenUsageToLastAssistantMessage(
   return next
 }
 
+/** Attach run duration to the last assistant message. */
+export function attachElapsedToLastAssistantMessage(
+  messages: ChatUIMessage[],
+  elapsedMs: number,
+): ChatUIMessage[] {
+  const next = messages.slice()
+  for (let i = next.length - 1; i >= 0; i--) {
+    if (next[i].role === 'assistant') {
+      next[i] = { ...next[i], elapsedMs }
+      break
+    }
+  }
+  return next
+}
+
 /** The message's variant list and active index, with the active entry refreshed from the message. */
 export function snapshotVariants(message: ChatUIMessage): {
   variants: MessageVariant[]
@@ -1118,7 +1141,7 @@ export function switchVariantInMessages(
     if (m.id !== messageId) return m
     const { variants } = snapshotVariants(m)
     if (variants.length < 2 || index < 0 || index >= variants.length) return m
-    const { tokenUsage: _drop, ...rest } = m
+    const { tokenUsage: _drop, elapsedMs: _elapsed, ...rest } = m
     const target = variants[index]
     return {
       ...rest,

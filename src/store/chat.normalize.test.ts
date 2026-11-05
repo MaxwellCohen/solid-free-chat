@@ -235,3 +235,26 @@ describe('variant helpers', () => {
 function text0(v: { parts: ChatUIMessage['parts'] }) {
   return v.parts[0].type === 'text' ? v.parts[0].content : ''
 }
+
+describe('elapsedMs', () => {
+  it('keeps valid elapsedMs and drops junk on load', () => {
+    const msg = (id: string, elapsedMs: unknown) => ({
+      id,
+      role: 'assistant',
+      parts: [],
+      elapsedMs,
+    })
+    const state = normalizeChatAppState({
+      conversationOrder: ['c'],
+      conversationsById: { c: { id: 'c', title: 't', updatedAt: 1, skillIds: [] } },
+      messagesByConversationId: {
+        c: [msg('a', 1234), msg('b', 'x'), msg('c', -5)],
+      },
+      currentConversationId: 'c',
+    })
+    const out = state?.messagesByConversationId.c
+    expect(out?.[0].elapsedMs).toBe(1234)
+    expect(out?.[1].elapsedMs).toBeUndefined()
+    expect(out?.[2].elapsedMs).toBeUndefined()
+  })
+})

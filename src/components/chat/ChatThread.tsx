@@ -42,6 +42,7 @@ import {
 import type { ModelPricing } from '../../lib/usage-cost'
 import { composeSystemPrompt } from '../../lib/compose-system-prompt'
 import {
+  attachElapsedToLastAssistantMessage,
   attachTokenUsageToLastAssistantMessage,
   chatActions,
   chatStore,
@@ -260,13 +261,31 @@ function ChatThreadSession(props: {
     isOverThreshold(sessionTotalCost() ?? 0, costThreshold()),
   )
 
+  /** Start of the in-flight model run (0 when idle); feeds `elapsedMs`. */
+  let runStartedAt = 0
   const chat = useChat({
     id: conversationId,
     initialMessages,
     onChunk: (chunk: StreamChunk) => {
       if (chunk.type !== 'RUN_FINISHED') return
+      const elapsedMs = runStartedAt ? Date.now() - runStartedAt : 0
+      runStartedAt = 0
       const u = chunk.usage
-      if (!u) return
+      if (!u) {
+        if (elapsedMs > 0) {
+          queueMicrotask(() => {
+            const msgs = chat.messages() as ChatUIMessage[]
+            if (!msgs.some((m) => m.role === 'assistant')) return
+            chat.setMessages(
+              attachElapsedToLastAssistantMessage(
+                msgs,
+                elapsedMs,
+              ) as UIMessage[],
+            )
+          })
+        }
+        return
+      }
       const cost = computeUsageCost(u, props.modelPricing)
       chatActions.recordConversationTokenUsage(conversationId, {
         promptTokens: u.promptTokens,
@@ -295,12 +314,17 @@ function ChatThreadSession(props: {
           }
         }
         if (!foundAssistant) return
-        const next = attachTokenUsageToLastAssistantMessage(msgs, snap)
+        const withUsage = attachTokenUsageToLastAssistantMessage(msgs, snap)
+        const next =
+          elapsedMs > 0
+            ? attachElapsedToLastAssistantMessage(withUsage, elapsedMs)
+            : withUsage
         chat.setMessages(next as UIMessage[])
       })
     },
-    connection: stream((messages, _data, abortSignal) =>
-      runAgent({
+    connection: stream((messages, _data, abortSignal) => {
+      runStartedAt = Date.now()
+      return runAgent({
         apiKey: props.openRouterApiKey.trim(),
         providerId: props.providerId,
         model: selectedModel(),
@@ -319,8 +343,8 @@ function ChatThreadSession(props: {
             })
           : [],
         abortSignal,
-      }),
-    ),
+      })
+    }),
     onFinish: () => {
       applyPendingVariants()
       commitConversationMessages()

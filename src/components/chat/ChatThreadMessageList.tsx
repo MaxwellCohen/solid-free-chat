@@ -29,6 +29,7 @@ import {
 import type { ChatUIMessage } from '../../store/chat.store'
 import {
   formatReplyTokenLine,
+  formatSpeedLine,
   messageToPlainText,
   userMessageToResendParts,
   withEditedText,
@@ -320,24 +321,44 @@ function AssistantUsageLine(props: {
   isLastAssistantMessage: boolean
   sessionTotalSuffix: () => string
 }) {
+  const speedLine = () =>
+    props.message.elapsedMs
+      ? formatSpeedLine(
+          props.message.elapsedMs,
+          props.message.tokenUsage?.completionTokens,
+        )
+      : ''
   return (
-    <Show
-      when={
-        props.message.role === 'assistant' ? props.message.tokenUsage : false
-      }
-      keyed
-    >
-      {(usage) => (
-        <p
-          data-usage-line
-          class="text-muted-foreground max-w-full px-0.5 text-xs tabular-nums"
-          title="Context = prompt tokens for this reply. Chat total sums each API-reported run in this conversation."
-        >
-          {formatReplyTokenLine(usage)}
-          {props.isLastAssistantMessage ? props.sessionTotalSuffix() : ''}
-        </p>
-      )}
-    </Show>
+    <>
+      <Show when={props.message.role === 'assistant' && speedLine()}>
+        {(line) => (
+          <p
+            data-usage-line
+            data-speed-line
+            class="text-muted-foreground max-w-full px-0.5 text-xs tabular-nums"
+          >
+            {line()}
+          </p>
+        )}
+      </Show>
+      <Show
+        when={
+          props.message.role === 'assistant' ? props.message.tokenUsage : false
+        }
+        keyed
+      >
+        {(usage) => (
+          <p
+            data-usage-line
+            class="text-muted-foreground max-w-full px-0.5 text-xs tabular-nums"
+            title="Context = prompt tokens for this reply. Chat total sums each API-reported run in this conversation."
+          >
+            {formatReplyTokenLine(usage)}
+            {props.isLastAssistantMessage ? props.sessionTotalSuffix() : ''}
+          </p>
+        )}
+      </Show>
+    </>
   )
 }
 
