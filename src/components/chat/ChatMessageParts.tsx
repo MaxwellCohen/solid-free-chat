@@ -5,6 +5,7 @@ import { CircleAlert, FileText, LoaderCircle, Wrench } from '../icons'
 import { renderMarkdownToHtml } from '../../lib/markdown'
 import { validateChartSpec } from '../../lib/visuals/chart'
 import type { ChartSpec } from '../../lib/visuals/chart'
+import { enhanceCodeBlocks } from '../../lib/code-block-actions'
 import { enhanceMermaidBlocks } from '../../lib/visuals/mermaid'
 import { ChartView, DiagramView } from './ChatVisuals'
 
@@ -77,7 +78,9 @@ function TextPart(props: {
 
   // Draw ```mermaid fences once the markdown HTML is in the DOM.
   createEffect(html, (markup) => {
-    if (!container || !markup.includes('data-lang="mermaid"')) return
+    if (!container) return
+    enhanceCodeBlocks(container)
+    if (!markup.includes('data-lang="mermaid"')) return
     return enhanceMermaidBlocks(container)
   })
 
