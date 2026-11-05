@@ -91,7 +91,9 @@ describe('parseChatImport', () => {
     const r = parseChatImport(
       JSON.stringify({
         conversationsById: { x: { title: 5 }, y: null },
-        messagesByConversationId: { x: [null, 3, { id: 'm', role: 'user', parts: [] }] },
+        messagesByConversationId: {
+          x: [null, 3, { id: 'm', role: 'user', parts: [] }],
+        },
       }),
     )
     expect(r.ok).toBe(true)
@@ -106,9 +108,18 @@ describe('mergeImportedChats', () => {
     const current = makeState()
     const imported = makeState()
     imported.conversationsById.a.title = 'Imported'
-    imported.skills[0] = { id: 's1', name: 'Other', instructions: 'x', updatedAt: 9 }
+    imported.skills[0] = {
+      id: 's1',
+      name: 'Other',
+      instructions: 'x',
+      updatedAt: 9,
+    }
     let n = 0
-    const { state, addedIds } = mergeImportedChats(current, imported, () => `n${++n}`)
+    const { state, addedIds } = mergeImportedChats(
+      current,
+      imported,
+      () => `n${++n}`,
+    )
     expect(addedIds).toHaveLength(2)
     expect(addedIds.every((id) => id !== 'a' && id !== 'b')).toBe(true)
     expect(state.conversationsById.a.title).toBe('Alpha')
@@ -121,14 +132,18 @@ describe('mergeImportedChats', () => {
     expect(state.skills).toHaveLength(3)
     expect(state.skills.find((s) => s.id === 's1')!.name).toBe('S')
     expect(copy.skillIds[0]).not.toBe('s1')
-    expect(state.skills.find((s) => s.id === copy.skillIds[0])!.name).toBe('Other')
+    expect(state.skills.find((s) => s.id === copy.skillIds[0])!.name).toBe(
+      'Other',
+    )
   })
 
   it('keeps ids when no collision', () => {
     const current = makeState()
     const imported = makeState()
     imported.conversationOrder = ['c']
-    imported.conversationsById = { c: { id: 'c', title: 'C', updatedAt: 1, skillIds: [] } }
+    imported.conversationsById = {
+      c: { id: 'c', title: 'C', updatedAt: 1, skillIds: [] },
+    }
     imported.messagesByConversationId = { c: [] }
     const { state, addedIds } = mergeImportedChats(current, imported)
     expect(addedIds).toEqual(['c'])

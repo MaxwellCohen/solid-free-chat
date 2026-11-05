@@ -246,7 +246,9 @@ describe('elapsedMs', () => {
     })
     const state = normalizeChatAppState({
       conversationOrder: ['c'],
-      conversationsById: { c: { id: 'c', title: 't', updatedAt: 1, skillIds: [] } },
+      conversationsById: {
+        c: { id: 'c', title: 't', updatedAt: 1, skillIds: [] },
+      },
       messagesByConversationId: {
         c: [msg('a', 1234), msg('b', 'x'), msg('c', -5)],
       },

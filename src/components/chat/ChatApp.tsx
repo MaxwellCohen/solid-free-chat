@@ -52,6 +52,9 @@ import { SIDEBAR_OPEN_LS_KEY } from './chat-app-constants'
 import { ChatAppModelToolbar } from './ChatAppModelToolbar'
 import { ChatAppOpenRouterModal } from './ChatAppOpenRouterModal'
 import { ChatAppShortcutsModal } from './ChatAppShortcutsModal'
+import { ChatAppTourModal } from './ChatAppTourModal'
+import { TOUR_SEEN_KEY } from '../../lib/tour-items'
+import type { TourItem } from '../../lib/tour-items'
 import {
   chatToMarkdown,
   exportFileName,
@@ -151,6 +154,56 @@ export default function ChatApp() {
   const [openRouterApiKeyModalOpen, setOpenRouterApiKeyModalOpen] =
     createSignal(false)
   const [shortcutsHelpOpen, setShortcutsHelpOpen] = createSignal(false)
+  const [tourOpen, setTourOpen] = createSignal(false)
+  function tourSeen() {
+    try {
+      return localStorage.getItem(TOUR_SEEN_KEY) !== null
+    } catch {
+      return true
+    }
+  }
+  function markTourSeen() {
+    try {
+      localStorage.setItem(TOUR_SEEN_KEY, '1')
+    } catch {
+      /* ignore */
+    }
+  }
+  function runTourAction(item: TourItem) {
+    setTourOpen(false)
+    switch (item.action) {
+      case 'palette':
+        openPalette()
+        break
+      case 'composer':
+        queueMicrotask(focusChatComposer)
+        break
+      case 'personas':
+        setPersonasOpen(true)
+        break
+      case 'arena':
+        void navigate({ to: '/arena' })
+        break
+      case 'roundtable':
+        void navigate({ to: '/roundtable' })
+        break
+      case 'insights':
+        void navigate({ to: '/insights' })
+        break
+      case 'saved':
+        void navigate({ to: '/saved' })
+        break
+      case 'shortcuts':
+        setShortcutsHelpOpen(true)
+        break
+      case 'display':
+        setChatSettingsOpen(true)
+        break
+      case 'import':
+        pickChatsToImport()
+        break
+    }
+  }
   const navigate = useNavigate()
   const [paletteOpen, setPaletteOpen] = createSignal(false)
   const [paletteQuery, setPaletteQuery] = createSignal('')
@@ -227,6 +280,10 @@ export default function ChatApp() {
     const oauthCode = takeOpenRouterCallbackCode()
     if (oauthCode) void finishOpenRouterSignIn(oauthCode)
     else if (!stored.key.trim()) setOpenRouterApiKeyModalOpen(true)
+    else if (!tourSeen()) {
+      markTourSeen()
+      setTourOpen(true)
+    }
     let stopPersist: (() => void) | undefined
     let disposed = false
     const stopStatus = onPersistenceStatus(setPersistStatus)
@@ -514,6 +571,11 @@ export default function ChatApp() {
         setPaletteOpen(false)
         return
       }
+      if (tourOpen()) {
+        event.preventDefault()
+        setTourOpen(false)
+        return
+      }
       if (shortcutsHelpOpen()) {
         event.preventDefault()
         setShortcutsHelpOpen(false)
@@ -689,6 +751,12 @@ export default function ChatApp() {
         label: 'Open roundtable',
         keywords: 'personas debate conversation panel discuss',
         run: () => void navigate({ to: '/roundtable' }),
+      },
+      {
+        id: 'openTour',
+        label: "What's new / Tour",
+        keywords: 'features guide help discover onboarding',
+        run: () => setTourOpen(true),
       },
       {
         id: 'showHelp',
@@ -871,6 +939,7 @@ export default function ChatApp() {
           shareFeedback={shareFeedback}
           onShare={() => void shareCurrentChat()}
           onOpenShortcuts={() => setShortcutsHelpOpen(true)}
+          onOpenTour={() => setTourOpen(true)}
           onOpenSettings={() => setChatSettingsOpen(true)}
           settingsActive={() => currentChatSettings() !== undefined}
           tools={HARNESS_TOOLS}
@@ -1030,6 +1099,12 @@ export default function ChatApp() {
             {importToast()}
           </div>
         </Show>
+
+        <ChatAppTourModal
+          open={tourOpen}
+          onTry={runTourAction}
+          onClose={() => setTourOpen(false)}
+        />
 
         <ChatAppShortcutsModal
           open={shortcutsHelpOpen}

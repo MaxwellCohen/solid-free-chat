@@ -112,6 +112,7 @@ async function boot(page: Page, path: string, state?: unknown) {
       if (sessionStorage.getItem('live-seeded')) return
       sessionStorage.setItem('live-seeded', '1')
       sessionStorage.setItem('solid-free-chat-openrouter-api-key', k as string)
+      localStorage.setItem('tour-seen-v1', '1')
       if (s) localStorage.setItem('solid-free-chat:v2', JSON.stringify(s))
     },
     [KEY, state ?? null],

@@ -118,6 +118,7 @@ async function open(page: Page, state: unknown) {
       'solid-free-chat-openrouter-api-key',
       'sk-or-e2e-fake',
     )
+    localStorage.setItem('tour-seen-v1', '1')
     localStorage.setItem('solid-free-chat:v2', JSON.stringify(s))
   }, state)
   await page.goto('/')

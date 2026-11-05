@@ -31,6 +31,7 @@ type ChatAppModelToolbarProps = {
   shareFeedback: () => string | null
   onShare: () => void
   onOpenShortcuts: () => void
+  onOpenTour: () => void
   onOpenSettings: () => void
   settingsActive: () => boolean
   tools: readonly HarnessToolDescriptor[]
@@ -68,6 +69,7 @@ function ToolbarRow(props: { props: ChatAppModelToolbarProps }) {
       <SettingsButton props={props.props} />
       <ShareButton props={props.props} />
       <ShortcutsButton onOpen={props.props.onOpenShortcuts} />
+      <TourButton onOpen={props.props.onOpenTour} />
       <StreamingIndicator isStreaming={props.props.isStreaming} />
       <ModelStatusMessage props={props.props} />
     </div>
@@ -184,6 +186,20 @@ function ShortcutsButton(props: { onOpen: () => void }) {
       aria-label="Keyboard shortcuts"
     >
       <Keyboard class="size-4 shrink-0" aria-hidden="true" />
+    </button>
+  )
+}
+
+function TourButton(props: { onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      class="text-muted-foreground hover:bg-muted hover:text-foreground hidden shrink-0 items-center justify-center rounded-lg px-2.5 py-1.5 text-sm font-semibold sm:inline-flex"
+      onClick={() => props.onOpen()}
+      title="What's new / Tour"
+      aria-label="What's new / Tour"
+    >
+      ?
     </button>
   )
 }

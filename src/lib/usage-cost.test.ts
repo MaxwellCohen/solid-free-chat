@@ -10,7 +10,9 @@ import {
 
 describe('parseModelPricing', () => {
   it('parses string prices', () => {
-    expect(parseModelPricing({ prompt: '0.000001', completion: '0.000002' })).toEqual({
+    expect(
+      parseModelPricing({ prompt: '0.000001', completion: '0.000002' }),
+    ).toEqual({
       prompt: 0.000001,
       completion: 0.000002,
     })
@@ -25,10 +27,14 @@ describe('parseModelPricing', () => {
 describe('computeUsageCost', () => {
   const usage = { promptTokens: 1000, completionTokens: 500 }
   it('prefers reported cost', () => {
-    expect(computeUsageCost({ ...usage, cost: 0.5 }, { prompt: 1, completion: 1 })).toBe(0.5)
+    expect(
+      computeUsageCost({ ...usage, cost: 0.5 }, { prompt: 1, completion: 1 }),
+    ).toBe(0.5)
   })
   it('computes from pricing', () => {
-    expect(computeUsageCost(usage, { prompt: 0.001, completion: 0.002 })).toBeCloseTo(2)
+    expect(
+      computeUsageCost(usage, { prompt: 0.001, completion: 0.002 }),
+    ).toBeCloseTo(2)
   })
   it('is undefined without data', () => {
     expect(computeUsageCost(usage)).toBeUndefined()
@@ -38,7 +44,12 @@ describe('computeUsageCost', () => {
 describe('totalCost', () => {
   it('sums known costs only', () => {
     expect(
-      totalCost([{ tokenUsage: { cost: 1 } }, {}, { tokenUsage: {} }, { tokenUsage: { cost: 0.5 } }]),
+      totalCost([
+        { tokenUsage: { cost: 1 } },
+        {},
+        { tokenUsage: {} },
+        { tokenUsage: { cost: 0.5 } },
+      ]),
     ).toBe(1.5)
   })
 })
