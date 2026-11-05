@@ -70,6 +70,34 @@ export function isImageFile(file: File): boolean {
   return file.type.startsWith('image/') || IMAGE_EXT_RE.test(file.name)
 }
 
+/** Splits dropped/pasted files by kind, gated on what the model accepts. */
+export function partitionAttachableFiles(
+  files: File[],
+  caps: { image: boolean; document: boolean },
+): { images: File[]; pdfs: File[]; error: string | null } {
+  const images: File[] = []
+  const pdfs: File[] = []
+  let blocked = false
+  let unsupported = false
+  for (const f of files) {
+    if (isPdfFile(f)) {
+      if (caps.document) pdfs.push(f)
+      else blocked = true
+    } else if (isImageFile(f)) {
+      if (caps.image) images.push(f)
+      else blocked = true
+    } else unsupported = true
+  }
+  let error: string | null = null
+  if (blocked) {
+    error =
+      'This model can’t accept some of those files. Switch models to attach them.'
+  } else if (unsupported) {
+    error = 'Only images and PDFs can be attached.'
+  }
+  return { images, pdfs, error }
+}
+
 export type PendingImage = {
   id: string
   mimeType: string

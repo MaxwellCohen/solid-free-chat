@@ -3,6 +3,7 @@ import type { UIMessage } from '@tanstack/ai-client'
 import {
   messageToPlainText,
   messagesBefore,
+  partitionAttachableFiles,
   withEditedText,
 } from './chat-thread-utils'
 
@@ -44,5 +45,31 @@ describe('withEditedText', () => {
     expect(withEditedText([{ type: 'text', content: 'old' }, img], '')).toEqual(
       [img],
     )
+  })
+})
+
+describe('partitionAttachableFiles', () => {
+  const png = new File(['x'], 'a.png', { type: 'image/png' })
+  const pdf = new File(['x'], 'b.pdf', { type: 'application/pdf' })
+  const txt = new File(['x'], 'c.txt', { type: 'text/plain' })
+  it('splits by kind', () => {
+    const r = partitionAttachableFiles([png, pdf], {
+      image: true,
+      document: true,
+    })
+    expect(r).toEqual({ images: [png], pdfs: [pdf], error: null })
+  })
+  it('gates on capabilities', () => {
+    const r = partitionAttachableFiles([png, pdf], {
+      image: false,
+      document: true,
+    })
+    expect(r.images).toEqual([])
+    expect(r.pdfs).toEqual([pdf])
+    expect(r.error).toBeTruthy()
+  })
+  it('flags unsupported types', () => {
+    const r = partitionAttachableFiles([txt], { image: true, document: true })
+    expect(r.error).toMatch(/images and PDFs/)
   })
 })

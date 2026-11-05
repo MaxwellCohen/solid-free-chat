@@ -54,6 +54,7 @@ import {
   formatTokenCount,
   isImageFile,
   isPdfFile,
+  partitionAttachableFiles,
   parseDataUrl,
   readFileAsDataUrl,
   guessImageMimeFromFilename,
@@ -470,10 +471,36 @@ function ChatThreadSession(props: {
     setPendingFiles((list) => list.filter((p) => p.id !== id))
   }
 
-  async function onImageInput(e: Event & { currentTarget: HTMLInputElement }) {
+  function onImageInput(e: Event & { currentTarget: HTMLInputElement }) {
     const input = e.currentTarget
     const files = Array.from(input.files ?? [])
     input.value = ''
+    return attachImages(files)
+  }
+
+  function onFileInput(e: Event & { currentTarget: HTMLInputElement }) {
+    const input = e.currentTarget
+    const files = Array.from(input.files ?? [])
+    input.value = ''
+    return attachPdfs(files)
+  }
+
+  /** Drag-drop / paste entry: routes files through the same paths as the pickers. */
+  async function attachDroppedFiles(files: File[]) {
+    const { images, pdfs, error } = partitionAttachableFiles(files, {
+      image: supportsImage(),
+      document: supportsDocument(),
+    })
+    if (error) {
+      setAttachError(error)
+      if (!images.length && !pdfs.length) return
+    }
+    if (images.length) await attachImages(images)
+    if (pdfs.length) await attachPdfs(pdfs)
+    if (error) setAttachError(error)
+  }
+
+  async function attachImages(files: File[]) {
     if (!files.length) return
     setAttachError(null)
     let sawUnsupportedFile = false
@@ -526,10 +553,7 @@ function ChatThreadSession(props: {
     }
   }
 
-  async function onFileInput(e: Event & { currentTarget: HTMLInputElement }) {
-    const input = e.currentTarget
-    const files = Array.from(input.files ?? [])
-    input.value = ''
+  async function attachPdfs(files: File[]) {
     if (!files.length) return
     setAttachError(null)
     const next: PendingFile[] = []
@@ -662,8 +686,52 @@ function ChatThreadSession(props: {
     await sendPromise
   }
 
+  const [dragging, setDragging] = createSignal(false)
+  let dragDepth = 0
+  const hasFiles = (e: DragEvent) =>
+    Array.from(e.dataTransfer?.types ?? []).includes('Files')
+
   return (
-    <div class="flex min-h-0 flex-1 flex-col">
+    <div
+      class="relative flex min-h-0 flex-1 flex-col"
+      onDragEnter={(e) => {
+        if (!hasFiles(e)) return
+        e.preventDefault()
+        dragDepth++
+        setDragging(true)
+      }}
+      onDragOver={(e) => {
+        if (hasFiles(e)) e.preventDefault()
+      }}
+      onDragLeave={(e) => {
+        if (!hasFiles(e)) return
+        dragDepth = Math.max(0, dragDepth - 1)
+        if (dragDepth === 0) setDragging(false)
+      }}
+      onDrop={(e) => {
+        if (!hasFiles(e)) return
+        e.preventDefault()
+        dragDepth = 0
+        setDragging(false)
+        void attachDroppedFiles(Array.from(e.dataTransfer?.files ?? []))
+      }}
+      onPaste={(e) => {
+        const files = Array.from(e.clipboardData?.files ?? []).filter(
+          (f) => isImageFile(f) || isPdfFile(f),
+        )
+        if (!files.length) return
+        e.preventDefault()
+        void attachDroppedFiles(files)
+      }}
+    >
+      <Show when={dragging()}>
+        <div
+          data-testid="drop-overlay"
+          class="border-primary bg-background/80 text-foreground pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-xl border-2 border-dashed text-sm font-medium"
+        >
+          Drop images or PDFs to attach
+        </div>
+      </Show>
       <Show when={overThreshold()}>
         <p
           class="border-border bg-muted text-foreground border-b px-3 py-1.5 text-xs"
