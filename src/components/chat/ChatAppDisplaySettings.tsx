@@ -7,6 +7,8 @@ import {
   writeDisplayPrefs,
 } from '../../lib/display-prefs'
 import type { DisplayPrefs } from '../../lib/display-prefs'
+import { useTheme } from '../../lib/theme-context'
+import { ACCENTS, ACCENT_SWATCH } from '../../lib/theme-preference'
 
 const FONT_LABELS = { s: 'S', m: 'M', l: 'L', xl: 'XL' } as const
 const SELECT_CLASS =
@@ -14,6 +16,7 @@ const SELECT_CLASS =
 
 /** Display preferences: saved in localStorage and applied to <html> immediately. */
 export function ChatAppDisplaySettings() {
+  const theme = useTheme()
   const [prefs, setPrefs] = createSignal(readDisplayPrefs())
 
   function update(patch: Partial<DisplayPrefs>) {
@@ -26,6 +29,32 @@ export function ChatAppDisplaySettings() {
   return (
     <fieldset class="border-border flex flex-col gap-3 rounded-lg border p-3">
       <legend class="px-1 text-xs font-semibold">Display</legend>
+      <div
+        class="flex flex-col gap-1 text-xs font-semibold"
+        role="group"
+        aria-label="Appearance accent"
+      >
+        Accent color
+        <div class="flex flex-wrap items-center gap-2">
+          <For each={ACCENTS}>
+            {(a) => (
+              <button
+                type="button"
+                class={[
+                  'size-7 rounded-full border transition-shadow',
+                  theme.accent() === a
+                    ? 'ring-foreground ring-2 ring-offset-2'
+                    : 'border-border',
+                ]}
+                style={{ 'background-color': ACCENT_SWATCH[a] }}
+                aria-label={`Set accent: ${a}`}
+                aria-pressed={theme.accent() === a ? 'true' : 'false'}
+                onClick={() => theme.setAccent(a)}
+              />
+            )}
+          </For>
+        </div>
+      </div>
       <label class="flex flex-col gap-1 text-xs font-semibold">
         Font size
         <select

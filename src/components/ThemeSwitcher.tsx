@@ -2,18 +2,8 @@ import { For } from 'solid-js'
 import { Computer, Moon, Sun } from './icons'
 
 import { useTheme } from '~/lib/theme-context'
-import { ACCENTS } from '~/lib/theme-preference'
+import { ACCENTS, ACCENT_SWATCH } from '~/lib/theme-preference'
 import type { ThemePreference } from '~/lib/theme-preference'
-
-const ACCENT_SWATCH: Record<string, string> = {
-  default: 'oklch(0.55 0.01 286)',
-  indigo: 'oklch(0.5 0.2 277)',
-  emerald: 'oklch(0.6 0.14 160)',
-  rose: 'oklch(0.6 0.2 17)',
-  amber: 'oklch(0.75 0.16 70)',
-  sky: 'oklch(0.65 0.13 235)',
-  violet: 'oklch(0.55 0.2 293)',
-}
 
 const OPTIONS: Array<{
   value: ThemePreference
