@@ -1,9 +1,11 @@
 import {
   Errored,
+  Loading,
   Show,
   createEffect,
   createMemo,
   createSignal,
+  lazy,
   onSettled,
 } from 'solid-js'
 import { isServer } from '@solidjs/web'
@@ -54,14 +56,11 @@ import {
   ZEN_SESSION_KEY,
 } from './chat-app-constants'
 import { ChatAppOutline } from './ChatAppOutline'
-import { ChatAppSnippetsModal } from './ChatAppSnippetsModal'
 import { buildOutline } from '../../lib/outline'
 import { loadSnippets, saveSnippets } from '../../lib/snippets'
 import type { Snippet } from '../../lib/snippets'
 import { ChatAppModelToolbar } from './ChatAppModelToolbar'
 import { ChatAppOpenRouterModal } from './ChatAppOpenRouterModal'
-import { ChatAppShortcutsModal } from './ChatAppShortcutsModal'
-import { ChatAppTourModal } from './ChatAppTourModal'
 import { TOUR_SEEN_KEY } from '../../lib/tour-items'
 import type { TourItem } from '../../lib/tour-items'
 import {
@@ -71,9 +70,6 @@ import {
 } from '../../lib/chat-export'
 import { printChat } from '../../lib/print-chat'
 import { ChatAppSidebar, requestTagEditor } from './ChatAppSidebar'
-import { ChatAppSettingsModal } from './ChatAppSettingsModal'
-import { ChatAppSkillsModal } from './ChatAppSkillsModal'
-import { ChatAppPersonasModal } from './ChatAppPersonasModal'
 import {
   BUILT_IN_PERSONAS,
   createCustomPersona,
@@ -88,6 +84,54 @@ import type { PaletteCommand } from './ChatAppCommandPalette'
 import { useTheme } from '../../lib/theme-context'
 import { findByName } from '../../lib/slash-commands'
 import type { SlashAction } from './ChatThread'
+
+const ChatAppSettingsModal = lazy(() =>
+  import('./ChatAppSettingsModal').then((m) => ({
+    default: m.ChatAppSettingsModal,
+  })),
+)
+const ChatAppPersonasModal = lazy(() =>
+  import('./ChatAppPersonasModal').then((m) => ({
+    default: m.ChatAppPersonasModal,
+  })),
+)
+const ChatAppSkillsModal = lazy(() =>
+  import('./ChatAppSkillsModal').then((m) => ({
+    default: m.ChatAppSkillsModal,
+  })),
+)
+const ChatAppSnippetsModal = lazy(() =>
+  import('./ChatAppSnippetsModal').then((m) => ({
+    default: m.ChatAppSnippetsModal,
+  })),
+)
+const ChatAppTourModal = lazy(() =>
+  import('./ChatAppTourModal').then((m) => ({ default: m.ChatAppTourModal })),
+)
+const ChatAppShortcutsModal = lazy(() =>
+  import('./ChatAppShortcutsModal').then((m) => ({
+    default: m.ChatAppShortcutsModal,
+  })),
+)
+
+/** Warms the modal chunks right after first render so keyboard shortcuts feel instant. */
+function preloadModals() {
+  void import('./ChatAppTourModal')
+  void import('./ChatAppShortcutsModal')
+  void import('./ChatAppSettingsModal')
+  void import('./ChatAppPersonasModal')
+  void import('./ChatAppSkillsModal')
+  void import('./ChatAppSnippetsModal')
+}
+
+/** Latches true once `open` has been true, so lazy modals load on first use. */
+function useEverOpened(open: () => boolean) {
+  const [seen, setSeen] = createSignal(false)
+  createEffect(open, (o) => {
+    if (o) setSeen(true)
+  })
+  return seen
+}
 
 /** Matches Tailwind's `max-sm` breakpoint, where the sidebar is an overlay drawer. */
 function isNarrowViewport() {
@@ -1006,6 +1050,14 @@ export default function ChatApp() {
     }
   }
 
+  onSettled(preloadModals)
+  const chatSettingsOpened = useEverOpened(chatSettingsOpen)
+  const personasOpened = useEverOpened(personasOpen)
+  const skillsOpened = useEverOpened(skillsLibraryOpen)
+  const snippetsOpened = useEverOpened(snippetsOpen)
+  const tourOpened = useEverOpened(tourOpen)
+  const shortcutsOpened = useEverOpened(shortcutsHelpOpen)
+
   return (
     <div
       class="group/app flex h-full min-h-0 w-full max-w-[100vw] flex-col overflow-hidden sm:flex-row"
@@ -1158,69 +1210,85 @@ export default function ChatApp() {
           onSave={saveOpenRouterApiKeyFromModal}
         />
 
-        <ChatAppSettingsModal
-          open={chatSettingsOpen}
-          currentConversationId={currentConversationId}
-          settings={currentChatSettings}
-          onChange={(patch) => {
-            const id = currentConversationId()
-            if (id) actions.setConversationSettings(id, patch)
-          }}
-          onReset={() => {
-            const id = currentConversationId()
-            if (id) actions.setConversationSettings(id, null)
-          }}
-          onClose={() => setChatSettingsOpen(false)}
-        />
+        <Show when={chatSettingsOpened()}>
+          <Loading>
+            <ChatAppSettingsModal
+              open={chatSettingsOpen}
+              currentConversationId={currentConversationId}
+              settings={currentChatSettings}
+              onChange={(patch) => {
+                const id = currentConversationId()
+                if (id) actions.setConversationSettings(id, patch)
+              }}
+              onReset={() => {
+                const id = currentConversationId()
+                if (id) actions.setConversationSettings(id, null)
+              }}
+              onClose={() => setChatSettingsOpen(false)}
+            />
+          </Loading>
+        </Show>
 
-        <ChatAppPersonasModal
-          open={personasOpen}
-          personas={allPersonas}
-          onPick={startPersonaChat}
-          onCreate={(draft) => {
-            const next = createCustomPersona(draft, customPersonas())
-            setCustomPersonas(next)
-            saveCustomPersonas(next)
-          }}
-          onDelete={(id) => {
-            const next = deleteCustomPersona(id, customPersonas())
-            setCustomPersonas(next)
-            saveCustomPersonas(next)
-          }}
-          onClose={() => setPersonasOpen(false)}
-        />
+        <Show when={personasOpened()}>
+          <Loading>
+            <ChatAppPersonasModal
+              open={personasOpen}
+              personas={allPersonas}
+              onPick={startPersonaChat}
+              onCreate={(draft) => {
+                const next = createCustomPersona(draft, customPersonas())
+                setCustomPersonas(next)
+                saveCustomPersonas(next)
+              }}
+              onDelete={(id) => {
+                const next = deleteCustomPersona(id, customPersonas())
+                setCustomPersonas(next)
+                saveCustomPersonas(next)
+              }}
+              onClose={() => setPersonasOpen(false)}
+            />
+          </Loading>
+        </Show>
 
-        <ChatAppSkillsModal
-          open={skillsLibraryOpen}
-          currentConversationId={currentConversationId}
-          skills={skills}
-          attachedSkillIds={attachedSkillIds}
-          onToggleSkill={(skillId) => {
-            const id = currentConversationId()
-            if (!id) return
-            actions.toggleConversationSkill(id, skillId)
-          }}
-          onAddSkill={(name, instructions) => {
-            const skillId = actions.addSkill(name, instructions)
-            const conversationId = currentConversationId()
-            if (skillId && conversationId) {
-              actions.toggleConversationSkill(conversationId, skillId)
-            }
-          }}
-          onImportSkills={(incoming) => actions.importSkills(incoming)}
-          onUpdateSkill={(skillId, patch) =>
-            actions.updateSkill(skillId, patch)
-          }
-          onDeleteSkill={(skillId) => actions.deleteSkill(skillId)}
-          onClose={() => setSkillsLibraryOpen(false)}
-        />
+        <Show when={skillsOpened()}>
+          <Loading>
+            <ChatAppSkillsModal
+              open={skillsLibraryOpen}
+              currentConversationId={currentConversationId}
+              skills={skills}
+              attachedSkillIds={attachedSkillIds}
+              onToggleSkill={(skillId) => {
+                const id = currentConversationId()
+                if (!id) return
+                actions.toggleConversationSkill(id, skillId)
+              }}
+              onAddSkill={(name, instructions) => {
+                const skillId = actions.addSkill(name, instructions)
+                const conversationId = currentConversationId()
+                if (skillId && conversationId) {
+                  actions.toggleConversationSkill(conversationId, skillId)
+                }
+              }}
+              onImportSkills={(incoming) => actions.importSkills(incoming)}
+              onUpdateSkill={(skillId, patch) =>
+                actions.updateSkill(skillId, patch)
+              }
+              onDeleteSkill={(skillId) => actions.deleteSkill(skillId)}
+              onClose={() => setSkillsLibraryOpen(false)}
+            />
+          </Loading>
+        </Show>
 
-        <ChatAppSnippetsModal
-          open={snippetsOpen}
-          snippets={snippets}
-          onChange={updateSnippets}
-          onClose={() => setSnippetsOpen(false)}
-        />
+        <Show when={snippetsOpened()}>
+          <Loading>
+            <ChatAppSnippetsModal
+              open={snippetsOpen}
+              snippets={snippets}
+              onChange={updateSnippets}
+              onClose={() => setSnippetsOpen(false)}
+            />
+          </Loading>
+        </Show>
 
         <ChatAppCommandPalette
           open={paletteOpen}
@@ -1238,16 +1306,24 @@ export default function ChatApp() {
           </div>
         </Show>
 
-        <ChatAppTourModal
-          open={tourOpen}
-          onTry={runTourAction}
-          onClose={() => setTourOpen(false)}
-        />
+        <Show when={tourOpened()}>
+          <Loading>
+            <ChatAppTourModal
+              open={tourOpen}
+              onTry={runTourAction}
+              onClose={() => setTourOpen(false)}
+            />
+          </Loading>
+        </Show>
 
-        <ChatAppShortcutsModal
-          open={shortcutsHelpOpen}
-          onClose={() => setShortcutsHelpOpen(false)}
-        />
+        <Show when={shortcutsOpened()}>
+          <Loading>
+            <ChatAppShortcutsModal
+              open={shortcutsHelpOpen}
+              onClose={() => setShortcutsHelpOpen(false)}
+            />
+          </Loading>
+        </Show>
       </section>
       <Show when={outlineOpen() && !zen()}>
         <ChatAppOutline items={outlineItems} onClose={toggleOutline} />

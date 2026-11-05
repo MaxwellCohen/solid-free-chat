@@ -13,7 +13,7 @@ import type { UIMessage } from '@tanstack/ai-client'
 import { useChat } from '../../lib/use-chat'
 import type { ContentPart, StreamChunk } from '@tanstack/ai'
 import { getProvider } from '../../lib/providers'
-import { runAgent } from '../../lib/harness/run-agent'
+import { runAgent } from '../../lib/harness/run-agent-lazy'
 import {
   FOLLOW_UP_SYSTEM_PROMPT,
   buildFollowUpMessages,

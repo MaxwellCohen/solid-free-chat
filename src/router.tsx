@@ -1,6 +1,5 @@
 import { setupRouterSsrQueryIntegration } from '@tanstack/solid-router-ssr-query'
 import { createRouter as createTanStackRouter } from '@tanstack/solid-router'
-import * as Sentry from '@sentry/browser'
 import { enableRichArguments } from '@solidjs/web/server-functions/rich-args'
 import { routeTree } from './routeTree.gen'
 
@@ -35,25 +34,28 @@ function initSentry() {
   if (typeof document === 'undefined') return
   const dsn = import.meta.env.VITE_SENTRY_DSN
   if (typeof dsn !== 'string' || !dsn.trim()) return
-  Sentry.init({
-    dsn: dsn.trim(),
-    integrations: [Sentry.browserTracingIntegration()],
-    tracesSampleRate: 0.1,
-    sendDefaultPii: false,
-    // Only same-origin requests get trace headers; never add them to OpenRouter.
-    tracePropagationTargets: [/^\/(?!\/)/],
-    beforeBreadcrumb: (breadcrumb) => {
-      if (breadcrumb.data) {
-        delete breadcrumb.data.request_headers
-        delete breadcrumb.data.response_headers
-      }
-      return scrubSecrets(breadcrumb)
-    },
-    beforeSend: (event) => {
-      if (event.request) delete event.request.headers
-      return scrubSecrets(event)
-    },
-    beforeSendTransaction: (event) => scrubSecrets(event),
+  // Loaded lazily so the SDK stays out of the initial bundle.
+  void import('@sentry/browser').then((Sentry) => {
+    Sentry.init({
+      dsn: dsn.trim(),
+      integrations: [Sentry.browserTracingIntegration()],
+      tracesSampleRate: 0.1,
+      sendDefaultPii: false,
+      // Only same-origin requests get trace headers; never add them to OpenRouter.
+      tracePropagationTargets: [/^\/(?!\/)/],
+      beforeBreadcrumb: (breadcrumb) => {
+        if (breadcrumb.data) {
+          delete breadcrumb.data.request_headers
+          delete breadcrumb.data.response_headers
+        }
+        return scrubSecrets(breadcrumb)
+      },
+      beforeSend: (event) => {
+        if (event.request) delete event.request.headers
+        return scrubSecrets(event)
+      },
+      beforeSendTransaction: (event) => scrubSecrets(event),
+    })
   })
 }
 

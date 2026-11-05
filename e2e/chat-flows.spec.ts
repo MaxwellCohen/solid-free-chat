@@ -294,7 +294,7 @@ test('calculate tool call round-trips through the agent loop', async ({
     },
   )
   await send(page, 'What is 7 times 8?')
-  await expect(page.getByText('The answer is 56.')).toBeVisible()
+  await expect(page.getByText('The answer is 56.').first()).toBeVisible()
   const followUp = requests.find((b) =>
     JSON.stringify(b.messages).includes('"role":"tool"'),
   )
@@ -356,7 +356,7 @@ test('empty final turn after a tool result triggers one nudge', async ({
     },
   )
   await send(page, 'What is 7 times 8?')
-  await expect(page.getByText('The answer is 56.')).toBeVisible()
+  await expect(page.getByText('The answer is 56.').first()).toBeVisible()
   await expect(page.getByTestId('nudge-notice')).toBeVisible()
   expect(
     requests.filter((b) =>

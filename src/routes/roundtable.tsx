@@ -10,7 +10,7 @@ import {
   loadChatStateAsync,
   persistChatStateAsync,
 } from '../lib/chat-persistence'
-import { runAgent } from '../lib/harness/run-agent'
+import { runAgent } from '../lib/harness/run-agent-lazy'
 import { loadAllModelOptions } from '../lib/model-options'
 import { loadStoredApiKey } from '../lib/openrouter-key-storage'
 import { BUILT_IN_PERSONAS, loadCustomPersonas } from '../lib/personas'

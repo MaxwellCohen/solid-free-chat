@@ -19,7 +19,7 @@ import {
   saveDecks,
 } from '../lib/flashcards'
 import type { Deck, Grade } from '../lib/flashcards'
-import { runAgent } from '../lib/harness/run-agent'
+import { runAgent } from '../lib/harness/run-agent-lazy'
 import { isEditableTarget } from '../lib/keyboard-shortcuts'
 import { loadAllModelOptions } from '../lib/model-options'
 import { loadStoredApiKey } from '../lib/openrouter-key-storage'

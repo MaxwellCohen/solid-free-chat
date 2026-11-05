@@ -25,7 +25,7 @@ import {
   persistChatStateAsync,
   loadChatStateAsync,
 } from '../lib/chat-persistence'
-import { runAgent } from '../lib/harness/run-agent'
+import { runAgent } from '../lib/harness/run-agent-lazy'
 import { loadAllModelOptions } from '../lib/model-options'
 import { loadStoredApiKey } from '../lib/openrouter-key-storage'
 import { getProvider } from '../lib/providers'
