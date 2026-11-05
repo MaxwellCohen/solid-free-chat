@@ -42,4 +42,11 @@ describe('composeSystemPrompt', () => {
       `${BASELINE_SYSTEM_MESSAGE}\n\nKeep answers short.`,
     )
   })
+
+  it('appends custom instructions last and ignores blank ones', () => {
+    expect(composeSystemPrompt(['s1'], skills, '  Be pirate.  ')).toBe(
+      `${BASELINE_SYSTEM_MESSAGE}\n\nKeep answers short.\n\nBe pirate.`,
+    )
+    expect(composeSystemPrompt([], skills, '   ')).toBe(BASELINE_SYSTEM_MESSAGE)
+  })
 })

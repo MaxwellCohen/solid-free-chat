@@ -193,6 +193,9 @@ function ChatThreadSession(props: {
     (state) => state.conversationsById[conversationId]?.skillIds ?? [],
   )
   const skills = useChatStore((state) => state.skills)
+  const chatSettings = useChatStore(
+    (state) => state.conversationsById[conversationId]?.settings,
+  )
   const enabledToolIds = useChatStore((state) => state.enabledToolIds)
   const sessionTotalTokens = useChatStore(
     (state) => state.conversationsById[conversationId]?.sessionTotalTokens,
@@ -256,7 +259,13 @@ function ChatThreadSession(props: {
         providerId: props.providerId,
         model: selectedModel(),
         messages,
-        systemPrompt: composeSystemPrompt(skillIds(), skills()),
+        systemPrompt: composeSystemPrompt(
+          skillIds(),
+          skills(),
+          chatSettings()?.systemPrompt,
+        ),
+        temperature: chatSettings()?.temperature,
+        maxTokens: chatSettings()?.maxTokens,
         tools: props.supportsTools
           ? createEnabledTools(enabledToolIds(), {
               skills: createConversationSkillsApi(conversationId),
@@ -609,6 +618,7 @@ function ChatThreadSession(props: {
         error={() => chat.error()}
         onReconnectOpenRouter={props.onReconnectOpenRouter}
         providerName={getProvider(props.providerId).name}
+        onPickStarter={(prompt) => setDraft(prompt)}
       />
       <label class="text-muted-foreground flex items-center justify-end gap-1.5 px-3 pt-1 text-xs">
         Warn above $

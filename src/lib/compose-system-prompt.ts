@@ -6,11 +6,12 @@ export const BASELINE_SYSTEM_MESSAGE =
 
 /**
  * Compose the system prompt from the baseline plus attached skills (in order).
- * Missing skill ids are skipped.
+ * Missing skill ids are skipped. Per-chat custom instructions come last.
  */
 export function composeSystemPrompt(
   skillIds: readonly string[],
   skills: readonly ChatSkill[],
+  customInstructions?: string,
 ): string {
   const byId = new Map(skills.map((skill) => [skill.id, skill]))
   const parts = [BASELINE_SYSTEM_MESSAGE]
@@ -21,5 +22,7 @@ export function composeSystemPrompt(
     if (!instructions) continue
     parts.push(instructions)
   }
+  const custom = customInstructions?.trim()
+  if (custom) parts.push(custom)
   return parts.join('\n\n')
 }

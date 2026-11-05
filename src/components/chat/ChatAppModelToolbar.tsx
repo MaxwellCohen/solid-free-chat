@@ -4,6 +4,7 @@ import {
   LoaderCircle,
   PanelLeft,
   Share2,
+  SlidersHorizontal,
   SquarePen,
   Wrench,
 } from '../icons'
@@ -29,6 +30,8 @@ type ChatAppModelToolbarProps = {
   shareFeedback: () => string | null
   onShare: () => void
   onOpenShortcuts: () => void
+  onOpenSettings: () => void
+  settingsActive: () => boolean
   tools: readonly HarnessToolDescriptor[]
   enabledToolIds: () => string[]
   toolsSupported: () => boolean
@@ -61,6 +64,7 @@ function ToolbarRow(props: { props: ChatAppModelToolbarProps }) {
       <NewChatButton onNewChat={props.props.onNewChat} />
       <ModelPicker props={props.props} />
       <ToolsMenu props={props.props} />
+      <SettingsButton props={props.props} />
       <ShareButton props={props.props} />
       <ShortcutsButton onOpen={props.props.onOpenShortcuts} />
       <StreamingIndicator isStreaming={props.props.isStreaming} />
@@ -136,6 +140,31 @@ function ToolsMenu(props: { props: ChatAppModelToolbarProps }) {
         </For>
       </div>
     </details>
+  )
+}
+
+function SettingsButton(props: { props: ChatAppModelToolbarProps }) {
+  return (
+    <button
+      type="button"
+      class="text-muted-foreground hover:bg-muted hover:text-foreground relative inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium"
+      onClick={() => props.props.onOpenSettings()}
+      title="Chat settings"
+      aria-label={
+        props.props.settingsActive()
+          ? 'Chat settings (customized)'
+          : 'Chat settings'
+      }
+    >
+      <SlidersHorizontal class="size-4 shrink-0" aria-hidden="true" />
+      <span class="hidden sm:inline">Settings</span>
+      <Show when={props.props.settingsActive()}>
+        <span
+          class="bg-primary absolute top-1 right-1 size-2 rounded-full"
+          aria-hidden="true"
+        />
+      </Show>
+    </button>
   )
 }
 

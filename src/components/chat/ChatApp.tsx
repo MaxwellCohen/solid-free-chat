@@ -56,6 +56,7 @@ import {
   serializeChat,
 } from '../../lib/chat-export'
 import { ChatAppSidebar } from './ChatAppSidebar'
+import { ChatAppSettingsModal } from './ChatAppSettingsModal'
 import { ChatAppSkillsModal } from './ChatAppSkillsModal'
 import { ChatAppCommandPalette } from './ChatAppCommandPalette'
 import type { PaletteCommand } from './ChatAppCommandPalette'
@@ -114,6 +115,11 @@ export default function ChatApp() {
   const [currentConversationLoading, setCurrentConversationLoading] =
     createSignal(false)
   const [skillsLibraryOpen, setSkillsLibraryOpen] = createSignal(false)
+  const [chatSettingsOpen, setChatSettingsOpen] = createSignal(false)
+  const currentChatSettings = useChatStore((state) => {
+    const id = state.currentConversationId
+    return id ? state.conversationsById[id]?.settings : undefined
+  })
   const [openRouterApiKeyModalOpen, setOpenRouterApiKeyModalOpen] =
     createSignal(false)
   const [shortcutsHelpOpen, setShortcutsHelpOpen] = createSignal(false)
@@ -454,6 +460,11 @@ export default function ChatApp() {
         setShortcutsHelpOpen(false)
         return
       }
+      if (chatSettingsOpen()) {
+        event.preventDefault()
+        setChatSettingsOpen(false)
+        return
+      }
       if (skillsLibraryOpen()) {
         event.preventDefault()
         setSkillsLibraryOpen(false)
@@ -738,6 +749,8 @@ export default function ChatApp() {
           shareFeedback={shareFeedback}
           onShare={() => void shareCurrentChat()}
           onOpenShortcuts={() => setShortcutsHelpOpen(true)}
+          onOpenSettings={() => setChatSettingsOpen(true)}
+          settingsActive={() => currentChatSettings() !== undefined}
           tools={HARNESS_TOOLS}
           enabledToolIds={enabledToolIds}
           toolsSupported={() => modelSupportsTools(selectedModelMeta())}
@@ -806,6 +819,21 @@ export default function ChatApp() {
           onSignIn={signInWithOpenRouter}
           onClose={closeOpenRouterApiKeyModal}
           onSave={saveOpenRouterApiKeyFromModal}
+        />
+
+        <ChatAppSettingsModal
+          open={chatSettingsOpen}
+          currentConversationId={currentConversationId}
+          settings={currentChatSettings}
+          onChange={(patch) => {
+            const id = currentConversationId()
+            if (id) actions.setConversationSettings(id, patch)
+          }}
+          onReset={() => {
+            const id = currentConversationId()
+            if (id) actions.setConversationSettings(id, null)
+          }}
+          onClose={() => setChatSettingsOpen(false)}
         />
 
         <ChatAppSkillsModal

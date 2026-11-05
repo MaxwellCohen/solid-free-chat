@@ -5,6 +5,8 @@ import {
   DEFAULT_ENABLED_TOOL_IDS,
   isKnownToolId,
 } from '../lib/harness/tools'
+import { mergeChatSettings, normalizeChatSettings } from '../lib/chat-settings'
+import type { ChatSettings } from '../lib/chat-settings'
 import type { HarnessChatHistoryApi, HarnessSkillsApi } from '../lib/harness/tools'
 
 /** Token counts from the provider for one completed model run (see RUN_FINISHED). */
@@ -40,6 +42,8 @@ export interface ChatConversation {
   titleLocked?: boolean
   /** Ordered skill ids attached to this chat (live links into `skills`). */
   skillIds: string[]
+  /** Per-chat overrides; undefined fields use provider defaults. */
+  settings?: ChatSettings
   /** Most recent usage reported by the API for this chat. */
   lastUsage?: TokenUsageSnapshot
   /** Sum of `totalTokens` from each completed run in this chat (approx. session usage). */
@@ -297,6 +301,9 @@ function normalizeConversationRecord(
       title,
       updatedAt,
       skillIds,
+      ...(normalizeChatSettings(source.settings)
+        ? { settings: normalizeChatSettings(source.settings) }
+        : {}),
       ...(source.pinned === true ? { pinned: true } : {}),
       ...(source.titleLocked === true ? { titleLocked: true } : {}),
       ...(lastUsage ? { lastUsage } : {}),
@@ -659,6 +666,24 @@ export const chatActions = {
         ...s,
         skills: s.skills.filter((skill) => skill.id !== skillId),
         conversationsById,
+      }
+    })
+  },
+
+  setConversationSettings(
+    conversationId: string,
+    patch: Partial<Record<keyof ChatSettings, unknown>> | null,
+  ) {
+    chatStore.setState((s) => {
+      const current = getConversation(s, conversationId)
+      if (!current) return s
+      const settings =
+        patch === null ? undefined : mergeChatSettings(current.settings, patch)
+      const next: ChatConversation = { ...current, settings }
+      if (!settings) delete next.settings
+      return {
+        ...s,
+        conversationsById: { ...s.conversationsById, [conversationId]: next },
       }
     })
   },

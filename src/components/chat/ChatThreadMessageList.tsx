@@ -31,6 +31,7 @@ import {
   withEditedText,
 } from './chat-thread-utils'
 import { MessageParts } from './ChatMessageParts'
+import { STARTER_PROMPTS } from '../../lib/starter-prompts'
 import { classifyChatError } from '../../lib/chat-error'
 
 const MESSAGE_GAP_PX = 16
@@ -49,6 +50,7 @@ type ChatThreadMessageListProps = {
   error: () => Error | undefined
   onReconnectOpenRouter?: () => void
   providerName: string
+  onPickStarter: (prompt: string) => void
 }
 
 export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
@@ -118,6 +120,31 @@ export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
       aria-live="polite"
       class="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6"
     >
+      <Show when={props.messages().length === 0 && !props.isLoading()}>
+        <div class="mx-auto flex max-w-2xl flex-col items-center gap-4 py-8 text-center">
+          <h2 class="text-foreground text-lg font-semibold tracking-tight">
+            How can I help today?
+          </h2>
+          <div class="grid w-full gap-2 sm:grid-cols-2">
+            <For each={STARTER_PROMPTS}>
+              {(starter) => (
+                <button
+                  type="button"
+                  class="border-border hover:bg-muted rounded-xl border p-3 text-left"
+                  onClick={() => props.onPickStarter(starter.prompt)}
+                >
+                  <span class="text-foreground block text-sm font-medium">
+                    {starter.title}
+                  </span>
+                  <span class="text-muted-foreground block text-xs">
+                    {starter.description}
+                  </span>
+                </button>
+              )}
+            </For>
+          </div>
+        </div>
+      </Show>
       <div
         class="relative w-full"
         style={{ height: `${virtualizer.getTotalSize() + trailingSpace()}px` }}

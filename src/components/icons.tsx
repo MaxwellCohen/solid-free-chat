@@ -22,6 +22,7 @@ import panelLeft from 'lucide/dist/esm/icons/panel-left.mjs'
 import pencil from 'lucide/dist/esm/icons/pencil.mjs'
 import pin from 'lucide/dist/esm/icons/pin.mjs'
 import rotateCw from 'lucide/dist/esm/icons/rotate-cw.mjs'
+import slidersHorizontal from 'lucide/dist/esm/icons/sliders-horizontal.mjs'
 import share2 from 'lucide/dist/esm/icons/share-2.mjs'
 import squarePen from 'lucide/dist/esm/icons/square-pen.mjs'
 import square from 'lucide/dist/esm/icons/square.mjs'
@@ -83,6 +84,7 @@ export const PanelLeftClose = createIcon(panelLeftClose)
 export const Pencil = createIcon(pencil)
 export const Pin = createIcon(pin)
 export const RotateCw = createIcon(rotateCw)
+export const SlidersHorizontal = createIcon(slidersHorizontal)
 export const Share2 = createIcon(share2)
 export const SquarePen = createIcon(squarePen)
 export const Square = createIcon(square)
