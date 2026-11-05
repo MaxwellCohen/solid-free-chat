@@ -53,7 +53,7 @@ async function mockOpenRouter(page: Page) {
                 input_modalities: ['text'],
                 output_modalities: ['text'],
               },
-              supported_parameters: ['temperature', 'max_tokens'],
+              supported_parameters: ['temperature', 'max_tokens', 'tools'],
             },
           ],
         }),
@@ -238,4 +238,81 @@ test('skills export downloads JSON and re-import merges without duplicates', asy
   await dialog.getByLabel('Import skills file').setInputFiles(path)
   await expect(dialog.getByRole('status')).toContainText('0 added, 0 updated')
   await expect(dialog.getByText('ELI5', { exact: true })).toHaveCount(1)
+})
+
+test('calculate tool call round-trips through the agent loop', async ({
+  page,
+}) => {
+  const requests = await open(page, {
+    ...seedState(),
+    enabledToolIds: ['calculate'],
+  })
+  // Registered after open(), so it takes precedence over the default mock.
+  await page.route(
+    'https://openrouter.ai/api/v1/chat/completions',
+    async (route: Route) => {
+      const body = JSON.parse(route.request().postData() ?? '{}') as ChatBody
+      requests.push(body)
+      const chunk = (delta: object, finish: string | null) =>
+        `data: ${JSON.stringify({
+          id: 'gen-e2e',
+          object: 'chat.completion.chunk',
+          created: 1,
+          model: MODEL,
+          choices: [{ index: 0, delta, finish_reason: finish }],
+        })}\n\n`
+      const hasToolResult = JSON.stringify(body.messages).includes(
+        '"role":"tool"',
+      )
+      const payload = hasToolResult
+        ? sse('The answer is 56.')
+        : chunk(
+            {
+              role: 'assistant',
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'call_1',
+                  type: 'function',
+                  function: {
+                    name: 'calculate',
+                    arguments: '{"expression":"7 * 8"}',
+                  },
+                },
+              ],
+            },
+            null,
+          ) +
+          chunk({}, 'tool_calls') +
+          'data: [DONE]\n\n'
+      return route.fulfill({
+        status: 200,
+        headers: { ...CORS, 'content-type': 'text/event-stream' },
+        body: payload,
+      })
+    },
+  )
+  await send(page, 'What is 7 times 8?')
+  await expect(page.getByText('The answer is 56.')).toBeVisible()
+  const followUp = requests.find((b) =>
+    JSON.stringify(b.messages).includes('"role":"tool"'),
+  )
+  expect(JSON.stringify(followUp?.messages)).toContain('56')
+})
+
+test('bookmarking a message lists it on the Saved page', async ({ page }) => {
+  await open(page, seedState(true))
+  await page.getByRole('button', { name: 'Bookmark message' }).first().click()
+  await expect(
+    page.getByRole('button', { name: 'Remove bookmark' }),
+  ).toHaveCount(1)
+  await page.getByRole('link', { name: 'Saved', exact: true }).click()
+  await expect(
+    page.getByRole('heading', { name: 'Saved messages' }),
+  ).toBeVisible()
+  const cards = page.getByTestId('saved-message')
+  await expect(cards).toHaveCount(1)
+  await expect(cards.first()).toContainText('E2E chat')
+  await page.reload()
+  await expect(page.getByTestId('saved-message')).toHaveCount(1)
 })

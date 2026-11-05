@@ -4,6 +4,7 @@ import type { JSX } from '@solidjs/web'
 
 import checkCircle2 from 'lucide/dist/esm/icons/circle-check.mjs'
 import check from 'lucide/dist/esm/icons/check.mjs'
+import chevronLeft from 'lucide/dist/esm/icons/chevron-left.mjs'
 import chevronRight from 'lucide/dist/esm/icons/chevron-right.mjs'
 import circleAlert from 'lucide/dist/esm/icons/circle-alert.mjs'
 import copy from 'lucide/dist/esm/icons/copy.mjs'
@@ -25,6 +26,7 @@ import rotateCw from 'lucide/dist/esm/icons/rotate-cw.mjs'
 import slidersHorizontal from 'lucide/dist/esm/icons/sliders-horizontal.mjs'
 import share2 from 'lucide/dist/esm/icons/share-2.mjs'
 import squarePen from 'lucide/dist/esm/icons/square-pen.mjs'
+import star from 'lucide/dist/esm/icons/star.mjs'
 import square from 'lucide/dist/esm/icons/square.mjs'
 import sun from 'lucide/dist/esm/icons/sun.mjs'
 import wrench from 'lucide/dist/esm/icons/wrench.mjs'
@@ -66,6 +68,7 @@ function createIcon(icon: IconNode) {
 
 export const CheckCircle2 = createIcon(checkCircle2)
 export const Check = createIcon(check)
+export const ChevronLeft = createIcon(chevronLeft)
 export const ChevronRight = createIcon(chevronRight)
 export const CircleAlert = createIcon(circleAlert)
 export const Computer = createIcon(monitor)
@@ -88,6 +91,7 @@ export const SlidersHorizontal = createIcon(slidersHorizontal)
 export const Share2 = createIcon(share2)
 export const SquarePen = createIcon(squarePen)
 export const Square = createIcon(square)
+export const Star = createIcon(star)
 export const Sun = createIcon(sun)
 export const Volume2 = createIcon(volume2)
 export const Wrench = createIcon(wrench)

@@ -37,6 +37,7 @@ import { composeSystemPrompt } from '../../lib/compose-system-prompt'
 import {
   attachTokenUsageToLastAssistantMessage,
   chatActions,
+  toggleBookmarkInMessages,
   createChatHistoryApi,
   createConversationSkillsApi,
 } from '../../store/chat.store'
@@ -515,6 +516,15 @@ function ChatThreadSession(props: {
     if (user) await resendUserMessage(user)
   }
 
+  function toggleBookmark(message: UIMessage) {
+    const next = toggleBookmarkInMessages(
+      chat.messages() as ChatUIMessage[],
+      message.id,
+    )
+    chat.setMessages(next as UIMessage[])
+    commitConversationMessages(next)
+  }
+
   function branchFromMessage(message: UIMessage) {
     const upTo = messagesBefore(
       chat.messages() as ChatUIMessage[],
@@ -876,6 +886,7 @@ function ChatThreadSession(props: {
         onResendUserMessage={resendUserMessage}
         onRegenerateMessage={regenerateAssistantMessage}
         onBranchMessage={branchFromMessage}
+        onToggleBookmark={toggleBookmark}
         failedUserMessage={failedUserMessage}
         error={() => chat.error()}
         onReconnectOpenRouter={props.onReconnectOpenRouter}

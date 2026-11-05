@@ -15,6 +15,7 @@ import {
   Pencil,
   RotateCw,
   Square,
+  Star,
   Volume2,
 } from '../icons'
 import {
@@ -46,6 +47,7 @@ type ChatThreadMessageListProps = {
   onResendUserMessage: (message: UIMessage, editedParts?: ContentPart[]) => void
   onRegenerateMessage: (message: UIMessage) => void
   onBranchMessage: (message: UIMessage) => void
+  onToggleBookmark: (message: UIMessage) => void
   failedUserMessage: () => UIMessage | null
   error: () => Error | undefined
   onReconnectOpenRouter?: () => void
@@ -237,6 +239,7 @@ function VirtualChatMessage(props: {
               onEdit={() => setEditing(true)}
               onRegenerate={props.listProps.onRegenerateMessage}
               onBranch={props.listProps.onBranchMessage}
+              onToggleBookmark={props.listProps.onToggleBookmark}
             />
             <UserResendButton
               message={msg()}
@@ -338,6 +341,7 @@ function MessageActions(props: {
   onEdit: () => void
   onRegenerate: (message: UIMessage) => void
   onBranch: (message: UIMessage) => void
+  onToggleBookmark: (message: UIMessage) => void
 }) {
   const [copied, setCopied] = createSignal(false)
   const text = () => messageToPlainText(props.message)
@@ -436,6 +440,24 @@ function MessageActions(props: {
             Regenerate
           </button>
         </Show>
+        <button
+          type="button"
+          class={ACTION_BUTTON_CLASS}
+          aria-label={
+            props.message.bookmarked ? 'Remove bookmark' : 'Bookmark message'
+          }
+          aria-pressed={props.message.bookmarked ? 'true' : 'false'}
+          onClick={() => props.onToggleBookmark(props.message)}
+        >
+          <Star
+            class={[
+              'size-3 shrink-0',
+              { 'fill-current': props.message.bookmarked === true },
+            ]}
+            aria-hidden="true"
+          />
+          {props.message.bookmarked ? 'Saved' : 'Save'}
+        </button>
         <button
           type="button"
           class={ACTION_BUTTON_CLASS}

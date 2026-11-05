@@ -620,6 +620,12 @@ export default function ChatApp() {
         run: () => void navigate({ to: '/insights' }),
       },
       {
+        id: 'openSaved',
+        label: 'Saved messages',
+        keywords: 'bookmarks starred favorites',
+        run: () => void navigate({ to: '/saved' }),
+      },
+      {
         id: 'openArena',
         label: 'Open arena',
         keywords: 'compare models side by side vote leaderboard',

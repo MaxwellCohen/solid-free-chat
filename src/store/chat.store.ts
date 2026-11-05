@@ -25,6 +25,8 @@ export interface TokenUsageSnapshot {
 /** UIMessage with optional per-reply usage (extension; persisted in local storage). */
 export type ChatUIMessage = UIMessage & {
   tokenUsage?: TokenUsageSnapshot
+  /** User starred this message; listed on the Saved page. */
+  bookmarked?: boolean
 }
 
 /** Reusable skill: instructions composed into the system prompt when attached. */
@@ -347,10 +349,14 @@ function normalizeConversationOrder(
 
 function normalizeMessage(raw: unknown): ChatUIMessage | null {
   if (!raw || typeof raw !== 'object') return null
-  const message = raw as UIMessage & { tokenUsage?: unknown }
+  const { bookmarked, ...message } = raw as UIMessage & {
+    tokenUsage?: unknown
+    bookmarked?: unknown
+  }
   const tokenUsage = normalizeTokenUsageSnapshot(message.tokenUsage)
   return {
     ...message,
+    ...(bookmarked === true ? { bookmarked: true } : {}),
     createdAt:
       message.createdAt != null
         ? new Date(message.createdAt as unknown as string | number)
@@ -525,6 +531,10 @@ function getConversationWithMessages(
 export const chatActions = {
   resetToEmpty() {
     chatStore.setState(() => emptyState())
+  },
+
+  isEmpty() {
+    return chatStore.state.conversationOrder.length === 0
   },
 
   hydrate(state: unknown) {
@@ -855,6 +865,21 @@ export const chatActions = {
     })
   },
 
+  /** Flip the bookmark flag on one message. */
+  toggleMessageBookmark(conversationId: string, messageId: string) {
+    chatStore.setState((s) => {
+      const messages = lookup(s.messagesByConversationId, conversationId)
+      if (!messages?.some((m) => m.id === messageId)) return s
+      return {
+        ...s,
+        messagesByConversationId: {
+          ...s.messagesByConversationId,
+          [conversationId]: toggleBookmarkInMessages(messages, messageId),
+        },
+      }
+    })
+  },
+
   /** Replace the committed history for one conversation. */
   setConversationMessages(conversationId: string, messages: ChatUIMessage[]) {
     chatStore.setState((s) => {
@@ -943,6 +968,18 @@ export function attachTokenUsageToLastAssistantMessage(
     }
   }
   return next
+}
+
+/** Toggle `bookmarked` on one message, dropping the key when cleared. */
+export function toggleBookmarkInMessages(
+  messages: ChatUIMessage[],
+  messageId: string,
+): ChatUIMessage[] {
+  return messages.map((m) => {
+    if (m.id !== messageId) return m
+    const { bookmarked, ...rest } = m
+    return bookmarked ? rest : { ...rest, bookmarked: true }
+  })
 }
 
 function deriveTitleFromMessages(messages: UIMessage[]): string | null {
