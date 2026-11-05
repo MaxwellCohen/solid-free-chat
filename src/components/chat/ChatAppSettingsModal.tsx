@@ -1,6 +1,7 @@
 import { Show, onSettled } from 'solid-js'
 import { bindModalFocus } from '../../lib/modal-focus'
 import { MAX_TEMPERATURE, MIN_TEMPERATURE } from '../../lib/chat-settings'
+import { ChatAppDisplaySettings } from './ChatAppDisplaySettings'
 import type { ChatSettings } from '../../lib/chat-settings'
 
 export function ChatAppSettingsModal(props: {
@@ -145,6 +146,7 @@ function SettingsModalDialog(props: {
             </span>
           </span>
         </label>
+        <ChatAppDisplaySettings />
         <div>
           <button
             type="button"

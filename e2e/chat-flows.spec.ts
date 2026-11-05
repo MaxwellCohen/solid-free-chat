@@ -331,3 +331,21 @@ test('regenerate keeps the previous reply as a switchable variant', async ({
   await page.getByRole('button', { name: 'Previous version' }).click()
   await expect(pos).toHaveText('1/2')
 })
+
+test('display font size applies to messages and persists', async ({ page }) => {
+  await open(page, seedState(true))
+  const bubble = page.locator('.chat-bubble').first()
+  await expect(bubble).toHaveCSS('font-size', '14px')
+  await page.getByRole('button', { name: 'Chat settings', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Chat settings' })
+  await dialog.getByLabel('Font size').selectOption('xl')
+  await expect(page.locator('html')).toHaveAttribute('data-font', 'xl')
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click()
+  await expect(bubble).toHaveCSS('font-size', '19px')
+  await page.reload()
+  await expect(page.locator('html')).toHaveAttribute('data-font', 'xl')
+  await expect(page.locator('.chat-bubble').first()).toHaveCSS(
+    'font-size',
+    '19px',
+  )
+})

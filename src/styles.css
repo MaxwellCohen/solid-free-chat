@@ -22,6 +22,36 @@ body {
   }
 }
 
+/* Display preferences (src/lib/display-prefs.ts) set these data attributes on <html>. */
+:root {
+  --chat-font-size: 0.875rem;
+  --chat-message-width: 42rem;
+}
+:root[data-font='s'] {
+  --chat-font-size: 0.8125rem;
+}
+:root[data-font='l'] {
+  --chat-font-size: 1rem;
+}
+:root[data-font='xl'] {
+  --chat-font-size: 1.1875rem;
+}
+:root[data-width='narrow'] {
+  --chat-message-width: 32rem;
+}
+:root[data-width='wide'] {
+  --chat-message-width: 56rem;
+}
+.chat-bubble {
+  font-size: var(--chat-font-size);
+}
+:root[data-compact='1'] .chat-bubble {
+  padding-block: 0.375rem;
+}
+:root[data-hide-usage='1'] [data-usage-line] {
+  display: none;
+}
+
 code {
   font-family:
     source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;

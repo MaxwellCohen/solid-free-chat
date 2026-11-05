@@ -15,6 +15,7 @@ import OfflineBanner from '../components/OfflineBanner'
 import { ThemeProvider } from '../lib/theme-context'
 import { createThemeController } from '../lib/create-theme-controller'
 import { THEME_INLINE_INIT_SCRIPT } from '../lib/theme-preference'
+import { DISPLAY_INLINE_INIT_SCRIPT } from '../lib/display-prefs'
 import { contentSecurityPolicy } from '../lib/content-security-policy'
 
 // Plain import so dev SSR CSS aggregation includes Tailwind (`?url` is excluded).
@@ -92,7 +93,9 @@ function RootComponent() {
           http-equiv="content-security-policy"
           content={contentSecurityPolicy()}
         />
-        <script innerHTML={THEME_INLINE_INIT_SCRIPT} />
+        <script
+          innerHTML={THEME_INLINE_INIT_SCRIPT + DISPLAY_INLINE_INIT_SCRIPT}
+        />
         <HydrationScript />
         {import.meta.env.PROD && (
           <script innerHTML={SERVICE_WORKER_REGISTER_SCRIPT} />

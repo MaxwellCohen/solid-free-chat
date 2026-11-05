@@ -620,6 +620,12 @@ export default function ChatApp() {
         run: () => void navigate({ to: '/insights' }),
       },
       {
+        id: 'displaySettings',
+        label: 'Display settings',
+        keywords: 'font size width spacing compact badges appearance',
+        run: () => setChatSettingsOpen(true),
+      },
+      {
         id: 'openSaved',
         label: 'Saved messages',
         keywords: 'bookmarks starred favorites',
