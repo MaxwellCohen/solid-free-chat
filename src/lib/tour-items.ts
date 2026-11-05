@@ -13,6 +13,7 @@ export type TourAction =
   | 'outline'
   | 'zen'
   | 'snippets'
+  | 'projects'
 
 export type TourItem = {
   id: string
@@ -192,6 +193,15 @@ export const TOUR_ITEMS: readonly TourItem[] = [
       'Type a trigger like ;sig then space to expand it. Supports {{date}}, {{time}}, {{clipboard}}.',
     how: 'Command palette: Snippets…',
     action: 'snippets',
+  },
+  {
+    id: 'projects',
+    emoji: '📁',
+    title: 'Projects',
+    description:
+      'Group chats and share instructions and reference notes with every chat in the group.',
+    how: 'Command palette: New project…',
+    action: 'projects',
   },
   {
     id: 'themes',

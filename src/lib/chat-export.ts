@@ -1,5 +1,6 @@
 import type { ChatAppState, ChatSkill } from '../store/chat.store'
 import { normalizeChatAppState } from '../store/chat.store'
+import { mergeProjects } from './chat-projects'
 import { lookup, maybe } from './nullable'
 
 export const EXPORT_FORMAT = 'solid-free-chat'
@@ -29,6 +30,7 @@ function serializeState(state: ChatAppState, now: number): string {
       currentConversationId: state.currentConversationId,
       selectedModel: state.selectedModel,
       skills: state.skills,
+      projects: state.projects,
       enabledToolIds: state.enabledToolIds,
     },
     null,
@@ -65,6 +67,7 @@ export function serializeChat(
       },
       currentConversationId: id,
       skills,
+      projects: state.projects.filter((p) => p.id === conversation.projectId),
     },
     now,
   )
@@ -164,6 +167,12 @@ export function mergeImportedChats(
     skills.push({ ...skill, id } satisfies ChatSkill)
   }
 
+  const { projects, idMap: projectIdMap } = mergeProjects(
+    current.projects,
+    imported.projects,
+    genId,
+  )
+
   const conversationsById = { ...current.conversationsById }
   const messagesByConversationId = { ...current.messagesByConversationId }
   const addedIds: string[] = []
@@ -177,6 +186,13 @@ export function mergeImportedChats(
       id,
       skillIds: conversation.skillIds.map((s) => skillIdMap.get(s) ?? s),
     }
+    if (conversation.projectId) {
+      const projectId =
+        projectIdMap.get(conversation.projectId) ?? conversation.projectId
+      if (projects.some((p) => p.id === projectId)) {
+        conversationsById[id].projectId = projectId
+      } else delete conversationsById[id].projectId
+    }
     messagesByConversationId[id] =
       imported.messagesByConversationId[oldId] ?? []
     addedIds.push(id)
@@ -187,6 +203,7 @@ export function mergeImportedChats(
     state: {
       ...current,
       skills,
+      projects,
       conversationOrder: [...addedIds, ...current.conversationOrder],
       conversationsById,
       messagesByConversationId,

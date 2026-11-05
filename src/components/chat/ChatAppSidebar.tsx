@@ -9,6 +9,7 @@ import {
 import {
   ChevronRight,
   Download,
+  FolderInput,
   KeyRound,
   PanelLeft,
   PanelLeftClose,
@@ -18,7 +19,7 @@ import {
   Tag,
   Upload,
 } from '../icons'
-import type { ChatConversation } from '../../store/chat.hooks'
+import type { ChatConversation, ChatProject } from '../../store/chat.hooks'
 import { NEW_CHAT_TITLE, chatActions } from '../../store/chat.store'
 import { formatCost } from '../../lib/usage-cost'
 import {
@@ -28,6 +29,7 @@ import {
   removeTag,
   toggleTagFilter,
 } from '../../lib/chat-tags'
+import { groupConversations } from '../../lib/chat-projects'
 import { requestScrollToMessage } from '../../lib/scroll-to-message'
 import { searchSidebarConversations } from '../../lib/conversation-search'
 import type { HistoryConversation } from '../../lib/harness/chat-history'
@@ -43,6 +45,10 @@ type ChatAppSidebarProps = {
   sidebarOpen: () => boolean
   onToggleSidebar: () => void
   conversations: () => ChatConversation[]
+  projects: () => ChatProject[]
+  onNewProject: () => void
+  onEditProject: (id: string) => void
+  onNewChatInProject: (id: string) => void
   currentConversationId: () => string | null
   onSelectConversation: (id: string) => void
   onCreateConversation: () => void
@@ -173,18 +179,31 @@ function ConversationPane(props: { props: ChatAppSidebarProps }) {
     <div class="order-1 flex min-h-0 flex-1 flex-col sm:order-2">
       <ConversationHeader
         onCreateConversation={props.props.onCreateConversation}
+        onNewProject={props.props.onNewProject}
       />
       <ConversationSearch props={props.props} />
     </div>
   )
 }
 
-function ConversationHeader(props: { onCreateConversation: () => void }) {
+function ConversationHeader(props: {
+  onCreateConversation: () => void
+  onNewProject: () => void
+}) {
   return (
     <div class="flex shrink-0 items-center justify-between gap-2 p-3">
       <h2 class="text-muted-foreground min-w-0 flex-1 truncate text-xs font-semibold tracking-wide uppercase">
         Chats
       </h2>
+      <button
+        type="button"
+        class="border-border hover:bg-muted shrink-0 rounded-lg border px-2.5 py-1.5 text-xs font-medium"
+        onClick={props.onNewProject}
+        title="New project"
+        aria-label="New project"
+      >
+        + Project
+      </button>
       <button
         type="button"
         class="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium"
@@ -347,23 +366,54 @@ function ConversationSearch(props: { props: ChatAppSidebarProps }) {
   )
 }
 
+const COLLAPSED_PROJECTS_KEY = 'sidebar-collapsed-projects'
+
+function loadCollapsedProjects(): Set<string> {
+  try {
+    const raw: unknown = JSON.parse(
+      localStorage.getItem(COLLAPSED_PROJECTS_KEY) ?? '[]',
+    )
+    return new Set(
+      Array.isArray(raw) ? raw.filter((x) => typeof x === 'string') : [],
+    )
+  } catch {
+    return new Set()
+  }
+}
+
 function ConversationNav(props: {
   props: ChatAppSidebarProps
   tag: string | null
 }) {
+  const [collapsed, setCollapsed] = createSignal<Set<string>>(
+    loadCollapsedProjects(),
+  )
+  const toggleCollapsed = (id: string) => {
+    const next = new Set(collapsed())
+    if (!next.delete(id)) next.add(id)
+    setCollapsed(next)
+    try {
+      localStorage.setItem(COLLAPSED_PROJECTS_KEY, JSON.stringify([...next]))
+    } catch {
+      /* ignore */
+    }
+  }
   const visible = createMemo(() =>
     filterByTag(props.props.conversations(), props.tag),
   )
-  const pinned = createMemo(() => visible().filter((c) => c.pinned))
-  const unpinned = createMemo(() => visible().filter((c) => !c.pinned))
+  const grouped = createMemo(() =>
+    groupConversations(visible(), props.props.projects(), props.tag === null),
+  )
   const renderItems = (items: () => ChatConversation[]) => (
     <For each={items()} keyed={(c) => c.id}>
       {(conversation) => (
         <ConversationListItem
           conversation={conversation()}
+          projects={props.props.projects}
           currentConversationId={props.props.currentConversationId}
           onSelectConversation={props.props.onSelectConversation}
           onDeleteConversation={props.props.onDeleteConversation}
+          onNewProject={props.props.onNewProject}
         />
       )}
     </For>
@@ -374,19 +424,94 @@ function ConversationNav(props: {
       class="min-h-0 flex-1 overflow-y-auto"
       aria-label="Conversations"
     >
-      <Show when={pinned().length > 0}>
+      <Show when={grouped().pinned.length > 0}>
         <h3 class="text-muted-foreground px-4 pt-1 pb-1 text-xs font-medium">
           Pinned
         </h3>
-        <ul class="space-y-0.5 px-2 pb-2">{renderItems(pinned)}</ul>
+        <ul class="space-y-0.5 px-2 pb-2">
+          {renderItems(() => grouped().pinned)}
+        </ul>
       </Show>
-      <ul class="space-y-0.5 px-2 pb-3">{renderItems(unpinned)}</ul>
+      <For each={grouped().groups} keyed={(g) => g.project.id}>
+        {(group) => (
+          <section
+            data-testid="project-group"
+            aria-label={`Project: ${group().project.name}`}
+          >
+            <div class="flex items-center gap-0.5 px-2 pt-1">
+              <button
+                type="button"
+                class="hover:bg-muted flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs font-medium"
+                aria-expanded={
+                  collapsed().has(group().project.id) ? 'false' : 'true'
+                }
+                data-testid="project-header"
+                onClick={() => toggleCollapsed(group().project.id)}
+              >
+                <ChevronRight
+                  class={[
+                    'text-muted-foreground size-3.5 shrink-0 transition-transform',
+                    { 'rotate-90': !collapsed().has(group().project.id) },
+                  ]}
+                  aria-hidden="true"
+                />
+                <span aria-hidden="true">{group().project.emoji}</span>
+                <span class="min-w-0 flex-1 truncate">
+                  {group().project.name}
+                </span>
+                <span class="text-muted-foreground shrink-0 font-normal">
+                  {group().chats.length}
+                </span>
+              </button>
+              <button
+                type="button"
+                class="text-muted-foreground hover:text-foreground hover:bg-muted shrink-0 rounded-lg px-2 py-1.5"
+                title="New chat in project"
+                aria-label={`New chat in project: ${group().project.name}`}
+                onClick={() =>
+                  props.props.onNewChatInProject(group().project.id)
+                }
+              >
+                <span class="text-sm leading-none" aria-hidden="true">
+                  +
+                </span>
+              </button>
+              <button
+                type="button"
+                class="text-muted-foreground hover:text-foreground hover:bg-muted shrink-0 rounded-lg px-2 py-1.5"
+                title="Edit project"
+                aria-label={`Edit project: ${group().project.name}`}
+                onClick={() => props.props.onEditProject(group().project.id)}
+              >
+                <Pencil class="size-3.5" aria-hidden="true" />
+              </button>
+            </div>
+            <Show when={!collapsed().has(group().project.id)}>
+              <ul class="space-y-0.5 px-2 pb-2 pl-4">
+                {renderItems(() => group().chats)}
+              </ul>
+            </Show>
+          </section>
+        )}
+      </For>
+      <Show
+        when={grouped().groups.length > 0 && grouped().ungrouped.length > 0}
+      >
+        <h3 class="text-muted-foreground px-4 pt-1 pb-1 text-xs font-medium">
+          Chats
+        </h3>
+      </Show>
+      <ul class="space-y-0.5 px-2 pb-3">
+        {renderItems(() => grouped().ungrouped)}
+      </ul>
     </nav>
   )
 }
 
 function ConversationListItem(props: {
   conversation: ChatConversation
+  projects: () => ChatProject[]
+  onNewProject: () => void
   currentConversationId: () => string | null
   onSelectConversation: (id: string) => void
   onDeleteConversation: (id: string) => void
@@ -395,6 +520,7 @@ function ConversationListItem(props: {
   const [editing, setEditing] = createSignal(false)
   const [draft, setDraft] = createSignal('')
   const [tagsOpen, setTagsOpen] = createSignal(false)
+  const [moveOpen, setMoveOpen] = createSignal(false)
   createEffect(
     () => tagEditRequest() === props.conversation.id,
     (hit) => {
@@ -507,6 +633,21 @@ function ConversationListItem(props: {
       >
         <Tag class="size-3.5" aria-hidden="true" />
       </button>
+      <button
+        type="button"
+        title="Move to project…"
+        aria-label={`Move to project: ${props.conversation.title || NEW_CHAT_TITLE}`}
+        aria-expanded={moveOpen() ? 'true' : 'false'}
+        class={[
+          'hover:bg-muted shrink-0 rounded-lg px-2',
+          props.conversation.projectId
+            ? 'text-primary'
+            : 'text-muted-foreground hover:text-foreground',
+        ]}
+        onClick={() => setMoveOpen((o) => !o)}
+      >
+        <FolderInput class="size-3.5" aria-hidden="true" />
+      </button>
       <Show
         when={confirmingDelete()}
         fallback={
@@ -534,6 +675,66 @@ function ConversationListItem(props: {
         >
           Delete?
         </button>
+      </Show>
+      <Show when={moveOpen()}>
+        <div
+          role="group"
+          aria-label="Move to project"
+          class="border-border bg-card basis-full space-y-0.5 rounded-lg border p-1"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.stopPropagation()
+              setMoveOpen(false)
+            }
+          }}
+        >
+          <For each={props.projects()}>
+            {(p) => (
+              <button
+                type="button"
+                class="hover:bg-muted flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs"
+                aria-pressed={
+                  props.conversation.projectId === p.id ? 'true' : 'false'
+                }
+                onClick={() => {
+                  chatActions.setConversationProject(
+                    props.conversation.id,
+                    p.id,
+                  )
+                  setMoveOpen(false)
+                }}
+              >
+                <span aria-hidden="true">{p.emoji}</span>
+                <span class="min-w-0 flex-1 truncate">{p.name}</span>
+                <Show when={props.conversation.projectId === p.id}>
+                  <span aria-hidden="true">✓</span>
+                </Show>
+              </button>
+            )}
+          </For>
+          <Show when={props.conversation.projectId}>
+            <button
+              type="button"
+              class="hover:bg-muted w-full rounded-md px-2 py-1.5 text-left text-xs"
+              onClick={() => {
+                chatActions.setConversationProject(props.conversation.id, null)
+                setMoveOpen(false)
+              }}
+            >
+              No project
+            </button>
+          </Show>
+          <button
+            type="button"
+            class="text-muted-foreground hover:bg-muted w-full rounded-md px-2 py-1.5 text-left text-xs"
+            onClick={() => {
+              setMoveOpen(false)
+              props.onNewProject()
+            }}
+          >
+            New project…
+          </button>
+        </div>
       </Show>
       <Show when={tagsOpen()}>
         <TagEditor

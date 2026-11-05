@@ -6,6 +6,8 @@ import { lookup } from '../lib/nullable'
 import { DEFAULT_CHAT_MODEL } from '../lib/chat-models'
 import { DEFAULT_ENABLED_TOOL_IDS, isKnownToolId } from '../lib/harness/tools'
 import { normalizeTags } from '../lib/chat-tags'
+import { cleanProjectDraft, normalizeProjects } from '../lib/chat-projects'
+import type { ProjectDraft } from '../lib/chat-projects'
 import { mergeChatSettings, normalizeChatSettings } from '../lib/chat-settings'
 import type { ChatSettings } from '../lib/chat-settings'
 import type {
@@ -56,6 +58,17 @@ export interface ChatSkill {
   updatedAt: number
 }
 
+/** Groups chats and shares instructions + reference notes with them. */
+export interface ChatProject {
+  id: string
+  name: string
+  emoji: string
+  instructions: string
+  /** Reference text composed into the system prompt (capped). */
+  notes: string
+  createdAt: number
+}
+
 export interface ChatConversation {
   id: string
   title: string
@@ -66,6 +79,8 @@ export interface ChatConversation {
   tags?: string[]
   /** Set when the user renamed the chat; disables auto-titling. */
   titleLocked?: boolean
+  /** Project this chat belongs to (live link into `projects`). */
+  projectId?: string
   /** Ordered skill ids attached to this chat (live links into `skills`). */
   skillIds: string[]
   /** Per-chat overrides; undefined fields use provider defaults. */
@@ -89,6 +104,7 @@ export interface ChatAppState {
   currentConversationId: string | null
   selectedModel: string
   skills: ChatSkill[]
+  projects: ChatProject[]
   /** Browser-local harness tools offered to the model (see `lib/harness/tools`). */
   enabledToolIds: string[]
 }
@@ -114,6 +130,7 @@ type PersistedChatState = {
   selectedModel?: unknown
   savedSystemPrompts?: unknown
   skills?: unknown
+  projects?: unknown
   enabledToolIds?: unknown
 }
 
@@ -126,6 +143,7 @@ const emptyState = (): ChatAppState => ({
   currentConversationId: null,
   selectedModel: DEFAULT_CHAT_MODEL,
   skills: [],
+  projects: [],
   enabledToolIds: [...DEFAULT_ENABLED_TOOL_IDS],
 })
 
@@ -143,6 +161,13 @@ function newSkillId(): string {
     return crypto.randomUUID()
   }
   return `sk-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+}
+
+function newProjectId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID()
+  }
+  return `p-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
 function newConversation(
@@ -338,6 +363,9 @@ function normalizeConversationRecord(
         ? { settings: normalizeChatSettings(source.settings) }
         : {}),
       ...(source.pinned === true ? { pinned: true } : {}),
+      ...(typeof source.projectId === 'string' && source.projectId.trim()
+        ? { projectId: source.projectId.trim() }
+        : {}),
       ...(normalizeTags(source.tags).length
         ? { tags: normalizeTags(source.tags) }
         : {}),
@@ -346,6 +374,20 @@ function normalizeConversationRecord(
       ...(sessionTotalTokens !== undefined ? { sessionTotalTokens } : {}),
       ...(sessionTotalCost !== undefined ? { sessionTotalCost } : {}),
     },
+  }
+}
+
+/** Removes `projectId`s that point at no known project (mutates the map). */
+function dropDanglingProjectIds(
+  conversationsById: Record<string, ChatConversation>,
+  projects: readonly { id: string }[],
+) {
+  const ids = new Set(projects.map((p) => p.id))
+  for (const [id, conversation] of Object.entries(conversationsById)) {
+    if (conversation.projectId && !ids.has(conversation.projectId)) {
+      const { projectId: _projectId, ...rest } = conversation
+      conversationsById[id] = rest
+    }
   }
 }
 
@@ -474,6 +516,9 @@ function normalizePersistedChatState(raw: unknown): ChatAppState | null {
     )
   }
 
+  const projects = normalizeProjects(source.projects, newProjectId)
+  dropDanglingProjectIds(conversationsById, projects)
+
   const conversationOrder = normalizeConversationOrder(
     source.conversationOrder,
     conversationsById,
@@ -494,6 +539,7 @@ function normalizePersistedChatState(raw: unknown): ChatAppState | null {
         ? source.selectedModel
         : DEFAULT_CHAT_MODEL,
     skills,
+    projects,
     enabledToolIds: normalizeEnabledToolIds(source.enabledToolIds),
   }
 }
@@ -555,6 +601,7 @@ function normalizeLegacyChatState(
         ? raw.selectedModel
         : DEFAULT_CHAT_MODEL,
     skills,
+    projects: [],
     enabledToolIds: [...DEFAULT_ENABLED_TOOL_IDS],
   }
 }
@@ -678,6 +725,7 @@ export const chatActions = {
             ...conversation,
             title: titleHint ? truncate(titleHint, 52) : conversation.title,
             skillIds: [...(source?.skillIds ?? [])],
+            ...(source?.projectId ? { projectId: source.projectId } : {}),
           },
         },
         messagesByConversationId: {
@@ -863,6 +911,69 @@ export const chatActions = {
         },
       }
     })
+  },
+
+  createProject(draft: ProjectDraft): string | undefined {
+    const clean = cleanProjectDraft(draft)
+    if (!clean) return undefined
+    const id = newProjectId()
+    chatStore.setState((s) => ({
+      ...s,
+      projects: [...s.projects, { id, ...clean, createdAt: Date.now() }],
+    }))
+    return id
+  },
+
+  updateProject(id: string, draft: ProjectDraft) {
+    const clean = cleanProjectDraft(draft)
+    if (!clean) return
+    chatStore.setState((s) => ({
+      ...s,
+      projects: s.projects.map((p) => (p.id === id ? { ...p, ...clean } : p)),
+    }))
+  },
+
+  /** Removes the project; its chats are ungrouped, never deleted. */
+  deleteProject(id: string) {
+    chatStore.setState((s) => {
+      const conversationsById = { ...s.conversationsById }
+      for (const [cid, c] of Object.entries(conversationsById)) {
+        if (c.projectId === id) {
+          const { projectId: _projectId, ...rest } = c
+          conversationsById[cid] = rest
+        }
+      }
+      return {
+        ...s,
+        projects: s.projects.filter((p) => p.id !== id),
+        conversationsById,
+      }
+    })
+  },
+
+  /** Moves a chat into a project, or out of any project when `projectId` is null. */
+  setConversationProject(id: string, projectId: string | null) {
+    chatStore.setState((s) => {
+      const conversation = getConversation(s, id)
+      if (!conversation) return s
+      const { projectId: _projectId, ...rest } = conversation
+      const valid =
+        projectId != null && s.projects.some((p) => p.id === projectId)
+      return {
+        ...s,
+        conversationsById: {
+          ...s.conversationsById,
+          [id]: valid ? { ...rest, projectId } : rest,
+        },
+      }
+    })
+  },
+
+  /** New chat inside `projectId`; returns the chat id. */
+  createConversationInProject(projectId: string) {
+    const id = chatActions.createConversation()
+    chatActions.setConversationProject(id, projectId)
+    return id
   },
 
   setConversationTags(id: string, tags: string[]) {

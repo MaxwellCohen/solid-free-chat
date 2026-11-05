@@ -122,6 +122,7 @@ export function parseChatGptExport(text: string): ChatImportResult {
     currentConversationId: null,
     selectedModel: DEFAULT_CHAT_MODEL,
     skills: [],
+    projects: [],
     enabledToolIds: [],
   }
   raw.forEach((conv, i) => {

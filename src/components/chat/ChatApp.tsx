@@ -69,6 +69,8 @@ import {
   serializeChat,
 } from '../../lib/chat-export'
 import { printChat } from '../../lib/print-chat'
+import { findProject } from '../../lib/chat-projects'
+import type { ProjectDraft } from '../../lib/chat-projects'
 import { ChatAppSidebar, requestTagEditor } from './ChatAppSidebar'
 import {
   BUILT_IN_PERSONAS,
@@ -105,6 +107,11 @@ const ChatAppSnippetsModal = lazy(() =>
     default: m.ChatAppSnippetsModal,
   })),
 )
+const ChatAppProjectModal = lazy(() =>
+  import('./ChatAppProjectModal').then((m) => ({
+    default: m.ChatAppProjectModal,
+  })),
+)
 const ChatAppTourModal = lazy(() =>
   import('./ChatAppTourModal').then((m) => ({ default: m.ChatAppTourModal })),
 )
@@ -122,6 +129,7 @@ function preloadModals() {
   void import('./ChatAppPersonasModal')
   void import('./ChatAppSkillsModal')
   void import('./ChatAppSnippetsModal')
+  void import('./ChatAppProjectModal')
 }
 
 /** Latches true once `open` has been true, so lazy modals load on first use. */
@@ -148,6 +156,34 @@ export default function ChatApp() {
   const conversations = useChatStore((state) =>
     chatSelectors.conversationList(state),
   )
+  const projects = useChatStore((state) => state.projects)
+  const currentProject = useChatStore((state) => {
+    const id = state.currentConversationId
+    return findProject(
+      state.projects,
+      id ? lookup(state.conversationsById, id)?.projectId : undefined,
+    )
+  })
+  const [projectModalOpen, setProjectModalOpen] = createSignal(false)
+  const [projectEditId, setProjectEditId] = createSignal<string | null>(null)
+  function openProjectModal(editId: string | null = null) {
+    setProjectEditId(editId)
+    setProjectModalOpen(true)
+  }
+  function createChatInProject(projectId: string) {
+    setCurrentConversationLoading(false)
+    actions.createConversationInProject(projectId)
+    collapseSidebarIfNarrow()
+  }
+  function saveProject(draft: ProjectDraft) {
+    const editId = projectEditId()
+    if (editId) actions.updateProject(editId, draft)
+    else {
+      const id = actions.createProject(draft)
+      if (id) createChatInProject(id)
+    }
+    setProjectModalOpen(false)
+  }
   const skills = useChatStore((state) => state.skills)
   const attachedSkillIds = useChatStore((state) => {
     const id = state.currentConversationId
@@ -307,6 +343,9 @@ export default function ChatApp() {
         break
       case 'snippets':
         setSnippetsOpen(true)
+        break
+      case 'projects':
+        openProjectModal()
         break
     }
   }
@@ -709,6 +748,11 @@ export default function ChatApp() {
         setSkillsLibraryOpen(false)
         return
       }
+      if (projectModalOpen()) {
+        event.preventDefault()
+        setProjectModalOpen(false)
+        return
+      }
       if (snippetsOpen()) {
         event.preventDefault()
         setSnippetsOpen(false)
@@ -860,6 +904,18 @@ export default function ChatApp() {
         run: () => setSnippetsOpen(true),
       },
       {
+        id: 'newProject',
+        label: 'New project…',
+        keywords: 'group folder workspace context notes',
+        run: () => openProjectModal(),
+      },
+      {
+        id: 'moveToProject',
+        label: 'Move chat to project…',
+        keywords: 'group folder organize',
+        run: () => openPalette('Move to project: '),
+      },
+      {
         id: 'openPersonas',
         label: 'Personas…',
         keywords: 'character roleplay tutor pirate system prompt',
@@ -969,6 +1025,35 @@ export default function ChatApp() {
         },
       })
     }
+    const currentProjectValue = currentProject()
+    if (currentProjectValue) {
+      items.push({
+        id: 'editProject',
+        label: 'Edit current project…',
+        hint: currentProjectValue.name,
+        keywords: 'project instructions notes',
+        run: () => openProjectModal(currentProjectValue.id),
+      })
+    }
+    if (current) {
+      for (const p of projects()) {
+        if (p.id === current.projectId) continue
+        items.push({
+          id: `moveTo:${p.id}`,
+          label: `Move to project: ${p.name}`,
+          keywords: 'move chat group',
+          run: () => actions.setConversationProject(current.id, p.id),
+        })
+      }
+      if (current.projectId) {
+        items.push({
+          id: 'moveToNone',
+          label: 'Move to project: none',
+          keywords: 'remove ungroup chat',
+          run: () => actions.setConversationProject(current.id, null),
+        })
+      }
+    }
     for (const c of conversations()) {
       items.push({
         id: `chat:${c.id}`,
@@ -1055,6 +1140,7 @@ export default function ChatApp() {
   const personasOpened = useEverOpened(personasOpen)
   const skillsOpened = useEverOpened(skillsLibraryOpen)
   const snippetsOpened = useEverOpened(snippetsOpen)
+  const projectModalOpened = useEverOpened(projectModalOpen)
   const tourOpened = useEverOpened(tourOpen)
   const shortcutsOpened = useEverOpened(shortcutsHelpOpen)
 
@@ -1068,6 +1154,10 @@ export default function ChatApp() {
           sidebarOpen={sidebarOpen}
           onToggleSidebar={toggleSidebar}
           conversations={conversations}
+          projects={projects}
+          onNewProject={() => openProjectModal()}
+          onEditProject={openProjectModal}
+          onNewChatInProject={createChatInProject}
           currentConversationId={currentConversationId}
           onSelectConversation={selectConversation}
           onCreateConversation={createConversationFromSidebar}
@@ -1147,6 +1237,22 @@ export default function ChatApp() {
                       ? 'Browser storage is full — recent chats may not be saved. Delete old chats or export a backup.'
                       : 'Could not save chats to this browser.'}
                   </p>
+                </Show>
+                <Show when={currentProject()}>
+                  {(project) => (
+                    <button
+                      type="button"
+                      data-testid="project-chip"
+                      class="border-border bg-muted/40 text-foreground hover:bg-muted flex w-full min-w-0 items-center gap-2 border-b px-3 py-1 text-left text-xs"
+                      aria-label={`Project: ${project().name}. Edit project`}
+                      onClick={() => openProjectModal(project().id)}
+                    >
+                      <span aria-hidden="true">{project().emoji}</span>
+                      <span class="min-w-0 truncate font-medium">
+                        {project().name}
+                      </span>
+                    </button>
+                  )}
                 </Show>
                 <Show when={currentChatSettings()?.persona}>
                   {(persona) => (
@@ -1276,6 +1382,21 @@ export default function ChatApp() {
               }
               onDeleteSkill={(skillId) => actions.deleteSkill(skillId)}
               onClose={() => setSkillsLibraryOpen(false)}
+            />
+          </Loading>
+        </Show>
+
+        <Show when={projectModalOpened()}>
+          <Loading>
+            <ChatAppProjectModal
+              open={projectModalOpen}
+              project={() => projects().find((p) => p.id === projectEditId())}
+              onSave={saveProject}
+              onDelete={(id) => {
+                actions.deleteProject(id)
+                setProjectModalOpen(false)
+              }}
+              onClose={() => setProjectModalOpen(false)}
             />
           </Loading>
         </Show>

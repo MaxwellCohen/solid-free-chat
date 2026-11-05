@@ -41,6 +41,7 @@ import {
 } from '../../lib/usage-cost'
 import type { ModelPricing } from '../../lib/usage-cost'
 import { composeSystemPrompt } from '../../lib/compose-system-prompt'
+import { composeProjectContext, findProject } from '../../lib/chat-projects'
 import {
   attachElapsedToLastAssistantMessage,
   attachTokenUsageToLastAssistantMessage,
@@ -248,6 +249,12 @@ function ChatThreadSession(props: {
     (state) => lookup(state.conversationsById, conversationId)?.skillIds ?? [],
   )
   const skills = useChatStore((state) => state.skills)
+  const project = useChatStore((state) =>
+    findProject(
+      state.projects,
+      lookup(state.conversationsById, conversationId)?.projectId,
+    ),
+  )
   const chatSettings = useChatStore(
     (state) => lookup(state.conversationsById, conversationId)?.settings,
   )
@@ -343,6 +350,7 @@ function ChatThreadSession(props: {
           skillIds(),
           skills(),
           chatSettings()?.systemPrompt,
+          project(),
         ),
         temperature: chatSettings()?.temperature,
         maxTokens: chatSettings()?.maxTokens,
@@ -532,9 +540,12 @@ function ChatThreadSession(props: {
 
   const contextMeter = createMemo(() =>
     contextUsage(
-      estimateConversationTokens(
-        chat.messages().map((m) => messageToPlainText(m)),
-      ),
+      estimateConversationTokens([
+        ...(composeProjectContext(project())
+          ? [composeProjectContext(project())]
+          : []),
+        ...chat.messages().map((m) => messageToPlainText(m)),
+      ]),
       props.contextLength,
     ),
   )

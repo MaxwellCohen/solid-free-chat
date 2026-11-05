@@ -10,6 +10,7 @@ import circleAlert from 'lucide/dist/esm/icons/circle-alert.mjs'
 import copy from 'lucide/dist/esm/icons/copy.mjs'
 import download from 'lucide/dist/esm/icons/download.mjs'
 import fileText from 'lucide/dist/esm/icons/file-text.mjs'
+import folderInput from 'lucide/dist/esm/icons/folder-input.mjs'
 import gitBranch from 'lucide/dist/esm/icons/git-branch.mjs'
 import image from 'lucide/dist/esm/icons/image.mjs'
 import keyRound from 'lucide/dist/esm/icons/key-round.mjs'
@@ -79,6 +80,7 @@ export const Computer = createIcon(monitor)
 export const Copy = createIcon(copy)
 export const Download = createIcon(download)
 export const FileText = createIcon(fileText)
+export const FolderInput = createIcon(folderInput)
 export const GitBranch = createIcon(gitBranch)
 export const Image = createIcon(image)
 export const KeyRound = createIcon(keyRound)

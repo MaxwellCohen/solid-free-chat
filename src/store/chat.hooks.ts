@@ -41,6 +41,7 @@ export type {
   ChatAppState,
   ChatConversation,
   ChatConversationWithMessages,
+  ChatProject,
   ChatSkill,
   TokenUsageSnapshot,
 } from './chat.store'

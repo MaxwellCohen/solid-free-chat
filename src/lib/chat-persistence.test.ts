@@ -54,6 +54,7 @@ describe('chat persistence', () => {
         'currentConversationId',
         'enabledToolIds',
         'messagesByConversationId',
+        'projects',
         'selectedModel',
         'skills',
       ].sort(),
