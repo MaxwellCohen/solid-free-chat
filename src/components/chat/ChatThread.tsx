@@ -37,6 +37,8 @@ import type { ChatUIMessage, TokenUsageSnapshot } from '../../store/chat.store'
 import { useChatStore } from '../../store/chat.hooks'
 import { createDictation, stopSpeaking } from '../../lib/speech'
 import { ChatThreadComposer } from './ChatThreadComposer'
+import { parseSlash } from '../../lib/slash-commands'
+import type { SlashCommand } from '../../lib/slash-commands'
 import { ChatThreadMessageList } from './ChatThreadMessageList'
 import type { PendingFile, PendingImage } from './chat-thread-utils'
 import {
@@ -52,6 +54,13 @@ import {
   userMessageToResendParts,
 } from './chat-thread-utils'
 
+export type SlashAction =
+  | { type: 'new' }
+  | { type: 'export'; format: 'md' | 'json' }
+  | { type: 'model' }
+  | { type: 'help' }
+  | { type: 'skill'; name: string }
+
 export default function ChatThread(props: {
   conversationId: string
   initialMessages: ChatUIMessage[]
@@ -66,6 +75,7 @@ export default function ChatThread(props: {
   onLoadingChange: (isLoading: boolean) => void
   onRegisterStop?: (stop: (() => void) | null) => void
   onReconnectOpenRouter?: () => void
+  onSlashAction?: (action: SlashAction) => void
 }) {
   return (
     <Show when={props.conversationId} keyed>
@@ -81,6 +91,7 @@ export default function ChatThread(props: {
           onLoadingChange={props.onLoadingChange}
           onRegisterStop={props.onRegisterStop}
           onReconnectOpenRouter={props.onReconnectOpenRouter}
+          onSlashAction={props.onSlashAction}
         />
       )}
     </Show>
@@ -99,6 +110,7 @@ function ChatThreadSession(props: {
   onLoadingChange: (isLoading: boolean) => void
   onRegisterStop?: (stop: (() => void) | null) => void
   onReconnectOpenRouter?: () => void
+  onSlashAction?: (action: SlashAction) => void
 }) {
   // The parent remounts this session per conversation, so these are snapshots.
   const conversationId = untrack(() => props.conversationId)
@@ -482,9 +494,48 @@ function ChatThreadSession(props: {
     return false
   }
 
+  /** Runs a picked/typed slash command; returns true when it was handled. */
+  function runSlash(command: SlashCommand, arg: string): boolean {
+    if (command.template) {
+      setDraft(command.template)
+      return true
+    }
+    const emit = props.onSlashAction
+    switch (command.name) {
+      case 'new':
+      case 'clear':
+        setDraft('')
+        emit?.({ type: 'new' })
+        return true
+      case 'export':
+        setDraft('')
+        emit?.({
+          type: 'export',
+          format: arg.toLowerCase() === 'json' ? 'json' : 'md',
+        })
+        return true
+      case 'model':
+      case 'help':
+        setDraft('')
+        emit?.({ type: command.name })
+        return true
+      case 'skill':
+        if (!arg) {
+          setDraft('/skill ')
+          return true
+        }
+        setDraft('')
+        emit?.({ type: 'skill', name: arg })
+        return true
+    }
+    return false
+  }
+
   async function onSubmit(e: Event) {
     e.preventDefault()
     if (!canSend()) return
+    const slash = parseSlash(draft())
+    if (slash && runSlash(slash.command, slash.arg)) return
     stopDictation()
 
     const text = draft().trim()
@@ -591,6 +642,7 @@ function ChatThreadSession(props: {
         draft={draft}
         onDraftInput={setDraft}
         onSubmit={onSubmit}
+        onPickSlash={(command) => runSlash(command, '')}
         canSend={canSend}
         dictationSupported={dictation !== null}
         dictating={() => dictation?.active() ?? false}

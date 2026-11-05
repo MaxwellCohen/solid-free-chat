@@ -1,5 +1,7 @@
-import { For, Show } from 'solid-js'
+import { For, Show, createMemo, createSignal } from 'solid-js'
 import { CheckCircle2, FileText, Image as ImageIcon, Mic, X } from '../icons'
+import { matchSlashCommands } from '../../lib/slash-commands'
+import type { SlashCommand } from '../../lib/slash-commands'
 import type { PendingFile, PendingImage } from './chat-thread-utils'
 
 type ChatThreadComposerProps = {
@@ -24,6 +26,7 @@ type ChatThreadComposerProps = {
   dictationSupported?: boolean
   dictating?: () => boolean
   onToggleDictation?: () => void
+  onPickSlash?: (command: SlashCommand) => void
 }
 
 export function ChatThreadComposer(props: ChatThreadComposerProps) {
@@ -226,17 +229,93 @@ function PendingFileChip(props: {
 }
 
 function ComposerInputRow(props: { props: ChatThreadComposerProps }) {
+  const [slashIndex, setSlashIndex] = createSignal(0)
+  const [dismissedFor, setDismissedFor] = createSignal<string | null>(null)
+  const slashMatches = createMemo(() =>
+    props.props.onPickSlash ? matchSlashCommands(props.props.draft()) : [],
+  )
+  const slashOpen = () =>
+    slashMatches().length > 0 && dismissedFor() !== props.props.draft()
+  const pick = (command: SlashCommand | undefined) => {
+    if (command) props.props.onPickSlash?.(command)
+  }
   return (
-    <div class="flex gap-2">
+    <div class="relative flex gap-2">
+      <Show when={slashOpen()}>
+        <ul
+          id="slash-command-list"
+          role="listbox"
+          aria-label="Slash commands"
+          class="border-border bg-card absolute right-0 bottom-full left-0 z-10 mb-2 max-h-56 overflow-y-auto rounded-xl border p-1 shadow-lg"
+        >
+          <For each={slashMatches()}>
+            {(command, i) => (
+              <li
+                id={`slash-command-${i()}`}
+                role="option"
+                aria-selected={i() === slashIndex() ? 'true' : 'false'}
+                class={[
+                  'flex cursor-pointer items-baseline gap-2 rounded-lg px-3 py-1.5 text-sm',
+                  { 'bg-muted': i() === slashIndex() },
+                ]}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  pick(command)
+                }}
+                onMouseMove={() => setSlashIndex(i())}
+              >
+                <span class="text-foreground font-medium">
+                  /{command.name}
+                  {command.args ? ` ${command.args}` : ''}
+                </span>
+                <span class="text-muted-foreground truncate text-xs">
+                  {command.description}
+                </span>
+              </li>
+            )}
+          </For>
+        </ul>
+      </Show>
       <textarea
         data-chat-composer
         class="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring max-h-40 min-h-11 flex-1 resize-y rounded-xl border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-50"
         placeholder="Message…"
         rows={2}
         value={props.props.draft()}
-        onInput={(e) => props.props.onDraftInput(e.currentTarget.value)}
+        aria-controls={slashOpen() ? 'slash-command-list' : undefined}
+        aria-activedescendant={
+          slashOpen() ? `slash-command-${slashIndex()}` : undefined
+        }
+        onInput={(e) => {
+          setSlashIndex(0)
+          props.props.onDraftInput(e.currentTarget.value)
+        }}
         disabled={props.props.isLoading()}
         onKeyDown={(e) => {
+          if (slashOpen() && !e.isComposing) {
+            const n = slashMatches().length
+            if (e.key === 'ArrowDown') {
+              e.preventDefault()
+              setSlashIndex((i) => (i + 1) % n)
+              return
+            }
+            if (e.key === 'ArrowUp') {
+              e.preventDefault()
+              setSlashIndex((i) => (i - 1 + n) % n)
+              return
+            }
+            if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+              e.preventDefault()
+              pick(slashMatches()[slashIndex()])
+              return
+            }
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              e.stopPropagation()
+              setDismissedFor(props.props.draft())
+              return
+            }
+          }
           if (e.key === 'Escape' && props.props.dictating?.()) {
             props.props.onToggleDictation?.()
           }

@@ -22,7 +22,11 @@ import { ChatErrorFallback } from './ChatErrorFallback'
 import { buildShareLink } from '../../lib/chat-share'
 import type { ChatModelOption } from '../../lib/chat-models'
 import { DEFAULT_CHAT_MODEL, modelSupportsTools } from '../../lib/chat-models'
-import { findMatchingShortcut } from '../../lib/keyboard-shortcuts'
+import {
+  CHAT_SHORTCUTS,
+  findMatchingShortcut,
+  formatShortcutChord,
+} from '../../lib/keyboard-shortcuts'
 import { HARNESS_TOOLS } from '../../lib/harness/tools'
 import {
   loadActiveProviderId,
@@ -53,6 +57,11 @@ import {
 } from '../../lib/chat-export'
 import { ChatAppSidebar } from './ChatAppSidebar'
 import { ChatAppSkillsModal } from './ChatAppSkillsModal'
+import { ChatAppCommandPalette } from './ChatAppCommandPalette'
+import type { PaletteCommand } from './ChatAppCommandPalette'
+import { useTheme } from '../../lib/theme-context'
+import { findByName } from '../../lib/slash-commands'
+import type { SlashAction } from './ChatThread'
 
 /** Matches Tailwind's `max-sm` breakpoint, where the sidebar is an overlay drawer. */
 function isNarrowViewport() {
@@ -62,6 +71,7 @@ function isNarrowViewport() {
 
 export default function ChatApp() {
   const actions = useChatActions()
+  const theme = useTheme()
   const currentConversationId = useChatStore(
     (state) => state.currentConversationId,
   )
@@ -107,6 +117,8 @@ export default function ChatApp() {
   const [openRouterApiKeyModalOpen, setOpenRouterApiKeyModalOpen] =
     createSignal(false)
   const [shortcutsHelpOpen, setShortcutsHelpOpen] = createSignal(false)
+  const [paletteOpen, setPaletteOpen] = createSignal(false)
+  const [paletteQuery, setPaletteQuery] = createSignal('')
   const [shareBusy, setShareBusy] = createSignal(false)
   const [shareFeedback, setShareFeedback] = createSignal<string | null>(null)
   let stopStreaming: (() => void) | null = null
@@ -432,6 +444,11 @@ export default function ChatApp() {
     if (!match) return
 
     if (match.id === 'stopGeneration') {
+      if (paletteOpen()) {
+        event.preventDefault()
+        setPaletteOpen(false)
+        return
+      }
       if (shortcutsHelpOpen()) {
         event.preventDefault()
         setShortcutsHelpOpen(false)
@@ -483,8 +500,140 @@ export default function ChatApp() {
       case 'showHelp':
         setShortcutsHelpOpen(true)
         break
+      case 'commandPalette':
+        openPalette()
+        break
     }
   }
+
+  function openPalette(query = '') {
+    setPaletteQuery(query)
+    setPaletteOpen(true)
+  }
+
+  function changeModel(value: string) {
+    const i = value.indexOf('\n')
+    setSelectedProviderId(value.slice(0, i))
+    storeSelectedModelProviderId(value.slice(0, i))
+    actions.setSelectedModel(value.slice(i + 1))
+  }
+
+  function handleSlashAction(action: SlashAction) {
+    switch (action.type) {
+      case 'new':
+        createConversationFromSidebar()
+        break
+      case 'export':
+        exportCurrentChat(action.format)
+        break
+      case 'model':
+        openPalette('model ')
+        break
+      case 'help':
+        setShortcutsHelpOpen(true)
+        break
+      case 'skill': {
+        const id = currentConversationId()
+        const skill = findByName(skills(), action.name)
+        if (id && skill) actions.toggleConversationSkill(id, skill.id)
+        break
+      }
+    }
+  }
+
+  const paletteItems = createMemo((): PaletteCommand[] => {
+    const hint = (id: string) => {
+      const def = CHAT_SHORTCUTS.find((d) => d.id === id)
+      return def ? formatShortcutChord(def.keys) : undefined
+    }
+    const currentId = currentConversationId()
+    const current = conversations().find((c) => c.id === currentId)
+    const items: PaletteCommand[] = [
+      {
+        id: 'newChat',
+        label: 'New chat',
+        hint: hint('newChat'),
+        run: createConversationFromSidebar,
+      },
+      {
+        id: 'toggleSidebar',
+        label: 'Toggle sidebar',
+        hint: hint('toggleSidebar'),
+        run: toggleSidebar,
+      },
+      {
+        id: 'searchChats',
+        label: 'Search chats',
+        hint: hint('searchChats'),
+        run: focusSidebarSearch,
+      },
+      {
+        id: 'openSkills',
+        label: 'Open skills',
+        hint: hint('openSkills'),
+        run: () => setSkillsLibraryOpen(true),
+      },
+      {
+        id: 'showHelp',
+        label: 'Keyboard shortcuts',
+        hint: hint('showHelp'),
+        run: () => setShortcutsHelpOpen(true),
+      },
+      {
+        id: 'theme',
+        label: 'Switch theme',
+        hint: theme.preference(),
+        keywords: 'dark light system appearance',
+        run: () => {
+          const order = ['light', 'dark', 'system'] as const
+          const cur = theme.preference() ?? 'system'
+          theme.setPreference(order[(order.indexOf(cur) + 1) % order.length]!)
+        },
+      },
+      {
+        id: 'exportMd',
+        label: 'Export current chat (Markdown)',
+        run: () => exportCurrentChat('md'),
+      },
+      {
+        id: 'exportJson',
+        label: 'Export current chat (JSON)',
+        run: () => exportCurrentChat('json'),
+      },
+      {
+        id: 'share',
+        label: 'Share chat',
+        hint: hint('shareChat'),
+        run: () => void shareCurrentChat(),
+      },
+    ]
+    if (current) {
+      items.push({
+        id: 'pin',
+        label: current.pinned ? 'Unpin current chat' : 'Pin current chat',
+        run: () => actions.togglePinned(current.id),
+      })
+    }
+    for (const c of conversations()) {
+      items.push({
+        id: `chat:${c.id}`,
+        label: c.title || 'Untitled chat',
+        hint: 'Chat',
+        keywords: 'jump conversation open',
+        run: () => selectConversation(c.id),
+      })
+    }
+    for (const m of selectOptions()) {
+      items.push({
+        id: `model:${m.providerId ?? ''}:${m.id}`,
+        label: `Model: ${m.name}`,
+        keywords: 'switch model',
+        run: () =>
+          changeModel(`${m.providerId ?? selectedProviderId()}\n${m.id}`),
+      })
+    }
+    return items
+  })
 
   onSettled(() => {
     if (typeof window === 'undefined') return
@@ -583,12 +732,7 @@ export default function ChatApp() {
           showProvider={() =>
             new Set(modelList()?.map((m) => m.providerId)).size > 1
           }
-          onModelChange={(value) => {
-            const i = value.indexOf('\n')
-            setSelectedProviderId(value.slice(0, i))
-            storeSelectedModelProviderId(value.slice(0, i))
-            actions.setSelectedModel(value.slice(i + 1))
-          }}
+          onModelChange={changeModel}
           shareDisabled={() => currentMessageCount() === 0}
           shareBusy={shareBusy}
           shareFeedback={shareFeedback}
@@ -637,6 +781,7 @@ export default function ChatApp() {
                     }
                     providerId={selectedProviderId()}
                     onLoadingChange={setCurrentConversationLoading}
+                    onSlashAction={handleSlashAction}
                     onReconnectOpenRouter={openOpenRouterApiKeyModal}
                     onRegisterStop={(stop) => {
                       stopStreaming = stop
@@ -685,6 +830,13 @@ export default function ChatApp() {
           }
           onDeleteSkill={(skillId) => actions.deleteSkill(skillId)}
           onClose={() => setSkillsLibraryOpen(false)}
+        />
+
+        <ChatAppCommandPalette
+          open={paletteOpen}
+          initialQuery={paletteQuery}
+          items={paletteItems}
+          onClose={() => setPaletteOpen(false)}
         />
 
         <ChatAppShortcutsModal

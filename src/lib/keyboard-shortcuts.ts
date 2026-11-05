@@ -12,6 +12,7 @@ export type ShortcutId =
   | 'focusComposer'
   | 'shareChat'
   | 'openSkills'
+  | 'commandPalette'
   | 'stopGeneration'
   | 'showHelp'
 
@@ -54,6 +55,11 @@ export const CHAT_SHORTCUTS: readonly ShortcutDefinition[] = [
     keys: { key: 'k', mod: true, shift: true },
   },
   {
+    id: 'commandPalette',
+    label: 'Command palette',
+    keys: { key: 'k', mod: true },
+  },
+  {
     id: 'stopGeneration',
     label: 'Stop generation',
     keys: { key: 'Escape' },
@@ -88,8 +94,7 @@ export function matchesShortcut(
   chord: ShortcutChord,
 ): boolean {
   const key = event.key.length === 1 ? event.key.toLowerCase() : event.key
-  const expected =
-    chord.key.length === 1 ? chord.key.toLowerCase() : chord.key
+  const expected = chord.key.length === 1 ? chord.key.toLowerCase() : chord.key
   if (key !== expected) return false
   if (Boolean(chord.mod) !== modKey(event)) return false
   if (Boolean(chord.shift) !== event.shiftKey) return false
