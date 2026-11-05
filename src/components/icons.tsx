@@ -14,6 +14,7 @@ import gitBranch from 'lucide/dist/esm/icons/git-branch.mjs'
 import image from 'lucide/dist/esm/icons/image.mjs'
 import keyRound from 'lucide/dist/esm/icons/key-round.mjs'
 import keyboard from 'lucide/dist/esm/icons/keyboard.mjs'
+import listTree from 'lucide/dist/esm/icons/list-tree.mjs'
 import loaderCircle from 'lucide/dist/esm/icons/loader-circle.mjs'
 import monitor from 'lucide/dist/esm/icons/monitor.mjs'
 import mic from 'lucide/dist/esm/icons/mic.mjs'
@@ -82,6 +83,7 @@ export const GitBranch = createIcon(gitBranch)
 export const Image = createIcon(image)
 export const KeyRound = createIcon(keyRound)
 export const Keyboard = createIcon(keyboard)
+export const ListTree = createIcon(listTree)
 export const LoaderCircle = createIcon(loaderCircle)
 export const Mic = createIcon(mic)
 export const Moon = createIcon(moon)

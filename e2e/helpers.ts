@@ -73,3 +73,38 @@ export async function openSeeded(page: Page, state: unknown) {
     timeout: 20_000,
   })
 }
+
+export const QA7_SHOTS = QA_SHOTS.replace('qa4', 'qa7')
+
+/** Seed with a long multi-turn chat where replies contain headings. */
+export function seedOutlineChat() {
+  const state = seedChats([{ id: 'c1', title: 'Outline' }])
+  const msgs: unknown[] = []
+  const filler = Array.from(
+    { length: 12 },
+    () => 'Lorem ipsum dolor sit amet.',
+  ).join('\n\n')
+  for (let i = 1; i <= 6; i++) {
+    msgs.push({
+      id: `u${i}`,
+      role: 'user',
+      parts: [
+        { type: 'text', content: `Question number ${i} about topic ${i}` },
+      ],
+      createdAt: new Date(Date.now() - (20 - i) * 60_000).toISOString(),
+    })
+    msgs.push({
+      id: `a${i}`,
+      role: 'assistant',
+      parts: [
+        {
+          type: 'text',
+          content: `# Answer ${i}\n\n${filler}\n\n## Details ${i}\n\n${filler}\n\n\`\`\`sh\n# not a heading ${i}\n\`\`\``,
+        },
+      ],
+      createdAt: new Date(Date.now() - (20 - i) * 60_000 + 1000).toISOString(),
+    })
+  }
+  ;(state.messagesByConversationId as Record<string, unknown[]>).c1 = msgs
+  return state
+}

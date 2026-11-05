@@ -58,6 +58,7 @@ import { useChatStore } from '../../store/chat.hooks'
 import { lookup } from '../../lib/nullable'
 import { createDictation, stopSpeaking } from '../../lib/speech'
 import { ChatThreadComposer } from './ChatThreadComposer'
+import type { Snippet } from '../../lib/snippets'
 import { ChatContextMeter } from './ChatContextMeter'
 import {
   COMPACT_SYSTEM_PROMPT,
@@ -123,6 +124,7 @@ export default function ChatThread(props: {
   onReconnectOpenRouter?: () => void
   onOpenPersonas?: () => void
   onSlashAction?: (action: SlashAction) => void
+  snippets?: () => Snippet[]
 }) {
   return (
     <Show when={props.conversationId} keyed>
@@ -141,6 +143,7 @@ export default function ChatThread(props: {
           onReconnectOpenRouter={props.onReconnectOpenRouter}
           onOpenPersonas={props.onOpenPersonas}
           onSlashAction={props.onSlashAction}
+          snippets={props.snippets}
         />
       )}
     </Show>
@@ -162,6 +165,7 @@ function ChatThreadSession(props: {
   onReconnectOpenRouter?: () => void
   onOpenPersonas?: () => void
   onSlashAction?: (action: SlashAction) => void
+  snippets?: () => Snippet[]
 }) {
   // The parent remounts this session per conversation, so these are snapshots.
   const conversationId = untrack(() => props.conversationId)
@@ -1134,7 +1138,7 @@ function ChatThreadSession(props: {
           </For>
         </div>
       </Show>
-      <label class="text-muted-foreground flex items-center justify-end gap-1.5 px-3 pt-1 text-xs">
+      <label class="text-muted-foreground flex items-center justify-end gap-1.5 px-3 pt-1 text-xs group-data-[zen]/app:hidden">
         Warn above $
         <input
           type="text"
@@ -1176,6 +1180,7 @@ function ChatThreadSession(props: {
         onDraftInput={setDraft}
         onSubmit={onSubmit}
         onPickSlash={(command) => runSlash(command, '')}
+        snippets={props.snippets}
         canSend={canSend}
         dictationSupported={dictation !== null}
         dictating={() => dictation?.active() ?? false}

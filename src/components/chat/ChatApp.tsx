@@ -48,7 +48,16 @@ import { useChatActions, useChatStore } from '../../store/chat.hooks'
 import { chatSelectors, chatStore } from '../../store/chat.store'
 import { lookup, maybe } from '../../lib/nullable'
 import ChatThread from './ChatThread'
-import { SIDEBAR_OPEN_LS_KEY } from './chat-app-constants'
+import {
+  OUTLINE_OPEN_LS_KEY,
+  SIDEBAR_OPEN_LS_KEY,
+  ZEN_SESSION_KEY,
+} from './chat-app-constants'
+import { ChatAppOutline } from './ChatAppOutline'
+import { ChatAppSnippetsModal } from './ChatAppSnippetsModal'
+import { buildOutline } from '../../lib/outline'
+import { loadSnippets, saveSnippets } from '../../lib/snippets'
+import type { Snippet } from '../../lib/snippets'
 import { ChatAppModelToolbar } from './ChatAppModelToolbar'
 import { ChatAppOpenRouterModal } from './ChatAppOpenRouterModal'
 import { ChatAppShortcutsModal } from './ChatAppShortcutsModal'
@@ -133,6 +142,47 @@ export default function ChatApp() {
   const [skillsLibraryOpen, setSkillsLibraryOpen] = createSignal(false)
   const [chatSettingsOpen, setChatSettingsOpen] = createSignal(false)
   const [personasOpen, setPersonasOpen] = createSignal(false)
+  const [outlineOpen, setOutlineOpen] = createSignal(false)
+  const [zen, setZen] = createSignal(false)
+  const [snippets, setSnippets] = createSignal<Snippet[]>([])
+  const [snippetsOpen, setSnippetsOpen] = createSignal(false)
+  const outlineMessages = useChatStore((state) => {
+    const id = state.currentConversationId
+    return id ? (lookup(state.messagesByConversationId, id) ?? []) : []
+  })
+  const outlineItems = createMemo(() => buildOutline(outlineMessages()))
+  function toggleOutline() {
+    setOutlineOpen((open) => {
+      const next = !open
+      try {
+        localStorage.setItem(OUTLINE_OPEN_LS_KEY, next ? '1' : '0')
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }
+  function setZenMode(next: boolean) {
+    setZen(next)
+    try {
+      sessionStorage.setItem(ZEN_SESSION_KEY, next ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+    if (next) queueMicrotask(focusChatComposer)
+  }
+  // Mirror zen onto <html> so the site header and page height can react.
+  createEffect(
+    () => zen(),
+    (on) => {
+      document.documentElement.toggleAttribute('data-zen', on)
+      return () => document.documentElement.removeAttribute('data-zen')
+    },
+  )
+  function updateSnippets(next: Snippet[]) {
+    setSnippets(next)
+    saveSnippets(next)
+  }
   const [customPersonas, setCustomPersonas] = createSignal<Persona[]>([])
   onSettled(() => {
     setCustomPersonas(loadCustomPersonas())
@@ -205,6 +255,15 @@ export default function ChatApp() {
       case 'import':
         pickChatsToImport()
         break
+      case 'outline':
+        if (!outlineOpen()) toggleOutline()
+        break
+      case 'zen':
+        setZenMode(true)
+        break
+      case 'snippets':
+        setSnippetsOpen(true)
+        break
     }
   }
   const navigate = useNavigate()
@@ -271,6 +330,13 @@ export default function ChatApp() {
     } catch {
       /* ignore */
     }
+    try {
+      setOutlineOpen(localStorage.getItem(OUTLINE_OPEN_LS_KEY) === '1')
+      setZen(sessionStorage.getItem(ZEN_SESSION_KEY) === '1')
+    } catch {
+      /* ignore */
+    }
+    setSnippets(loadSnippets())
     const activeId = getProvider(loadActiveProviderId()).id
     setProviderId(activeId)
     setProviderIdDraft(activeId)
@@ -599,6 +665,11 @@ export default function ChatApp() {
         setSkillsLibraryOpen(false)
         return
       }
+      if (snippetsOpen()) {
+        event.preventDefault()
+        setSnippetsOpen(false)
+        return
+      }
       if (openRouterApiKeyModalOpen()) {
         event.preventDefault()
         closeOpenRouterApiKeyModal()
@@ -607,6 +678,11 @@ export default function ChatApp() {
       if (currentConversationLoading()) {
         event.preventDefault()
         stopStreaming?.()
+        return
+      }
+      if (zen()) {
+        event.preventDefault()
+        setZenMode(false)
         return
       }
       if (sidebarOpen() && isNarrowViewport()) {
@@ -639,6 +715,12 @@ export default function ChatApp() {
         break
       case 'showHelp':
         setShortcutsHelpOpen(true)
+        break
+      case 'toggleOutline':
+        toggleOutline()
+        break
+      case 'zenMode':
+        setZenMode(!zen())
         break
       case 'commandPalette':
         openPalette()
@@ -712,6 +794,26 @@ export default function ChatApp() {
         label: 'Open skills',
         hint: hint('openSkills'),
         run: () => setSkillsLibraryOpen(true),
+      },
+      {
+        id: 'toggleOutline',
+        label: 'Toggle outline',
+        hint: hint('toggleOutline'),
+        keywords: 'table of contents headings navigate panel',
+        run: toggleOutline,
+      },
+      {
+        id: 'zenMode',
+        label: 'Zen mode',
+        hint: hint('zenMode'),
+        keywords: 'focus distraction free minimal fullscreen',
+        run: () => setZenMode(!zen()),
+      },
+      {
+        id: 'openSnippets',
+        label: 'Snippets…',
+        keywords: 'text expander shortcuts templates canned replies',
+        run: () => setSnippetsOpen(true),
       },
       {
         id: 'openPersonas',
@@ -905,57 +1007,76 @@ export default function ChatApp() {
   }
 
   return (
-    <div class="flex h-full min-h-0 w-full max-w-[100vw] flex-col overflow-hidden sm:flex-row">
-      <ChatAppSidebar
-        sidebarOpen={sidebarOpen}
-        onToggleSidebar={toggleSidebar}
-        conversations={conversations}
-        currentConversationId={currentConversationId}
-        onSelectConversation={selectConversation}
-        onCreateConversation={createConversationFromSidebar}
-        onDeleteConversation={(id) => actions.deleteConversation(id)}
-        getSearchCorpus={searchCorpus}
-        openRouterApiKeyApplied={openRouterApiKeyApplied}
-        openRouterApiKeyModalOpen={openRouterApiKeyModalOpen}
-        onOpenOpenRouterModal={openOpenRouterApiKeyModal}
-        skillsPreview={skillsPreview}
-        attachedSkillNames={attachedSkillNames}
-        onOpenSkillsLibrary={() => setSkillsLibraryOpen(true)}
-        onExportChat={exportCurrentChat}
-        onExportAll={() => void exportAllChats()}
-        onPrintChat={printCurrentChat}
-        onImportFile={importChatsFile}
-      />
-
-      <section class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <ChatAppModelToolbar
+    <div
+      class="group/app flex h-full min-h-0 w-full max-w-[100vw] flex-col overflow-hidden sm:flex-row"
+      data-zen={zen() ? '' : undefined}
+    >
+      <Show when={!zen()}>
+        <ChatAppSidebar
           sidebarOpen={sidebarOpen}
           onToggleSidebar={toggleSidebar}
-          onNewChat={createConversationFromSidebar}
-          selectedModel={() => `${selectedProviderId()}\n${selectedModel()}`}
-          selectDisabled={selectDisabled}
-          selectOptions={selectOptions}
-          modelListLoading={modelListLoading}
-          modelListError={modelListError}
-          modelListEmpty={modelListEmpty}
-          isStreaming={currentConversationLoading}
-          showProvider={() =>
-            new Set(modelList()?.map((m) => m.providerId)).size > 1
-          }
-          onModelChange={changeModel}
-          shareDisabled={() => currentMessageCount() === 0}
-          shareBusy={shareBusy}
-          shareFeedback={shareFeedback}
-          onShare={() => void shareCurrentChat()}
-          onOpenShortcuts={() => setShortcutsHelpOpen(true)}
-          onOpenTour={() => setTourOpen(true)}
-          onOpenSettings={() => setChatSettingsOpen(true)}
-          settingsActive={() => currentChatSettings() !== undefined}
-          tools={HARNESS_TOOLS}
-          enabledToolIds={enabledToolIds}
-          toolsSupported={() => modelSupportsTools(selectedModelMeta())}
-          onToggleTool={(toolId) => actions.toggleTool(toolId)}
+          conversations={conversations}
+          currentConversationId={currentConversationId}
+          onSelectConversation={selectConversation}
+          onCreateConversation={createConversationFromSidebar}
+          onDeleteConversation={(id) => actions.deleteConversation(id)}
+          getSearchCorpus={searchCorpus}
+          openRouterApiKeyApplied={openRouterApiKeyApplied}
+          openRouterApiKeyModalOpen={openRouterApiKeyModalOpen}
+          onOpenOpenRouterModal={openOpenRouterApiKeyModal}
+          skillsPreview={skillsPreview}
+          attachedSkillNames={attachedSkillNames}
+          onOpenSkillsLibrary={() => setSkillsLibraryOpen(true)}
+          onExportChat={exportCurrentChat}
+          onExportAll={() => void exportAllChats()}
+          onPrintChat={printCurrentChat}
+          onImportFile={importChatsFile}
         />
+      </Show>
+
+      <section class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <Show when={!zen()}>
+          <ChatAppModelToolbar
+            outlineOpen={outlineOpen}
+            onToggleOutline={toggleOutline}
+            sidebarOpen={sidebarOpen}
+            onToggleSidebar={toggleSidebar}
+            onNewChat={createConversationFromSidebar}
+            selectedModel={() => `${selectedProviderId()}\n${selectedModel()}`}
+            selectDisabled={selectDisabled}
+            selectOptions={selectOptions}
+            modelListLoading={modelListLoading}
+            modelListError={modelListError}
+            modelListEmpty={modelListEmpty}
+            isStreaming={currentConversationLoading}
+            showProvider={() =>
+              new Set(modelList()?.map((m) => m.providerId)).size > 1
+            }
+            onModelChange={changeModel}
+            shareDisabled={() => currentMessageCount() === 0}
+            shareBusy={shareBusy}
+            shareFeedback={shareFeedback}
+            onShare={() => void shareCurrentChat()}
+            onOpenShortcuts={() => setShortcutsHelpOpen(true)}
+            onOpenTour={() => setTourOpen(true)}
+            onOpenSettings={() => setChatSettingsOpen(true)}
+            settingsActive={() => currentChatSettings() !== undefined}
+            tools={HARNESS_TOOLS}
+            enabledToolIds={enabledToolIds}
+            toolsSupported={() => modelSupportsTools(selectedModelMeta())}
+            onToggleTool={(toolId) => actions.toggleTool(toolId)}
+          />
+        </Show>
+        <Show when={zen()}>
+          <button
+            type="button"
+            data-testid="exit-zen"
+            class="border-border bg-card/80 text-muted-foreground hover:bg-muted hover:text-foreground fixed top-3 right-3 z-40 rounded-full border px-3 py-1 text-xs shadow-sm backdrop-blur"
+            onClick={() => setZenMode(false)}
+          >
+            Exit zen · Esc
+          </button>
+        </Show>
 
         <Show when={currentConversationId()} keyed>
           {(id) => {
@@ -1009,6 +1130,7 @@ export default function ChatApp() {
                     providerId={selectedProviderId()}
                     onLoadingChange={setCurrentConversationLoading}
                     onSlashAction={handleSlashAction}
+                    snippets={snippets}
                     onReconnectOpenRouter={openOpenRouterApiKeyModal}
                     onOpenPersonas={() => setPersonasOpen(true)}
                     onRegisterStop={(stop) => {
@@ -1093,6 +1215,13 @@ export default function ChatApp() {
           onClose={() => setSkillsLibraryOpen(false)}
         />
 
+        <ChatAppSnippetsModal
+          open={snippetsOpen}
+          snippets={snippets}
+          onChange={updateSnippets}
+          onClose={() => setSnippetsOpen(false)}
+        />
+
         <ChatAppCommandPalette
           open={paletteOpen}
           initialQuery={paletteQuery}
@@ -1120,6 +1249,9 @@ export default function ChatApp() {
           onClose={() => setShortcutsHelpOpen(false)}
         />
       </section>
+      <Show when={outlineOpen() && !zen()}>
+        <ChatAppOutline items={outlineItems} onClose={toggleOutline} />
+      </Show>
     </div>
   )
 }

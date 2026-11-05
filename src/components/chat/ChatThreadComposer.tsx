@@ -2,6 +2,14 @@ import { For, Show, createMemo, createSignal } from 'solid-js'
 import { CheckCircle2, FileText, Image as ImageIcon, Mic, X } from '../icons'
 import { matchSlashCommands } from '../../lib/slash-commands'
 import type { SlashCommand } from '../../lib/slash-commands'
+import {
+  applyExpansion,
+  expandPlaceholders,
+  findTriggerBeforeCaret,
+  findTriggerBeforeSeparator,
+  usesClipboard,
+} from '../../lib/snippets'
+import type { Snippet, TriggerHit } from '../../lib/snippets'
 import type { PendingFile, PendingImage } from './chat-thread-utils'
 
 type ChatThreadComposerProps = {
@@ -27,6 +35,7 @@ type ChatThreadComposerProps = {
   dictating?: () => boolean
   onToggleDictation?: () => void
   onPickSlash?: (command: SlashCommand) => void
+  snippets?: () => Snippet[]
 }
 
 export function ChatThreadComposer(props: ChatThreadComposerProps) {
@@ -239,6 +248,36 @@ function ComposerInputRow(props: { props: ChatThreadComposerProps }) {
   const pick = (command: SlashCommand | undefined) => {
     if (command) props.props.onPickSlash?.(command)
   }
+  /** Replaces the trigger word with its expansion; `separator` is the typed space/newline to keep. */
+  async function expand(
+    el: HTMLTextAreaElement,
+    hit: TriggerHit,
+    separator: string,
+  ) {
+    const before = el.value
+    let clipboard = ''
+    if (usesClipboard(hit.snippet.text)) {
+      try {
+        clipboard = await navigator.clipboard.readText()
+      } catch {
+        /* permission denied: expand with an empty clipboard */
+      }
+    }
+    if (el.value !== before) return
+    const expansion = expandPlaceholders(hit.snippet.text, {
+      now: new Date(),
+      clipboard,
+    })
+    const result = applyExpansion(
+      before,
+      hit,
+      expansion + separator,
+      hit.end + separator.length,
+    )
+    el.value = result.value
+    el.setSelectionRange(result.caret, result.caret)
+    props.props.onDraftInput(result.value)
+  }
   return (
     <div class="relative flex gap-2">
       <Show when={slashOpen()}>
@@ -288,7 +327,17 @@ function ComposerInputRow(props: { props: ChatThreadComposerProps }) {
         }
         onInput={(e) => {
           setSlashIndex(0)
-          props.props.onDraftInput(e.currentTarget.value)
+          const el = e.currentTarget
+          props.props.onDraftInput(el.value)
+          const snippets = props.props.snippets?.()
+          if (snippets?.length && !slashOpen() && e.data === ' ') {
+            const hit = findTriggerBeforeSeparator(
+              el.value,
+              el.selectionStart,
+              snippets,
+            )
+            if (hit) void expand(el, hit, el.value[hit.end])
+          }
         }}
         disabled={props.props.isLoading()}
         onKeyDown={(e) => {
@@ -320,6 +369,17 @@ function ComposerInputRow(props: { props: ChatThreadComposerProps }) {
             props.props.onToggleDictation?.()
           }
           if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+            // Enter on a just-typed trigger expands it instead of sending.
+            const snippets = props.props.snippets?.()
+            const el = e.currentTarget
+            const hit = snippets?.length
+              ? findTriggerBeforeCaret(el.value, el.selectionStart, snippets)
+              : null
+            if (hit) {
+              e.preventDefault()
+              void expand(el, hit, '')
+              return
+            }
             e.preventDefault()
             void props.props.onSubmit(e)
           }

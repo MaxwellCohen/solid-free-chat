@@ -63,3 +63,19 @@ test('tour screenshots', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.screenshot({ path: `${dir}/tour-390.png` })
 })
+
+test('tour lists outline, zen and snippets', async ({ page }) => {
+  await seedKey(page, true)
+  await page.goto('/')
+  await expect(page.getByRole('log', { name: 'Conversation' })).toBeVisible({
+    timeout: 20_000,
+  })
+  await page.keyboard.press('ControlOrMeta+k')
+  await page.keyboard.type('tour')
+  await page.keyboard.press('Enter')
+  for (const id of ['outline', 'zen', 'snippets']) {
+    await expect(page.getByTestId(`tour-item-${id}`)).toBeVisible()
+  }
+  await page.getByTestId('tour-item-snippets').getByRole('button').click()
+  await expect(page.getByRole('dialog', { name: 'Snippets' })).toBeVisible()
+})

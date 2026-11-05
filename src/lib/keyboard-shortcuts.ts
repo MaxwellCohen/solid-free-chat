@@ -16,6 +16,8 @@ export type ShortcutId =
   | 'findInChat'
   | 'stopGeneration'
   | 'showHelp'
+  | 'toggleOutline'
+  | 'zenMode'
 
 export type ShortcutDefinition = {
   id: ShortcutId
@@ -74,6 +76,16 @@ export const CHAT_SHORTCUTS: readonly ShortcutDefinition[] = [
     id: 'showHelp',
     label: 'Keyboard shortcuts',
     keys: { key: '/', mod: true },
+  },
+  {
+    id: 'toggleOutline',
+    label: 'Toggle outline',
+    keys: { key: 'u', mod: true, shift: true },
+  },
+  {
+    id: 'zenMode',
+    label: 'Zen mode (Esc exits)',
+    keys: { key: 'z', mod: true, shift: true },
   },
 ] as const
 

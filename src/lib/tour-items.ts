@@ -10,6 +10,9 @@ export type TourAction =
   | 'shortcuts'
   | 'display'
   | 'import'
+  | 'outline'
+  | 'zen'
+  | 'snippets'
 
 export type TourItem = {
   id: string
@@ -163,6 +166,32 @@ export const TOUR_ITEMS: readonly TourItem[] = [
     how: 'Meter above the composer',
     action: 'composer',
     actionLabel: 'Back to chat',
+  },
+  {
+    id: 'outline',
+    emoji: '🧭',
+    title: 'Conversation outline',
+    description:
+      'A side panel listing your messages and reply headings; click to jump.',
+    how: 'Ctrl/Cmd+Shift+U (wide screens)',
+    action: 'outline',
+  },
+  {
+    id: 'zen',
+    emoji: '🧘',
+    title: 'Zen mode',
+    description: 'Hide everything but the thread and composer. Esc exits.',
+    how: 'Ctrl/Cmd+Shift+Z',
+    action: 'zen',
+  },
+  {
+    id: 'snippets',
+    emoji: '✂️',
+    title: 'Snippets',
+    description:
+      'Type a trigger like ;sig then space to expand it. Supports {{date}}, {{time}}, {{clipboard}}.',
+    how: 'Command palette: Snippets…',
+    action: 'snippets',
   },
   {
     id: 'themes',

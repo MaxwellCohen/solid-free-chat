@@ -2,6 +2,7 @@ import { For, Show } from 'solid-js'
 import { maybe } from '../../lib/nullable'
 import {
   Keyboard,
+  ListTree,
   LoaderCircle,
   PanelLeft,
   Share2,
@@ -30,6 +31,8 @@ type ChatAppModelToolbarProps = {
   shareBusy: () => boolean
   shareFeedback: () => string | null
   onShare: () => void
+  outlineOpen: () => boolean
+  onToggleOutline: () => void
   onOpenShortcuts: () => void
   onOpenTour: () => void
   onOpenSettings: () => void
@@ -42,7 +45,10 @@ type ChatAppModelToolbarProps = {
 
 export function ChatAppModelToolbar(props: ChatAppModelToolbarProps) {
   return (
-    <header class="border-border flex shrink-0 flex-col gap-2 border-b px-3 py-2 sm:gap-3 sm:px-6 sm:py-3">
+    <header
+      data-testid="chat-toolbar"
+      class="border-border flex shrink-0 flex-col gap-2 border-b px-3 py-2 sm:gap-3 sm:px-6 sm:py-3"
+    >
       <ToolbarRow props={props} />
       <Show when={props.shareFeedback()} keyed>
         {(message) => (
@@ -68,6 +74,10 @@ function ToolbarRow(props: { props: ChatAppModelToolbarProps }) {
       <ToolsMenu props={props.props} />
       <SettingsButton props={props.props} />
       <ShareButton props={props.props} />
+      <OutlineButton
+        open={props.props.outlineOpen}
+        onToggle={props.props.onToggleOutline}
+      />
       <ShortcutsButton onOpen={props.props.onOpenShortcuts} />
       <TourButton onOpen={props.props.onOpenTour} />
       <StreamingIndicator isStreaming={props.props.isStreaming} />
@@ -172,6 +182,24 @@ function SettingsButton(props: { props: ChatAppModelToolbarProps }) {
           aria-hidden="true"
         />
       </Show>
+    </button>
+  )
+}
+
+function OutlineButton(props: { open: () => boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      class={[
+        'text-muted-foreground hover:bg-muted hover:text-foreground hidden shrink-0 items-center justify-center rounded-lg p-2 lg:inline-flex',
+        { 'bg-muted text-foreground': props.open() },
+      ]}
+      onClick={() => props.onToggle()}
+      title="Toggle outline"
+      aria-label="Toggle outline"
+      aria-pressed={props.open() ? 'true' : 'false'}
+    >
+      <ListTree class="size-4 shrink-0" aria-hidden="true" />
     </button>
   )
 }

@@ -81,6 +81,9 @@ The app serves at `http://localhost:3000`.
 - **Attachments:** drag-and-drop or paste images and PDFs (gated by what the model accepts)
 - **Find in chat** (Mod+F): highlights matches, Enter / Shift+Enter to step, Esc to close
 - **Personas**, **Roundtable** (personas discuss a topic), **Saved messages**, chat **tags**, **reply variants**, **quote reply**, message **keyboard navigation**, a **context meter** with compact, free **calculate / Wikipedia / weather / image generation** tools, and **print / PDF export**
+- **Conversation outline** (Mod+Shift+U, wide screens): a side panel listing your messages and the h1-h3 headings in replies; click to jump, the item nearest the viewport is highlighted, open state is remembered
+- **Zen mode** (Mod+Shift+Z or palette): hides the sidebar, toolbar, outline and context meter for a centered thread and composer; Esc or the pill exits; kept for the browser tab session only
+- **Snippets** (palette: Snippets…): a text expander for the composer. Type a trigger like `;sig` then space (or Enter) to expand it; supports `{{date}}`, `{{time}}` and `{{clipboard}}`; stored locally, with built-in examples to add
 - **What's new / Tour:** a feature tour (command palette entry or the `?` toolbar button), shown once to returning users
 - **Installable PWA:** works offline for the app shell and saved chats, with an offline indicator (model calls still need a network)
 
