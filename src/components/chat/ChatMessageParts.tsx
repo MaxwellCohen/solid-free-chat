@@ -7,7 +7,8 @@ import { validateChartSpec } from '../../lib/visuals/chart'
 import type { ChartSpec } from '../../lib/visuals/chart'
 import { enhanceCodeBlocks } from '../../lib/code-block-actions'
 import { enhanceMermaidBlocks } from '../../lib/visuals/mermaid'
-import { ChartView, DiagramView } from './ChatVisuals'
+import { ChartView, DiagramView, ImageCard } from './ChatVisuals'
+import { isImageUrl } from '../../lib/harness/image-url'
 
 type MessagePart = UIMessage['parts'][number]
 
@@ -237,6 +238,19 @@ function ToolCallPart(props: { part: Accessor<MessagePart> }) {
     )
   })
   const running = createMemo(() => output() === undefined && !failed())
+  const image = createMemo(() => {
+    const part = call()
+    const out = output() as
+      { ok?: unknown; url?: unknown; prompt?: unknown } | undefined
+    if (part?.name !== 'generate_image' || failed() || out?.ok !== true)
+      return null
+    return isImageUrl(out.url)
+      ? {
+          url: out.url,
+          prompt: typeof out.prompt === 'string' ? out.prompt : '',
+        }
+      : null
+  })
   const visual = createMemo(() => {
     const part = call()
     const out = output()
@@ -247,6 +261,9 @@ function ToolCallPart(props: { part: Accessor<MessagePart> }) {
 
   return (
     <>
+      <Show when={image()} keyed>
+        {(img) => <ImageCard url={img.url} prompt={img.prompt} />}
+      </Show>
       <Show when={visual()} keyed>
         {(v) =>
           v.kind === 'diagram' ? (

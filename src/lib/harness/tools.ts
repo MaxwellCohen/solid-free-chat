@@ -9,6 +9,7 @@ import { validateMermaid } from '../visuals/mermaid'
 import { calculate } from './calc'
 import { convertUnits } from './units'
 import { flipCoin, pickFrom, rollDice } from './random'
+import { buildImageUrl } from './image-url'
 import { getWeather, wikipediaLookup } from './web-tools'
 
 /**
@@ -465,6 +466,27 @@ const weatherTool = toolDefinition({
   },
 })
 
+const generateImageTool = toolDefinition({
+  name: 'generate_image',
+  description:
+    'Generate an image from a text prompt (Pollinations, free). The image is shown to the user in the chat. ' +
+    'Write a detailed, visual English prompt. Do not describe the image again afterwards beyond a short caption.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      prompt: strProp('Detailed visual description of the image.'),
+      width: { type: 'number', description: 'Pixels, 256-1536 (default 768).' },
+      height: {
+        type: 'number',
+        description: 'Pixels, 256-1536 (default 768).',
+      },
+      seed: { type: 'number', description: 'Optional seed for repeatability.' },
+    },
+    required: ['prompt'],
+    additionalProperties: false,
+  },
+})
+
 export const HARNESS_TOOLS: readonly HarnessToolDescriptor[] = [
   {
     id: 'skills',
@@ -628,6 +650,18 @@ export const HARNESS_TOOLS: readonly HarnessToolDescriptor[] = [
       weatherTool.server((input) =>
         getWeather((input as { location: string }).location),
       ),
+  },
+  {
+    id: 'generate_image',
+    label: 'Image generation',
+    summary: 'Draws an image from a text prompt in the chat.',
+    network: 'Sends your prompt to Pollinations (free, no key).',
+    enabledByDefault: false,
+    create: () =>
+      generateImageTool.server((input) => {
+        const r = buildImageUrl(input as Parameters<typeof buildImageUrl>[0])
+        return r.ok ? { ok: true, url: r.url, prompt: r.prompt } : r
+      }),
   },
 ]
 
