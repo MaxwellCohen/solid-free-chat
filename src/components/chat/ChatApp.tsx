@@ -57,6 +57,7 @@ import {
   exportFileName,
   serializeChat,
 } from '../../lib/chat-export'
+import { printChat } from '../../lib/print-chat'
 import { ChatAppSidebar, requestTagEditor } from './ChatAppSidebar'
 import { ChatAppSettingsModal } from './ChatAppSettingsModal'
 import { ChatAppSkillsModal } from './ChatAppSkillsModal'
@@ -439,6 +440,16 @@ export default function ChatApp() {
     )
   }
 
+  function printCurrentChat() {
+    const id = currentConversationId()
+    if (!id) return
+    const state = chatStore.state
+    printChat(
+      lookup(state.conversationsById, id)?.title ?? 'Chat',
+      state.messagesByConversationId[id] ?? [],
+    )
+  }
+
   const importChatsFile = (file: File) =>
     importChatsFromFile(file, collapseSidebarIfNarrow)
 
@@ -702,6 +713,12 @@ export default function ChatApp() {
         run: () => exportCurrentChat('md'),
       },
       {
+        id: 'print',
+        label: 'Print / Save as PDF',
+        keywords: 'pdf export paper',
+        run: printCurrentChat,
+      },
+      {
         id: 'exportJson',
         label: 'Export current chat (JSON)',
         run: () => exportCurrentChat('json'),
@@ -829,6 +846,7 @@ export default function ChatApp() {
         onOpenSkillsLibrary={() => setSkillsLibraryOpen(true)}
         onExportChat={exportCurrentChat}
         onExportAll={() => void exportAllChats()}
+        onPrintChat={printCurrentChat}
         onImportFile={importChatsFile}
       />
 

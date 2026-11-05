@@ -355,3 +355,59 @@ code {
 ::highlight(find-current) {
   background-color: rgb(249 115 22 / 0.7);
 }
+
+/* Print / Save as PDF: only the expanded transcript (#print-root) is shown. */
+#print-root {
+  display: none;
+}
+@media print {
+  body > *:not(#print-root) {
+    display: none !important;
+  }
+  html,
+  body {
+    background: #fff !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  #print-root {
+    display: block;
+    color: #111 !important;
+    background: #fff !important;
+    font-size: 11pt;
+    line-height: 1.5;
+  }
+  #print-root * {
+    color: #111 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  #print-root h1 {
+    font-size: 18pt;
+    margin: 0 0 12pt;
+  }
+  #print-root .print-msg {
+    margin-bottom: 12pt;
+  }
+  #print-root .print-msg h2 {
+    font-size: 9pt;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin: 0 0 2pt;
+    color: #555 !important;
+  }
+  #print-root pre {
+    border: 1px solid #ccc;
+    padding: 6pt;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  #print-root table,
+  #print-root blockquote,
+  #print-root img {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

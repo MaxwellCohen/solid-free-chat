@@ -56,6 +56,7 @@ type ChatAppSidebarProps = {
   onOpenSkillsLibrary: () => void
   onExportChat: (format: 'md' | 'json') => void
   onExportAll: () => void
+  onPrintChat: () => void
   onImportFile: (file: File) => Promise<string>
 }
 
@@ -673,6 +674,15 @@ function ExportImportMenu(props: { props: ChatAppSidebarProps }) {
             onClick={() => props.props.onExportChat('json')}
           >
             Export chat (JSON)
+          </button>
+        </Show>
+        <Show when={props.props.currentConversationId()}>
+          <button
+            type="button"
+            class={item}
+            onClick={() => props.props.onPrintChat()}
+          >
+            Print / Save as PDF
           </button>
         </Show>
         <button type="button" class={item} onClick={props.props.onExportAll}>
