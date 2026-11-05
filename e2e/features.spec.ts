@@ -66,6 +66,8 @@ function seedState(withMessages: boolean) {
 
 async function seed(page: Page, state: unknown) {
   await page.addInitScript((s) => {
+    // Skip sandboxed preview iframes (opaque origin, no storage).
+    if (window !== window.top) return
     // Seed once per tab so reloads exercise real persistence (IndexedDB).
     if (sessionStorage.getItem('e2e-seeded')) return
     sessionStorage.setItem('e2e-seeded', '1')
@@ -239,5 +241,58 @@ test('find in chat: opens, counts, steps, closes', async ({ page }) => {
   await expect(page.getByTestId('find-count')).toHaveText('1 of 3')
   await page.keyboard.press('Escape')
   await expect(bar).toBeHidden()
+  expect(errors).toEqual([])
+})
+
+test('code block: copy, download and sandboxed preview', async ({ page }) => {
+  const errors = trackErrors(page)
+  const state = seedState(true)
+  state.messagesByConversationId.c1 = [
+    {
+      id: 'u1',
+      role: 'user',
+      parts: [{ type: 'text', content: 'html please' }],
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: 'a1',
+      role: 'assistant',
+      parts: [{ type: 'text', content: '```html\n<h1 id="x">Hi</h1>\n```' }],
+      createdAt: new Date().toISOString(),
+    },
+  ]
+  await seed(page, state)
+  await page.goto('/')
+  await expect(
+    page.getByRole('button', { name: 'Copy', exact: true }),
+  ).toBeVisible({
+    timeout: 20_000,
+  })
+  await expect(page.getByRole('button', { name: 'Download' })).toBeVisible()
+  await page.getByRole('button', { name: 'Preview', exact: true }).click()
+  const frame = page.locator('iframe[title="Code preview"]')
+  await expect(frame).toHaveAttribute('sandbox', 'allow-scripts')
+  await expect(
+    page.frameLocator('iframe[title="Code preview"]').locator('#x'),
+  ).toHaveText('Hi')
+  expect(errors).toEqual([])
+})
+
+test('skills library: add a built-in skill', async ({ page }) => {
+  const errors = trackErrors(page)
+  await openChat(page)
+  await page.keyboard.press('ControlOrMeta+k')
+  await page
+    .getByRole('dialog', { name: 'Command palette' })
+    .getByRole('combobox')
+    .fill('skills')
+  await page.getByRole('option', { name: /Open skills/ }).click()
+  const dialog = page.getByRole('dialog', { name: 'Skills' })
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('button', { name: 'Add built-in skill: ELI5' }).click()
+  await expect(dialog.getByText('ELI5', { exact: true })).toBeVisible()
+  await expect(
+    dialog.getByRole('button', { name: 'Add built-in skill: ELI5' }),
+  ).toHaveCount(0)
   expect(errors).toEqual([])
 })
