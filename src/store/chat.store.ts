@@ -359,7 +359,7 @@ function normalizeConversationOrder(
   for (const value of raw) {
     if (typeof value !== 'string') continue
     const id = value.trim()
-    if (!id || seen.has(id) || !(id in conversationsById)) continue
+    if (!id || seen.has(id) || !Object.hasOwn(conversationsById, id)) continue
     seen.add(id)
     order.push(id)
   }
@@ -466,6 +466,8 @@ function normalizePersistedChatState(raw: unknown): ChatAppState | null {
   for (const [key, value] of Object.entries(rawConversationsById)) {
     const result = normalizeConversationRecord(value, key, skills)
     skills = result.skills
+    // `__proto__` as a record key would swap the map's prototype.
+    if (result.conversation.id === '__proto__') continue
     conversationsById[result.conversation.id] = result.conversation
     messagesByConversationId[result.conversation.id] = normalizeMessages(
       rawMessagesByConversationId[result.conversation.id],
@@ -478,7 +480,7 @@ function normalizePersistedChatState(raw: unknown): ChatAppState | null {
   )
   const currentConversationId =
     typeof source.currentConversationId === 'string' &&
-    source.currentConversationId in conversationsById
+    Object.hasOwn(conversationsById, source.currentConversationId)
       ? source.currentConversationId
       : (conversationOrder[0] ?? null)
 
@@ -525,7 +527,11 @@ function normalizeLegacyChatState(
       skills,
     )
     skills = result.skills
-    if (result.conversation.id in conversationsById) continue
+    if (
+      result.conversation.id === '__proto__' ||
+      Object.hasOwn(conversationsById, result.conversation.id)
+    )
+      continue
     conversationsById[result.conversation.id] = result.conversation
     messagesByConversationId[result.conversation.id] = normalizeMessages(
       value.messages,
@@ -535,7 +541,7 @@ function normalizeLegacyChatState(
 
   const currentConversationId =
     typeof raw.currentConversationId === 'string' &&
-    raw.currentConversationId in conversationsById
+    Object.hasOwn(conversationsById, raw.currentConversationId)
       ? raw.currentConversationId
       : (conversationOrder[0] ?? null)
 
@@ -573,7 +579,7 @@ function getConversation(
   state: ChatAppState,
   conversationId: string,
 ): ChatConversation | undefined {
-  if (!(conversationId in state.conversationsById)) return undefined
+  if (!Object.hasOwn(state.conversationsById, conversationId)) return undefined
   return state.conversationsById[conversationId]
 }
 

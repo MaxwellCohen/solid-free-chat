@@ -260,3 +260,20 @@ describe('elapsedMs', () => {
     expect(out?.[2].elapsedMs).toBeUndefined()
   })
 })
+
+describe('prototype-pollution hardening', () => {
+  it('ignores __proto__ / inherited-name conversation ids', () => {
+    const state = normalizeChatAppState(
+      JSON.parse(
+        '{"conversationsById":{"__proto__":{"id":"__proto__","title":"x"},"a":{"id":"a"}},"messagesByConversationId":{"a":[]},"conversationOrder":["__proto__","constructor","a"],"currentConversationId":"toString"}',
+      ),
+    )
+    expect(Object.keys(state!.conversationsById)).toEqual(['a'])
+    expect(state!.conversationOrder).toEqual(['a'])
+    expect(state!.currentConversationId).toBe('a')
+    expect(Object.getPrototypeOf(state!.conversationsById)).toBe(
+      Object.prototype,
+    )
+    expect(({} as { title?: string }).title).toBeUndefined()
+  })
+})

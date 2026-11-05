@@ -115,3 +115,11 @@ describe('chat-share', () => {
     expect(decoded?.title).toBe('Huge')
   })
 })
+
+describe('gunzip bomb guard', () => {
+  it('rejects oversized inflated payloads', async () => {
+    const { gunzipBytes, gzipBytes } = await import('./chat-share')
+    const bomb = await gzipBytes(new Uint8Array(200_000))
+    await expect(gunzipBytes(bomb, 1000)).rejects.toThrow()
+  })
+})
