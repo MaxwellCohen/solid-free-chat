@@ -1,5 +1,14 @@
 export type ChatErrorKind =
-  'auth' | 'rate-limit' | 'credits' | 'network' | 'stream' | 'unknown'
+  | 'auth'
+  | 'rate-limit'
+  | 'credits'
+  | 'model-unavailable'
+  | 'network'
+  | 'stream'
+  | 'unknown'
+
+const MODEL_UNAVAILABLE =
+  /only available on|no endpoints found for|not a valid model|model[_ ]not[_ ]found|\bmodels?[\s/:]+\S+\s+(?:is\s+|has been\s+)?(?:not found|does not exist|no longer available|not available|deprecated|decommissioned)/i
 
 export type ChatErrorInfo = {
   kind: ChatErrorKind
@@ -85,7 +94,10 @@ export function classifyChatError(
         : ''
   const status = readStatus(error) ?? statusFromMessage(message)
 
-  if (status === 401 || status === 403) {
+  // Some providers answer 403 for models gated to other apps.
+  const modelGone =
+    !options.hasPartialResponse && MODEL_UNAVAILABLE.test(message)
+  if ((status === 401 || status === 403) && !modelGone) {
     return {
       kind: 'auth',
       title: `${provider} key rejected`,
@@ -111,6 +123,14 @@ export function classifyChatError(
           ? `Too many requests. Try again in ${formatRetryAfter(retryAfterSeconds)}.`
           : 'Too many requests. Wait a moment, then retry.',
       retryAfterSeconds,
+      needsReconnect: false,
+    }
+  }
+  if (modelGone) {
+    return {
+      kind: 'model-unavailable',
+      title: 'Model unavailable',
+      detail: `${provider} won't serve this model to this app right now, so it was hidden from the list. Pick another model, then retry.`,
       needsReconnect: false,
     }
   }

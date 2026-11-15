@@ -9,9 +9,13 @@ const cache = new Map<string, { options: ChatModelOption[]; expires: number }>()
 const CACHE_TTL_MS = 5 * 60_000
 
 let catalogPromise: Promise<FreeModelsCatalog> | undefined
+let catalogExpires = 0
+const CATALOG_TTL_MS = 15 * 60_000
 
 /** Metadata catalog from our cached endpoint; `{}` when unavailable. */
 function loadCatalog(): Promise<FreeModelsCatalog> {
+  if (Date.now() > catalogExpires) catalogPromise = undefined
+  if (!catalogPromise) catalogExpires = Date.now() + CATALOG_TTL_MS
   catalogPromise ??= fetch('/api/free-models')
     .then((res) => (res.ok ? (res.json() as Promise<FreeModelsCatalog>) : {}))
     .catch(() => ({}))

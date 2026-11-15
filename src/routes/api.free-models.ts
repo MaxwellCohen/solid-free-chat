@@ -5,7 +5,7 @@ import {
 } from '../lib/free-models-catalog'
 import type { FreeModelsCatalog } from '../lib/free-models-catalog'
 
-const FRESH_MS = 60 * 60_000
+const FRESH_MS = 15 * 60_000
 let memo: { body: string; fetchedAt: number } | undefined
 
 /**
@@ -41,7 +41,7 @@ async function serveFreeModels(): Promise<Response> {
     headers: {
       'content-type': 'application/json; charset=utf-8',
       'cache-control':
-        'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800',
+        'public, max-age=900, s-maxage=900, stale-while-revalidate=86400',
       'x-content-type-options': 'nosniff',
     },
   })
