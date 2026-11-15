@@ -42,8 +42,8 @@ export function contentSecurityPolicy(): string {
     // Inline theme bootstrap + SSR hydration scripts.
     "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
     "style-src 'self' 'unsafe-inline'",
-    // Remote images in model output render as links, so a reply cannot leak data through an image URL.
-    `img-src 'self' data: blob: ${IMAGE_ORIGINS.join(' ')}`,
+    // Previews may load remote images. Chat markdown never does: it renders them as links.
+    `img-src 'self' data: blob: https: ${IMAGE_ORIGINS.join(' ')}`,
     "font-src 'self' data:",
     `connect-src ${connect.join(' ')}`,
     "frame-src 'self'",

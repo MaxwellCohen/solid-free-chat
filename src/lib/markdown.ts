@@ -23,23 +23,50 @@ const highlightMarkdownCode: CodeHighlighter =
 
 const streamingExtensions = [streamingMarkdownExtension()]
 
-const REMOTE_LINK_RE = /<a href="(https?:\/\/[^"]*)"/gi
-const REMOTE_IMG_RE =
-  /<img src="((?:https?:)?\/\/[^"]*)"(?: alt="([^"]*)")?[^>]*>/gi
+const HTTP_URL_RE = /^(https?:)?\/\//i
+const TAG_RE =
+  /<a href="([^"]*)"|<\/a>|<img src="([^"]*)"(?: alt="([^"]*)")?[^>]*>/gi
+const LOCAL_BASE = 'https://local.invalid'
 
+/** True unless the URL stays on this origin or is inline data (parsed the way a browser would). */
+export function isRemoteUrl(src: string): boolean {
+  try {
+    const url = new URL(src, LOCAL_BASE)
+    if (url.protocol === 'data:' || url.protocol === 'blob:') return false
+    return url.origin !== LOCAL_BASE
+  } catch {
+    return true
+  }
+}
+
+export function isHttpUrl(src: string): boolean {
+  return HTTP_URL_RE.test(src)
+}
+
+/** Remote links open in a new tab; remote images become links (or plain text inside a link). */
 function hardenHtml(html: string): string {
   if (!html.includes('<a ') && !html.includes('<img ')) return html
-  return html
-    .replace(
-      REMOTE_LINK_RE,
-      (_m, href: string) =>
-        `<a href="${href}" target="_blank" rel="noopener noreferrer"`,
-    )
-    .replace(
-      REMOTE_IMG_RE,
-      (_m, src: string, alt?: string) =>
-        `<a href="${src}" target="_blank" rel="noopener noreferrer">${alt || 'image'}</a>`,
-    )
+  let inLink = false
+  return html.replace(
+    TAG_RE,
+    (tag: string, href?: string, src?: string, alt?: string) => {
+      if (href !== undefined) {
+        inLink = true
+        return /^https?:\/\//i.test(href)
+          ? `${tag} target="_blank" rel="noopener noreferrer"`
+          : tag
+      }
+      if (src === undefined) {
+        inLink = false
+        return tag
+      }
+      if (!isRemoteUrl(src)) return tag
+      const label = alt || 'image'
+      return inLink || !isHttpUrl(src)
+        ? label
+        : `<a href="${src}" target="_blank" rel="noopener noreferrer">${label}</a>`
+    },
+  )
 }
 
 /** Sync Markdown → HTML for chat (streaming-safe, Highlight fences). */

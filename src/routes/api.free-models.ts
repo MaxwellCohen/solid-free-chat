@@ -8,7 +8,6 @@ import type { FreeModelsCatalog } from '../lib/free-models-catalog'
 const FRESH_MS = 15 * 60_000
 const BACKOFF_MS = 60_000
 let memo: { body: string; fetchedAt: number } | undefined
-let inflight: Promise<void> | undefined
 
 async function refreshMemo(): Promise<void> {
   try {
@@ -32,10 +31,7 @@ async function refreshMemo(): Promise<void> {
  */
 async function serveFreeModels(): Promise<Response> {
   if (!memo || Date.now() - memo.fetchedAt > FRESH_MS) {
-    inflight ??= refreshMemo().finally(() => {
-      inflight = undefined
-    })
-    await inflight
+    await refreshMemo()
   }
   if (!memo) {
     return new Response(JSON.stringify({ error: 'catalog unavailable' }), {

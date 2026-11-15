@@ -2,7 +2,11 @@ import { For, Match, Show, Switch, createEffect, createMemo } from 'solid-js'
 import type { Accessor } from 'solid-js'
 import type { UIMessage } from '@tanstack/ai-client'
 import { CircleAlert, FileText, LoaderCircle, Wrench } from '../icons'
-import { renderMarkdownToHtml } from '../../lib/markdown'
+import {
+  isHttpUrl,
+  isRemoteUrl,
+  renderMarkdownToHtml,
+} from '../../lib/markdown'
 import { validateChartSpec } from '../../lib/visuals/chart'
 import type { ChartSpec } from '../../lib/visuals/chart'
 import { enhanceCodeBlocks } from '../../lib/code-block-actions'
@@ -109,16 +113,18 @@ function ImagePart(props: { part: Accessor<MessagePart> }) {
 
   return (
     <Show
-      when={!/^(https?:)?\/\//i.test(src())}
+      when={!isRemoteUrl(src())}
       fallback={
-        <a
-          href={src()}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="mt-2 block text-xs underline first:mt-0"
-        >
-          Image
-        </a>
+        <Show when={isHttpUrl(src())}>
+          <a
+            href={src()}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="mt-2 block text-xs underline first:mt-0"
+          >
+            Image
+          </a>
+        </Show>
       }
     >
       <img

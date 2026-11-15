@@ -13,7 +13,6 @@ import { useNavigate } from '@tanstack/solid-router'
 import {
   loadChatStateAsync,
   onPersistenceStatus,
-  setChatRemoteSyncBlocked,
   startChatPersistence,
 } from '../../lib/chat-persistence'
 import type { PersistenceStatus } from '../../lib/chat-persistence'
@@ -23,7 +22,7 @@ import {
   importChatsFromFile,
 } from './chat-app-files'
 import { ChatErrorFallback } from './ChatErrorFallback'
-import { buildShareLink } from '../../lib/chat-share'
+import { MAX_SHARE_HASH_CHARS, buildShareLink } from '../../lib/chat-share'
 import type { ChatModelOption } from '../../lib/chat-models'
 import { DEFAULT_CHAT_MODEL, modelSupportsTools } from '../../lib/chat-models'
 import {
@@ -151,6 +150,8 @@ function isNarrowViewport() {
   if (typeof window === 'undefined') return false
   return window.matchMedia('(max-width: 639.98px)').matches
 }
+
+const SHARE_TOO_LARGE = new Error('share link too large')
 
 export default function ChatApp() {
   const actions = useChatActions()
@@ -473,11 +474,6 @@ export default function ChatApp() {
     }
   })
 
-  // Don't let another tab's save replace this tab's state mid-reply.
-  createEffect(currentConversationLoading, (loading) => {
-    setChatRemoteSyncBlocked(loading)
-  })
-
   /** Minimal list when the server could not load models — user can still pick the free router. */
   const modelListErrorFallback = (): ChatModelOption[] => [
     {
@@ -534,15 +530,16 @@ export default function ChatApp() {
 
   function persistOpenRouterApiKey(raw: string, remember: boolean) {
     const v = raw.trim()
+    if (!storeApiKey({ key: v, remember }, providerIdDraft())) {
+      setShareFeedback(
+        'Could not save the key — browser storage is full or blocked.',
+      )
+      return
+    }
     setOpenRouterApiKeyDraft(v)
     setOpenRouterApiKeyApplied(v)
     setRememberApiKey(remember)
     setRememberApiKeyDraft(remember)
-    if (!storeApiKey({ key: v, remember }, providerIdDraft())) {
-      setShareFeedback(
-        'Could not save the key in this browser — it will only last until you reload.',
-      )
-    }
     setProviderId(providerIdDraft())
     storeActiveProviderId(providerIdDraft())
     setKeysVersion((n) => n + 1)
@@ -1176,6 +1173,9 @@ export default function ChatApp() {
         title,
         model: selectedModel(),
         messages,
+      }).then((r) => {
+        if (r.url.length > MAX_SHARE_HASH_CHARS) throw SHARE_TOO_LARGE
+        return r
       })
       // Safari only allows clipboard writes started synchronously in the click handler.
       const copyPromise =
@@ -1188,6 +1188,7 @@ export default function ChatApp() {
               }),
             ])
           : linkPromise.then((r) => navigator.clipboard.writeText(r.url))
+      copyPromise.catch(() => {})
       const result = await linkPromise
       try {
         await copyPromise
@@ -1210,8 +1211,12 @@ export default function ChatApp() {
       } else {
         setShareFeedback('Read-only link copied to clipboard.')
       }
-    } catch {
-      setShareFeedback('Could not copy share link.')
+    } catch (e) {
+      setShareFeedback(
+        e === SHARE_TOO_LARGE
+          ? 'This chat is too large to share as a link. Export it instead.'
+          : 'Could not copy share link.',
+      )
     } finally {
       setShareBusy(false)
     }

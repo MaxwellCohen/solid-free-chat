@@ -47,4 +47,24 @@ describe('renderMarkdownToHtml hardening', () => {
     expect(html).toContain('&lt;b&gt;')
     expect(html).toContain('&quot;')
   })
+
+  it('keeps one link when an image is inside a link', () => {
+    const html = renderMarkdownToHtml(
+      '[![Build](https://img.shields.io/x.svg)](https://github.com/o/r)',
+    )
+    expect(html.match(/<a /g)).toHaveLength(1)
+    expect(html).toContain('>Build</a>')
+  })
+
+  it('drops images whose URL only looks local', () => {
+    for (const src of [
+      '\\\\evil.example/p',
+      '/\\evil.example/p',
+      'http:evil.example/p',
+    ]) {
+      const html = renderMarkdownToHtml(`![x](${src})`)
+      expect(html).not.toContain('<img')
+      expect(html).not.toContain('<a ')
+    }
+  })
 })

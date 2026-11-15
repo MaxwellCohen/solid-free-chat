@@ -97,16 +97,6 @@ export function mergeRemoteChatState(
   }
 }
 
-let remoteSyncBlocked = false
-let remoteDeferred = false
-let applyDeferredRemote: (() => void) | null = null
-
-/** Call with true while a reply is streaming so cross-tab updates don't clobber it. */
-export function setChatRemoteSyncBlocked(blocked: boolean) {
-  remoteSyncBlocked = blocked
-  if (!blocked && remoteDeferred) applyDeferredRemote?.()
-}
-
 /** Prefers IndexedDB (migrating from localStorage); falls back to localStorage. */
 export async function loadChatStateAsync(): Promise<ChatAppState | null> {
   if (idbAvailable()) {
@@ -158,29 +148,20 @@ export function startChatPersistence(onRemoteChange?: () => void): () => void {
   if (typeof window === 'undefined') {
     return () => {}
   }
-  // Local unsaved edits win; a reply in progress defers the remote state.
-  const canApplyRemote = () => {
-    if (saveTimer !== null) return false
-    remoteDeferred = remoteSyncBlocked
-    return !remoteSyncBlocked
-  }
-  const applyRemote = () => {
-    if (!canApplyRemote()) return
-    void loadChatStateAsync().then((remote) => {
-      if (!remote || !channel || !canApplyRemote()) return
-      applyingRemote = true
-      try {
-        chatStore.setState((local) => mergeRemoteChatState(local, remote))
-        onRemoteChange?.()
-      } finally {
-        applyingRemote = false
-      }
-    })
-  }
   if (typeof BroadcastChannel !== 'undefined') {
     channel = new BroadcastChannel(SYNC_CHANNEL)
-    channel.onmessage = applyRemote
-    applyDeferredRemote = applyRemote
+    channel.onmessage = () => {
+      void loadChatStateAsync().then((remote) => {
+        if (!remote || !channel) return
+        applyingRemote = true
+        try {
+          chatStore.setState((local) => mergeRemoteChatState(local, remote))
+          onRemoteChange?.()
+        } finally {
+          applyingRemote = false
+        }
+      })
+    }
   }
   const sub = chatStore.subscribe(() => {
     if (applyingRemote) return
@@ -190,17 +171,22 @@ export function startChatPersistence(onRemoteChange?: () => void): () => void {
       saveTimer = null
     }, DEBOUNCE_MS)
   })
-  const onPageHide = () => {
+  // Save a pending change as soon as the tab is hidden. A write that only
+  // starts during unload may not finish, so hiding is the reliable signal.
+  const flush = () => {
     if (saveTimer === null) return
     clearTimeout(saveTimer)
     saveTimer = null
     void persistChatStateAsync()
   }
-  window.addEventListener('pagehide', onPageHide)
+  const onVisibility = () => {
+    if (document.visibilityState === 'hidden') flush()
+  }
+  window.addEventListener('pagehide', flush)
+  document.addEventListener('visibilitychange', onVisibility)
   return () => {
-    window.removeEventListener('pagehide', onPageHide)
-    applyDeferredRemote = null
-    remoteDeferred = false
+    window.removeEventListener('pagehide', flush)
+    document.removeEventListener('visibilitychange', onVisibility)
     sub.unsubscribe()
     if (saveTimer !== null) clearTimeout(saveTimer)
     saveTimer = null

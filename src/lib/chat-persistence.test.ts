@@ -5,7 +5,6 @@ import {
   loadChatState,
   mergeRemoteChatState,
   persistChatStateNow,
-  setChatRemoteSyncBlocked,
   startChatPersistence,
 } from './chat-persistence'
 import { chatActions, chatStore } from '../store/chat.store'
@@ -147,6 +146,7 @@ describe('startChatPersistence cross-tab sync', () => {
     channels = []
     vi.stubGlobal('localStorage', memoryStorage())
     vi.stubGlobal('window', new EventTarget())
+    vi.stubGlobal('document', new EventTarget())
     vi.stubGlobal(
       'BroadcastChannel',
       class {
@@ -191,25 +191,6 @@ describe('startChatPersistence cross-tab sync', () => {
     expect(chatStore.state.selectedModel).toBe('m/local')
     await vi.advanceTimersByTimeAsync(1000)
     expect(localStorage.getItem(CHAT_STORAGE_KEY)).toBe(raw)
-    stop()
-  })
-
-  it('skips remote state while a local save is pending', async () => {
-    const stop = startChatPersistence()
-    chatStore.setState((s) => ({ ...s, selectedModel: 'm/edited' }))
-    await remoteSave(remoteRaw('Remote'))
-    expect(title()).not.toBe('Remote')
-    stop()
-  })
-
-  it('defers remote state while a reply is streaming', async () => {
-    const stop = startChatPersistence()
-    setChatRemoteSyncBlocked(true)
-    await remoteSave(remoteRaw('Remote'))
-    expect(title()).not.toBe('Remote')
-    setChatRemoteSyncBlocked(false)
-    await vi.advanceTimersByTimeAsync(0)
-    expect(title()).toBe('Remote')
     stop()
   })
 })
