@@ -22,7 +22,13 @@ function specFor(type: ChartType) {
       ? {
           type,
           datasets: [
-            { label: 'A', data: [{ x: 1, y: 2 }, { x: 3, y: 5 }] },
+            {
+              label: 'A',
+              data: [
+                { x: 1, y: 2 },
+                { x: 3, y: 5 },
+              ],
+            },
             { label: 'B', data: [{ x: 2, y: 1 }] },
           ],
         }

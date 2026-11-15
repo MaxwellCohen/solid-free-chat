@@ -6,7 +6,16 @@ import {
   onSettled,
 } from 'solid-js'
 import { isServer } from '@solidjs/web'
-import { loadChatState, startChatPersistence } from '../../lib/chat-persistence'
+import {
+  garbageCollectAttachments,
+  initAttachmentBackend,
+  loadChatState,
+  onChatPersistenceError,
+  persistChatStateNow,
+  restoreAttachments,
+  setChatRemoteSyncBlocked,
+  startChatPersistence,
+} from '../../lib/chat-persistence'
 import { buildShareLink } from '../../lib/chat-share'
 import type { ChatModelOption } from '../../lib/chat-models'
 import { DEFAULT_CHAT_MODEL, modelSupportsTools } from '../../lib/chat-models'
@@ -20,7 +29,11 @@ import {
   storeActiveProviderId,
   storeApiKey,
 } from '../../lib/openrouter-key-storage'
-import { loadAllModelOptions } from '../../lib/model-options'
+import {
+  MODEL_REFRESH_MS,
+  markModelUnavailable,
+  loadAllModelOptions,
+} from '../../lib/model-options'
 import { getProvider } from '../../lib/providers'
 import {
   completeOpenRouterLogin,
@@ -107,18 +120,32 @@ export default function ChatApp() {
     return state.messagesByConversationId[id]?.length ?? 0
   })
 
+  /** Bumped to re-check model availability without changing keys. */
+  const [modelRefreshTick, setModelRefreshTick] = createSignal(0)
+  let loadedKeysVersion: number | undefined
+
   createEffect(
-    () => (isServer ? null : keysVersion()),
-    (version) => {
-      if (version == null || isServer) return
+    () =>
+      isServer ? null : { version: keysVersion(), tick: modelRefreshTick() },
+    (deps) => {
+      if (deps == null || isServer) return
+      // Background refreshes keep the current list visible and ignore errors.
+      const silent = loadedKeysVersion === deps.version
       let cancelled = false
-      setModelListLoading(true)
-      setModelListError(undefined)
+      if (!silent) {
+        setModelListLoading(true)
+        setModelListError(undefined)
+      }
       void (async () => {
         const { options, error } = await loadAllModelOptions()
         if (cancelled) return
-        if (options.length === 0 && error) setModelListError(error)
-        else setModelList(options)
+        if (options.length === 0 && error) {
+          if (!silent) setModelListError(error)
+        } else {
+          loadedKeysVersion = deps.version
+          setModelListError(undefined)
+          setModelList(options)
+        }
         setModelListLoading(false)
       })()
       return () => {
@@ -170,12 +197,36 @@ export default function ChatApp() {
     if (oauthCode) void finishOpenRouterSignIn(oauthCode)
     else if (!stored.key.trim()) setOpenRouterApiKeyModalOpen(true)
     const saved = loadChatState()
-    if (saved) {
-      actions.hydrate(saved)
+    let cancelled = false
+    let stopPersist: (() => void) | null = null
+    const stopPersistErrors = onChatPersistenceError(() => {
+      setShareFeedback(
+        'Storage is full — new messages are not being saved. Delete old chats or export them.',
+      )
+    })
+    void (async () => {
+      const hasBackend = await initAttachmentBackend()
+      const restored = saved ? await restoreAttachments(saved) : null
+      if (cancelled) return
+      if (restored) actions.hydrate(restored)
+      actions.ensureDefaultConversation()
+      stopPersist = startChatPersistence()
+      if (hasBackend) {
+        // Moves legacy inline attachments into IndexedDB right away.
+        persistChatStateNow()
+        void garbageCollectAttachments()
+      }
+    })()
+    return () => {
+      cancelled = true
+      stopPersistErrors()
+      stopPersist?.()
     }
-    actions.ensureDefaultConversation()
-    const stopPersist = startChatPersistence()
-    return stopPersist
+  })
+
+  // Don't let another tab's save replace this tab's state mid-reply.
+  createEffect(currentConversationLoading, (loading) => {
+    setChatRemoteSyncBlocked(loading)
   })
 
   /** Minimal list when the server could not load models — user can still pick the free router. */
@@ -238,10 +289,14 @@ export default function ChatApp() {
     setOpenRouterApiKeyApplied(v)
     setRememberApiKey(remember)
     setRememberApiKeyDraft(remember)
-    storeApiKey({ key: v, remember }, providerIdDraft())
+    if (!storeApiKey({ key: v, remember }, providerIdDraft())) {
+      setShareFeedback(
+        'Could not save the key in this browser — it will only last until you reload.',
+      )
+    }
     setProviderId(providerIdDraft())
     storeActiveProviderId(providerIdDraft())
-    setKeysVersion((v) => v + 1)
+    setKeysVersion((n) => n + 1)
   }
 
   function selectProviderDraft(id: string) {
@@ -344,13 +399,22 @@ export default function ChatApp() {
     }
   }
 
+  function confirmLeaveStreaming() {
+    return (
+      !currentConversationLoading() ||
+      window.confirm('A reply is still generating. Stop it and switch chats?')
+    )
+  }
+
   function selectConversation(id: string) {
+    if (id !== currentConversationId() && !confirmLeaveStreaming()) return
     setCurrentConversationLoading(false)
     actions.setCurrentConversationId(id)
     collapseSidebarIfNarrow()
   }
 
   function createConversationFromSidebar() {
+    if (!confirmLeaveStreaming()) return
     setCurrentConversationLoading(false)
     actions.createConversation()
     collapseSidebarIfNarrow()
@@ -362,7 +426,7 @@ export default function ChatApp() {
     a.href = url
     a.download = name
     a.click()
-    URL.revokeObjectURL(url)
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
   function exportCurrentChat(format: 'md' | 'json') {
@@ -494,6 +558,27 @@ export default function ChatApp() {
     }
   }
 
+  // Re-check models when the user comes back to the page, and every 10 min.
+  onSettled(() => {
+    if (typeof window === 'undefined') return
+    // Tab return fires both focus and visibilitychange; refresh once.
+    let last = Date.now()
+    const refresh = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - last < 5000)
+        return
+      last = Date.now()
+      setModelRefreshTick((n) => n + 1)
+    }
+    const timer = window.setInterval(refresh, MODEL_REFRESH_MS)
+    document.addEventListener('visibilitychange', refresh)
+    window.addEventListener('focus', refresh)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', refresh)
+      window.removeEventListener('focus', refresh)
+    }
+  })
+
   onSettled(() => {
     if (typeof window === 'undefined') return
     window.addEventListener('keydown', handleChatShortcut)
@@ -532,13 +617,37 @@ export default function ChatApp() {
     try {
       const title =
         chatStore.state.conversationsById[id]?.title ?? 'Shared chat'
-      const result = await buildShareLink({
+      const linkPromise = buildShareLink({
         baseUrl: `${window.location.origin}/share`,
         title,
         model: selectedModel(),
         messages,
       })
-      await navigator.clipboard.writeText(result.url)
+      // Safari only allows clipboard writes started synchronously in the click handler.
+      const copyPromise =
+        typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write
+          ? navigator.clipboard.write([
+              new ClipboardItem({
+                'text/plain': linkPromise.then(
+                  (r) => new Blob([r.url], { type: 'text/plain' }),
+                ),
+              }),
+            ])
+          : linkPromise.then((r) => navigator.clipboard.writeText(r.url))
+      const result = await linkPromise
+      try {
+        await copyPromise
+      } catch {
+        try {
+          await navigator.clipboard.writeText(result.url)
+        } catch {
+          window.prompt('Copy share link', result.url)
+          setShareFeedback(
+            'Could not copy automatically — copy the link shown.',
+          )
+          return
+        }
+      }
       if (result.overLimit) {
         const mb = (result.byteLength / (1024 * 1024)).toFixed(1)
         setShareFeedback(
@@ -625,6 +734,12 @@ export default function ChatApp() {
                   providerId={selectedProviderId()}
                   onLoadingChange={setCurrentConversationLoading}
                   onReconnectOpenRouter={openOpenRouterApiKeyModal}
+                  onModelUnavailable={(pid, mid) => {
+                    markModelUnavailable(pid, mid)
+                    setModelList((l) =>
+                      l?.filter((m) => !(m.providerId === pid && m.id === mid)),
+                    )
+                  }}
                   onRegisterStop={(stop) => {
                     stopStreaming = stop
                   }}

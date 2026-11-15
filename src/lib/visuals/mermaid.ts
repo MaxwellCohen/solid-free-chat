@@ -58,9 +58,14 @@ function replaceWithSvg(pre: Element, svg: string) {
  * streaming). Blocks that fail to parse — e.g. still streaming — stay as code.
  * Returns a cancel function.
  */
-export function enhanceMermaidBlocks(root: HTMLElement, delayMs = 300): () => void {
+export function enhanceMermaidBlocks(
+  root: HTMLElement,
+  delayMs = 300,
+): () => void {
   const pending: HTMLElement[] = []
-  for (const pre of root.querySelectorAll<HTMLElement>('pre[data-lang="mermaid"]')) {
+  for (const pre of root.querySelectorAll<HTMLElement>(
+    'pre[data-lang="mermaid"]',
+  )) {
     const svg = svgCache.get(pre.textContent)
     if (svg) replaceWithSvg(pre, svg)
     else pending.push(pre)

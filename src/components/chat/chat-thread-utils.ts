@@ -138,3 +138,11 @@ export function withEditedText(
   const rest = parts.filter((p) => p.type !== 'text')
   return text ? [{ type: 'text', content: text }, ...rest] : rest
 }
+
+/** Whether an assistant reply had produced anything before failing. */
+export function hasAssistantOutput(message: UIMessage | undefined): boolean {
+  if (message?.role !== 'assistant') return false
+  return message.parts.some((p) =>
+    p.type === 'text' || p.type === 'thinking' ? p.content.trim() !== '' : true,
+  )
+}

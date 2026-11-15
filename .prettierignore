@@ -1,3 +1,13 @@
 package-lock.json
 pnpm-lock.yaml
 yarn.lock
+.output
+dist
+.nitro
+.tanstack
+.wrangler
+test-results
+src/routeTree.gen.ts
+.fallow
+wrangler.jsonc
+.cursor

@@ -99,3 +99,49 @@ describe('classifyChatError provider name', () => {
     ).toContain('Groq')
   })
 })
+
+describe('classifyChatError model unavailable', () => {
+  it.each([
+    new Error('models/gemini-9 is not found for API version v1beta'),
+    new Error('No endpoints found for meta-llama/llama-3-8b:free.'),
+    new Error('The model `llama3-8b-8192` has been decommissioned'),
+    new Error(
+      'The model `foo` does not exist or you do not have access to it.',
+    ),
+  ])('detects %s', (err) => {
+    expect(classifyChatError(err).kind).toBe('model-unavailable')
+  })
+
+  it.each([
+    'boom',
+    'No endpoints found that support tool use.',
+    'No endpoints found matching your data policy.',
+    'The `max_tokens` parameter is deprecated.',
+    'The model called tool `foo` which was not found',
+    'Not Found',
+  ])('ignores %s', (msg) => {
+    expect(classifyChatError(new Error(msg)).kind).not.toBe('model-unavailable')
+  })
+
+  it('does not blame the model once it had replied', () => {
+    const err = new Error('No endpoints found for x/y:free.')
+    expect(classifyChatError(err, { hasPartialResponse: true }).kind).not.toBe(
+      'model-unavailable',
+    )
+  })
+
+  it('keeps a plain 403 as auth', () => {
+    const err = Object.assign(new Error('Forbidden'), { status: 403 })
+    expect(classifyChatError(err).kind).toBe('auth')
+  })
+})
+
+it('treats a 403 for a gated model as unavailable, not auth', () => {
+  const err = Object.assign(
+    new Error(
+      'thinkingmachines/inkling-2-small:free is only available on agentic harnesses.',
+    ),
+    { status: 403 },
+  )
+  expect(classifyChatError(err).kind).toBe('model-unavailable')
+})

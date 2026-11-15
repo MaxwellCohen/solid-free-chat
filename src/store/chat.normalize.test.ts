@@ -129,4 +129,67 @@ describe('normalizeChatAppState', () => {
       normalizeChatAppState({ ...base, enabledToolIds: [] })!.enabledToolIds,
     ).toEqual([])
   })
+
+  describe('message validation', () => {
+    const conv = { id: 'c1', title: 'T', updatedAt: 1, skillIds: [] }
+    const load = (messages: unknown[], messageKey = 'c1') =>
+      normalizeChatAppState({
+        conversationsById: { c1: conv },
+        messagesByConversationId: { [messageKey]: messages },
+      })!.messagesByConversationId.c1
+
+    it('drops messages with bad id, role or parts', () => {
+      const good = {
+        id: 'm1',
+        role: 'user',
+        parts: [{ type: 'text', content: 'a' }],
+      }
+      const out = load([
+        good,
+        { id: 2, role: 'user', parts: [] },
+        { id: 'm3', role: 'robot', parts: [] },
+        { id: 'm4', role: 'user' },
+        { id: 'm5', role: 'user', parts: 'nope' },
+        null,
+      ])
+      expect(out.map((m) => m.id)).toEqual(['m1'])
+    })
+
+    it('filters parts without a string type', () => {
+      const out = load([
+        {
+          id: 'm1',
+          role: 'assistant',
+          parts: [
+            { type: 'text', content: 'a' },
+            null,
+            { content: 'x' },
+            { type: 5 },
+            'str',
+          ],
+        },
+      ])
+      expect(out[0].parts).toEqual([{ type: 'text', content: 'a' }])
+    })
+
+    it('drops an invalid createdAt and keeps a valid one', () => {
+      const out = load([
+        { id: 'm1', role: 'user', parts: [], createdAt: 'garbage' },
+        { id: 'm2', role: 'user', parts: [], createdAt: 1000 },
+      ])
+      expect(out[0].createdAt).toBeUndefined()
+      expect(out[1].createdAt).toEqual(new Date(1000))
+    })
+
+    it('looks up messages by record key before the normalized id', () => {
+      const out = normalizeChatAppState({
+        conversationsById: { ' k1 ': { title: 'T', updatedAt: 1 } },
+        messagesByConversationId: {
+          ' k1 ': [{ id: 'm1', role: 'user', parts: [] }],
+        },
+      })!
+      const id = out.conversationOrder[0]
+      expect(out.messagesByConversationId[id].map((m) => m.id)).toEqual(['m1'])
+    })
+  })
 })

@@ -44,7 +44,10 @@ describe('searchSidebarConversations', () => {
 
   it('truncates long snippets with ellipses', () => {
     const long = `${'x'.repeat(100)}needle${'y'.repeat(100)}`
-    const [hit] = searchSidebarConversations([chat('d', 't', 1, [long])], 'needle')
+    const [hit] = searchSidebarConversations(
+      [chat('d', 't', 1, [long])],
+      'needle',
+    )
     expect(hit.snippet?.before.startsWith('…')).toBe(true)
     expect(hit.snippet?.after.endsWith('…')).toBe(true)
     expect(hit.snippet?.match).toBe('needle')

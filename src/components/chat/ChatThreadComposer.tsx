@@ -58,7 +58,7 @@ function ImageAttachmentButton(props: { props: ChatThreadComposerProps }) {
   return (
     <div
       class={[
-        'border-border text-muted-foreground hover:bg-muted hover:text-foreground relative inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-[box-shadow,background-color,color] duration-300 disabled:opacity-50',
+        'border-border text-muted-foreground hover:bg-muted hover:text-foreground focus-within:ring-ring relative inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium focus-within:ring-2 transition-[box-shadow,background-color,color] duration-300 disabled:opacity-50',
         {
           'ring-primary/70 bg-primary/5 text-foreground ring-2':
             props.props.imageButtonPulse(),
@@ -80,6 +80,7 @@ function ImageAttachmentButton(props: { props: ChatThreadComposerProps }) {
         multiple
         class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
         aria-label="Attach images"
+        disabled={props.props.isLoading()}
         onChange={props.props.onImageInput}
       />
     </div>
@@ -90,7 +91,7 @@ function PdfAttachmentButton(props: { props: ChatThreadComposerProps }) {
   return (
     <div
       class={[
-        'border-border text-muted-foreground hover:bg-muted hover:text-foreground relative inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium disabled:opacity-50',
+        'border-border text-muted-foreground hover:bg-muted hover:text-foreground focus-within:ring-ring relative inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium focus-within:ring-2 disabled:opacity-50',
         {
           'pointer-events-none opacity-50': props.props.isLoading(),
         },
@@ -105,6 +106,7 @@ function PdfAttachmentButton(props: { props: ChatThreadComposerProps }) {
         multiple
         class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
         aria-label="Attach PDF"
+        disabled={props.props.isLoading()}
         onChange={props.props.onFileInput}
       />
     </div>
@@ -232,7 +234,7 @@ function ComposerInputRow(props: { props: ChatThreadComposerProps }) {
         rows={2}
         value={props.props.draft()}
         onInput={(e) => props.props.onDraftInput(e.currentTarget.value)}
-        disabled={props.props.isLoading()}
+        aria-label="Message"
         onKeyDown={(e) => {
           if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
             e.preventDefault()

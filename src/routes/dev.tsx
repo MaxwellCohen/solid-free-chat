@@ -13,6 +13,7 @@ import {
   STARTER_FILES,
   buildWorkspace,
   createWorkspaceTools,
+  normalizePath,
 } from '../lib/dev-workspace'
 import type { Files } from '../lib/dev-workspace'
 
@@ -50,13 +51,20 @@ function Dev() {
   // Mirror of `files()` readable synchronously from tools mid-turn.
   let current: Files = { ...STARTER_FILES }
 
+  let buildId = 0
+  // Bumped by every commit so a slow hash decode can't clobber newer edits.
+  let loadId = 0
+
   const commit = (next: Files) => {
+    loadId++
     current = next
     setFiles(next)
   }
 
   const build = async () => {
+    const id = ++buildId
     const result = await buildWorkspace(current)
+    if (id !== buildId) return result
     if (result.ok) {
       setBuildErrors([])
       setConsole('')
@@ -68,13 +76,24 @@ function Dev() {
   onSettled(() => {
     setMounted(true)
     void (async () => {
-      const shared = await decodeWorkspace(location.hash)
-      if (shared) {
-        commit(shared)
-        setSelected(Object.keys(shared).sort()[0] ?? '')
+      const startLoad = loadId
+      const decoded = await decodeWorkspace(location.hash).catch(
+        () => undefined,
+      )
+      if (startLoad === loadId && decoded) {
+        const shared: Files = Object.fromEntries(
+          Object.entries(decoded).flatMap(([path, content]) => {
+            const safe = normalizePath(path)
+            return safe ? [[safe, content]] : []
+          }),
+        )
+        if (Object.keys(shared).length > 0) {
+          commit(shared)
+          setSelected(Object.keys(shared).sort()[0] ?? '')
+        }
       }
       await build()
-    })()
+    })().catch(() => {})
     const onMessage = (e: MessageEvent) => {
       const data = e.data as {
         source?: string
@@ -106,7 +125,7 @@ function Dev() {
   const editFile = (content: string) => {
     commit({ ...current, [selected()]: content })
     clearTimeout(editTimer)
-    editTimer = setTimeout(() => void build(), 500)
+    editTimer = setTimeout(() => void build().catch(() => {}), 500)
   }
 
   const clampSplit = (v: number) => Math.min(80, Math.max(20, v))

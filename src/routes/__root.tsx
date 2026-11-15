@@ -21,6 +21,10 @@ import '../styles.css'
 import '../styles/markdown-highlight.css'
 
 // Dev skips the service worker so its caches never shadow Vite HMR.
+// A tab left open across a deploy can ask for a lazy chunk that no longer
+// exists. Reload once to pick up the new build (guarded against reload loops).
+const CHUNK_RELOAD_SCRIPT = `addEventListener("vite:preloadError",function(){try{var k="solid-free-chat:chunk-reload",t=+sessionStorage.getItem(k)||0;if(Date.now()-t<30000)return;sessionStorage.setItem(k,String(Date.now()))}catch(e){return}location.reload()})`
+
 const SERVICE_WORKER_REGISTER_SCRIPT = `if("serviceWorker"in navigator)addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){})})`
 
 export const Route = createRootRouteWithContext()({
@@ -87,6 +91,7 @@ function RootComponent() {
         {import.meta.env.PROD && (
           <script innerHTML={SERVICE_WORKER_REGISTER_SCRIPT} />
         )}
+        {import.meta.env.PROD && <script innerHTML={CHUNK_RELOAD_SCRIPT} />}
       </head>
       <body>
         <HeadContent />

@@ -43,19 +43,26 @@ export function loadStoredApiKey(providerId = 'openrouter'): StoredApiKey {
   }
 }
 
+/** Returns false when the key could not be saved (the previous key is left in place). */
 export function storeApiKey(
   { key, remember }: StoredApiKey,
   providerId = 'openrouter',
-) {
+): boolean {
   const name = keyName(providerId)
   try {
-    localStorage.removeItem(name)
-    sessionStorage.removeItem(name)
-    if (!key) return
-    const storage = remember ? localStorage : sessionStorage
-    storage.setItem(name, key)
+    if (!key) {
+      localStorage.removeItem(name)
+      sessionStorage.removeItem(name)
+      return true
+    }
+    const target = remember ? localStorage : sessionStorage
+    const other = remember ? sessionStorage : localStorage
+    target.setItem(name, key)
+    other.removeItem(name)
+    return true
   } catch {
     /* ignore quota / private mode */
+    return false
   }
 }
 

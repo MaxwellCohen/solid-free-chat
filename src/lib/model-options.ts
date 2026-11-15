@@ -4,6 +4,39 @@ import { loadStoredApiKey } from './openrouter-key-storage'
 import { getProviderModelOptionsCached } from './provider-models'
 import { PROVIDERS } from './providers'
 
+/** Re-check interval; plus the 5-min list cache, data is never >15 min old. */
+export const MODEL_REFRESH_MS = 10 * 60_000
+
+const UNAVAILABLE_KEY = 'solid-free-chat-unavailable-models'
+const UNAVAILABLE_TTL_MS = 24 * 60 * 60_000
+
+function loadUnavailable(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(UNAVAILABLE_KEY)
+    const v: unknown = raw ? JSON.parse(raw) : {}
+    if (!v || typeof v !== 'object') return {}
+    const now = Date.now()
+    return Object.fromEntries(
+      Object.entries(v).filter(
+        (e): e is [string, number] => typeof e[1] === 'number' && e[1] > now,
+      ),
+    )
+  } catch {
+    return {}
+  }
+}
+
+/** Hides a model that failed as unavailable from model lists for a day. */
+export function markModelUnavailable(providerId: string, modelId: string) {
+  const map = loadUnavailable()
+  map[`${providerId}\n${modelId}`] = Date.now() + UNAVAILABLE_TTL_MS
+  try {
+    localStorage.setItem(UNAVAILABLE_KEY, JSON.stringify(map))
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Models from every provider with a saved key (OpenRouter is always included). */
 export async function loadAllModelOptions(): Promise<{
   options: ChatModelOption[]
@@ -32,7 +65,12 @@ export async function loadAllModelOptions(): Promise<{
       error: failed?.status === 'rejected' ? failed.reason : undefined,
     }
   }
-  return { options: lists.flat() }
+  const hidden = loadUnavailable()
+  return {
+    options: lists
+      .flat()
+      .filter((m) => !(`${m.providerId}\n${m.id}` in hidden)),
+  }
 }
 
 const KEY = 'solid-free-chat-tool-model'

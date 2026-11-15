@@ -9,7 +9,8 @@ import { createEffect, createSignal, onSettled, untrack } from 'solid-js'
 
 export type { VirtualItem, Virtualizer } from '@tanstack/virtual-core'
 
-type PartialKeys<T, Keys extends keyof T> = Omit<T, Keys> & Partial<Pick<T, Keys>>
+type PartialKeys<T, TKeys extends keyof T> = Omit<T, TKeys> &
+  Partial<Pick<T, TKeys>>
 
 /**
  * Solid 2 adapter for `@tanstack/virtual-core`.
@@ -31,17 +32,19 @@ function createVirtualizerBase<
   const [virtualItems, setVirtualItems] = createSignal(
     untrack(() => instance.getVirtualItems()),
   )
-  const [totalSize, setTotalSize] = createSignal(untrack(() => instance.getTotalSize()))
+  const [totalSize, setTotalSize] = createSignal(
+    untrack(() => instance.getTotalSize()),
+  )
 
   const publish = (next: Virtualizer<TScrollElement, TItemElement>) => {
     setVirtualItems(next.getVirtualItems())
     setTotalSize(next.getTotalSize())
   }
 
-  const onChange: VirtualizerOptions<TScrollElement, TItemElement>['onChange'] = (
-    next,
-    sync,
-  ) => {
+  const onChange: VirtualizerOptions<
+    TScrollElement,
+    TItemElement
+  >['onChange'] = (next, sync) => {
     untrack(() => {
       next._willUpdate()
       publish(next)

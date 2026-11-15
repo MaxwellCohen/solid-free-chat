@@ -100,8 +100,12 @@ function axisLabel(label: string | undefined) {
   return label ? { label } : undefined
 }
 
-export type UseChartDefinition<TResult> = <TDatum, TX extends ChartValue, TY extends ChartValue>(
-  definition: DomChartDefinition<TDatum, TX, TY>,
+export type UseChartDefinition<TResult> = <
+  TDatum,
+  TXValue extends ChartValue,
+  TYValue extends ChartValue,
+>(
+  definition: DomChartDefinition<TDatum, TXValue, TYValue>,
 ) => TResult
 
 /**

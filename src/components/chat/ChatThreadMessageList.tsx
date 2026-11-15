@@ -11,6 +11,7 @@ import {
   messageToPlainText,
   userMessageToResendParts,
   withEditedText,
+  hasAssistantOutput,
 } from './chat-thread-utils'
 import { MessageParts } from './ChatMessageParts'
 import { classifyChatError } from '../../lib/chat-error'
@@ -54,6 +55,36 @@ export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
     virtualizer.scrollToEnd()
   })
 
+  const [awayFromEnd, setAwayFromEnd] = createSignal(false)
+  const [replyStatus, setReplyStatus] = createSignal('')
+
+  function updateAwayFromEnd() {
+    const el = scrollContainerRef
+    if (!el) return
+    setAwayFromEnd(
+      el.scrollHeight - el.scrollTop - el.clientHeight >
+        SCROLL_END_THRESHOLD_PX,
+    )
+  }
+
+  // A growing reply moves the end away without firing a scroll event.
+  createEffect(
+    () => virtualizer.getTotalSize(),
+    () => {
+      requestAnimationFrame(updateAwayFromEnd)
+    },
+  )
+
+  let wasLoading = false
+  createEffect(
+    () => props.isLoading(),
+    (loading) => {
+      if (wasLoading && !loading) setReplyStatus('Reply finished')
+      else if (loading) setReplyStatus('')
+      wasLoading = loading
+    },
+  )
+
   // When the user sends a message, pin it to the top so the reply fills the view.
   let prevCount = props.messages().length
   createEffect(
@@ -81,28 +112,58 @@ export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
   }
 
   return (
-    <div
-      ref={(el) => {
-        scrollContainerRef = el
-      }}
-      class="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6"
-    >
-      <div
-        class="relative w-full"
-        style={{ height: `${virtualizer.getTotalSize() + trailingSpace()}px` }}
-      >
-        {/* Key by item key: the virtualizer re-creates item objects on every measure,
-            and remounting would reset open <details> (e.g. Reasoning). */}
-        <For each={virtualizer.getVirtualItems()} keyed={(item) => item.key}>
-          {(virtualItem) => (
-            <VirtualChatMessage
-              virtualItem={virtualItem}
-              virtualizer={virtualizer}
-              listProps={props}
-            />
-          )}
-        </For>
+    <div class="flex min-h-0 flex-1 flex-col">
+      <div class="relative min-h-0 flex-1">
+        <div
+          ref={(el) => {
+            scrollContainerRef = el
+          }}
+          role="log"
+          aria-label="Conversation"
+          aria-busy={props.isLoading() ? 'true' : 'false'}
+          onScroll={updateAwayFromEnd}
+          class="h-full overflow-y-auto px-3 py-4 sm:px-6"
+        >
+          <div
+            class="relative w-full"
+            style={{
+              height: `${virtualizer.getTotalSize() + trailingSpace()}px`,
+            }}
+          >
+            {/* Key by item key: the virtualizer re-creates item objects on every measure,
+              and remounting would reset open <details> (e.g. Reasoning). */}
+            <For
+              each={virtualizer.getVirtualItems()}
+              keyed={(item) => item.key}
+            >
+              {(virtualItem) => (
+                <VirtualChatMessage
+                  virtualItem={virtualItem}
+                  virtualizer={virtualizer}
+                  listProps={props}
+                />
+              )}
+            </For>
+          </div>
+        </div>
+        <Show when={awayFromEnd()}>
+          <button
+            type="button"
+            class="border-border bg-background hover:bg-muted absolute right-4 bottom-3 rounded-full border px-3 py-1 text-xs font-medium shadow-sm sm:right-8"
+            onClick={() =>
+              scrollContainerRef?.scrollTo({
+                top: scrollContainerRef.scrollHeight,
+                behavior: 'smooth',
+              })
+            }
+          >
+            Jump to latest
+          </button>
+        </Show>
       </div>
+      <p class="sr-only" role="status" aria-live="polite">
+        {replyStatus()}
+      </p>
       <ErrorBanner props={props} />
     </div>
   )
@@ -377,6 +438,7 @@ function EditMessageForm(props: {
     >
       <textarea
         class="border-border bg-background text-foreground min-h-20 w-full rounded-xl border px-3 py-2 text-sm"
+        aria-label="Edit message"
         value={value()}
         onInput={(e) => setValue(e.currentTarget.value)}
         ref={(el) => queueMicrotask(() => el.focus())}
@@ -405,13 +467,14 @@ function ErrorBanner(props: { props: ChatThreadMessageListProps }) {
       {(err) => {
         const info = () =>
           classifyChatError(err, {
-            hasPartialResponse:
-              props.props.messages().at(-1)?.role === 'assistant',
+            hasPartialResponse: hasAssistantOutput(
+              props.props.messages().at(-1),
+            ),
             providerName: props.props.providerName,
           })
         return (
           <div
-            class="bg-destructive/10 text-destructive mt-4 flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm"
+            class="bg-destructive/10 text-destructive mx-3 mb-2 flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm sm:mx-6"
             role="alert"
           >
             <span>

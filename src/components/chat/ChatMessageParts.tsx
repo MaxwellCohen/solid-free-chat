@@ -104,11 +104,25 @@ function ImagePart(props: { part: Accessor<MessagePart> }) {
   })
 
   return (
-    <img
-      src={src()}
-      alt=""
-      class="mt-2 max-h-56 max-w-full rounded-lg border border-white/20 object-contain first:mt-0"
-    />
+    <Show
+      when={!/^(https?:)?\/\//i.test(src())}
+      fallback={
+        <a
+          href={src()}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="mt-2 block text-xs underline first:mt-0"
+        >
+          Image
+        </a>
+      }
+    >
+      <img
+        src={src()}
+        alt=""
+        class="mt-2 max-h-56 max-w-full rounded-lg border border-white/20 object-contain first:mt-0"
+      />
+    </Show>
   )
 }
 

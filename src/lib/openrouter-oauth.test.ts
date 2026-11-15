@@ -47,7 +47,9 @@ describe('openrouter oauth', () => {
     await startOpenRouterLogin(true)
     const url = assign.mock.calls[0][0] as URL
     expect(url.origin + url.pathname).toBe('https://openrouter.ai/auth')
-    expect(url.searchParams.get('callback_url')).toBe('https://app.example/chat')
+    expect(url.searchParams.get('callback_url')).toBe(
+      'https://app.example/chat',
+    )
     expect(url.searchParams.get('code_challenge_method')).toBe('S256')
     const verifier = ss.entries().find(([k]) => k.endsWith('pkce-verifier'))![1]
     expect(verifier).toMatch(/^[A-Za-z0-9_-]{43}$/)
@@ -57,7 +59,9 @@ describe('openrouter oauth', () => {
     )
     const expected = Buffer.from(digest).toString('base64url')
     expect(url.searchParams.get('code_challenge')).toBe(expected)
-    expect(ss.entries().find(([k]) => k.endsWith('pkce-remember'))![1]).toBe('1')
+    expect(ss.entries().find(([k]) => k.endsWith('pkce-remember'))![1]).toBe(
+      '1',
+    )
   })
 
   it('takes the callback code out of the address bar', () => {
@@ -85,7 +89,10 @@ describe('openrouter oauth', () => {
       key: 'sk-or-1',
       remember: true,
     })
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ]
     expect(url).toBe('https://openrouter.ai/api/v1/auth/keys')
     expect(JSON.parse(init.body as string)).toEqual({
       code: 'code1',
@@ -97,7 +104,10 @@ describe('openrouter oauth', () => {
 
   it('throws with status on a failed exchange', async () => {
     ss.setItem('solid-free-chat-openrouter-pkce-verifier', 'ver')
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('bad', { status: 400 })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('bad', { status: 400 })),
+    )
     await expect(completeOpenRouterLogin('c')).rejects.toThrow('(400)')
   })
 })

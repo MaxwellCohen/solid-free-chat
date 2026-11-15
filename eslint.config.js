@@ -11,10 +11,23 @@ export default [
       'sort-imports': 'off',
       '@typescript-eslint/array-type': 'off',
       '@typescript-eslint/require-await': 'off',
+      // False positives on record lookups without `noUncheckedIndexedAccess`.
+      '@typescript-eslint/no-unnecessary-condition': 'off',
       'pnpm/json-enforce-catalog': 'off',
     },
   },
   {
-    ignores: ['eslint.config.js', 'prettier.config.js'],
+    ignores: [
+      'eslint.config.js',
+      'prettier.config.js',
+      '.output/**',
+      'dist/**',
+      '.nitro/**',
+      '.tanstack/**',
+      '.wrangler/**',
+      'test-results/**',
+      'src/routeTree.gen.ts',
+      'src/sw.js',
+    ],
   },
 ]

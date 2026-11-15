@@ -1,11 +1,11 @@
 import { Store } from '@tanstack/store'
 import type { UIMessage } from '@tanstack/ai-client'
 import { DEFAULT_CHAT_MODEL } from '../lib/chat-models'
-import {
-  DEFAULT_ENABLED_TOOL_IDS,
-  isKnownToolId,
+import { DEFAULT_ENABLED_TOOL_IDS, isKnownToolId } from '../lib/harness/tools'
+import type {
+  HarnessChatHistoryApi,
+  HarnessSkillsApi,
 } from '../lib/harness/tools'
-import type { HarnessChatHistoryApi, HarnessSkillsApi } from '../lib/harness/tools'
 
 /** Token counts from the provider for one completed model run (see RUN_FINISHED). */
 export interface TokenUsageSnapshot {
@@ -111,7 +111,10 @@ function newSkillId(): string {
   return `sk-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
-function newConversation(now = Date.now(), id = newConversationId()): ChatConversation {
+function newConversation(
+  now = Date.now(),
+  id = newConversationId(),
+): ChatConversation {
   return {
     id,
     title: NEW_CHAT_TITLE,
@@ -144,7 +147,9 @@ export function normalizeTokenUsageSnapshot(
     promptTokens,
     completionTokens,
     totalTokens,
-    ...(typeof cost === 'number' && Number.isFinite(cost) && cost >= 0 ? { cost } : {}),
+    ...(typeof cost === 'number' && Number.isFinite(cost) && cost >= 0
+      ? { cost }
+      : {}),
     recordedAt:
       typeof recordedAt === 'number' && Number.isFinite(recordedAt)
         ? recordedAt
@@ -176,12 +181,12 @@ export function normalizeSkills(
 ): ChatSkill[] {
   if (Array.isArray(skillsRaw)) {
     return skillsRaw
-      .filter((p): p is Record<string, unknown> => p != null && typeof p === 'object')
+      .filter(
+        (p): p is Record<string, unknown> => p != null && typeof p === 'object',
+      )
       .map((p) => ({
         id:
-          typeof p.id === 'string' && p.id.trim()
-            ? p.id.trim()
-            : newSkillId(),
+          typeof p.id === 'string' && p.id.trim() ? p.id.trim() : newSkillId(),
         name:
           typeof p.name === 'string' && p.name.trim()
             ? p.name.trim().slice(0, 120)
@@ -201,12 +206,11 @@ export function normalizeSkills(
 
   if (!Array.isArray(savedSystemPromptsRaw)) return []
   return savedSystemPromptsRaw
-    .filter((p): p is Record<string, unknown> => p != null && typeof p === 'object')
+    .filter(
+      (p): p is Record<string, unknown> => p != null && typeof p === 'object',
+    )
     .map((p) => ({
-      id:
-        typeof p.id === 'string' && p.id.trim()
-          ? p.id.trim()
-          : newSkillId(),
+      id: typeof p.id === 'string' && p.id.trim() ? p.id.trim() : newSkillId(),
       name:
         typeof p.name === 'string' && p.name.trim()
           ? p.name.trim().slice(0, 120)
@@ -247,9 +251,12 @@ function normalizeConversationRecord(
   skills: ChatSkill[],
 ): ConversationNormalizeResult {
   const now = Date.now()
-  const source = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+  const source =
+    raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
   const id =
-    typeof source.id === 'string' && source.id.trim() ? source.id.trim() : fallbackId
+    typeof source.id === 'string' && source.id.trim()
+      ? source.id.trim()
+      : fallbackId
   const title =
     typeof source.title === 'string' && source.title.trim()
       ? source.title
@@ -322,16 +329,30 @@ function normalizeConversationOrder(
   return order
 }
 
+const MESSAGE_ROLES = new Set(['system', 'user', 'assistant'])
+
 function normalizeMessage(raw: unknown): ChatUIMessage | null {
   if (!raw || typeof raw !== 'object') return null
   const message = raw as UIMessage & { tokenUsage?: unknown }
+  if (typeof message.id !== 'string' || !message.id) return null
+  if (!MESSAGE_ROLES.has(message.role)) return null
+  if (!Array.isArray(message.parts)) return null
+  const parts = message.parts.filter(
+    (part: unknown): part is UIMessage['parts'][number] =>
+      !!part &&
+      typeof part === 'object' &&
+      typeof (part as { type?: unknown }).type === 'string',
+  )
   const tokenUsage = normalizeTokenUsageSnapshot(message.tokenUsage)
+  const createdAt =
+    message.createdAt != null
+      ? new Date(message.createdAt as unknown as string | number)
+      : undefined
   return {
     ...message,
+    parts,
     createdAt:
-      message.createdAt != null
-        ? new Date(message.createdAt as unknown as string | number)
-        : undefined,
+      createdAt && !Number.isNaN(createdAt.getTime()) ? createdAt : undefined,
     ...(tokenUsage ? { tokenUsage } : {}),
   } as ChatUIMessage
 }
@@ -371,7 +392,8 @@ function normalizePersistedChatState(raw: unknown): ChatAppState | null {
     skills = result.skills
     conversationsById[result.conversation.id] = result.conversation
     messagesByConversationId[result.conversation.id] = normalizeMessages(
-      rawMessagesByConversationId[result.conversation.id],
+      rawMessagesByConversationId[key] ??
+        rawMessagesByConversationId[result.conversation.id],
     )
   }
 
@@ -383,7 +405,7 @@ function normalizePersistedChatState(raw: unknown): ChatAppState | null {
     typeof source.currentConversationId === 'string' &&
     source.currentConversationId in conversationsById
       ? source.currentConversationId
-      : conversationOrder[0] ?? null
+      : (conversationOrder[0] ?? null)
 
   return {
     conversationOrder,
@@ -408,8 +430,12 @@ function normalizeEnabledToolIds(raw: unknown): string[] {
   return [...new Set(ids)]
 }
 
-function normalizeLegacyChatState(raw: LegacyChatAppState): ChatAppState | null {
-  const legacyConversations = Array.isArray(raw.conversations) ? raw.conversations : null
+function normalizeLegacyChatState(
+  raw: LegacyChatAppState,
+): ChatAppState | null {
+  const legacyConversations = Array.isArray(raw.conversations)
+    ? raw.conversations
+    : null
   if (!legacyConversations) return null
 
   let skills = normalizeSkills(raw.skills, raw.savedSystemPrompts)
@@ -418,7 +444,11 @@ function normalizeLegacyChatState(raw: LegacyChatAppState): ChatAppState | null 
   const conversationOrder: string[] = []
 
   for (const value of legacyConversations) {
-    const result = normalizeConversationRecord(value, newConversationId(), skills)
+    const result = normalizeConversationRecord(
+      value,
+      newConversationId(),
+      skills,
+    )
     skills = result.skills
     if (result.conversation.id in conversationsById) continue
     conversationsById[result.conversation.id] = result.conversation
@@ -432,7 +462,7 @@ function normalizeLegacyChatState(raw: LegacyChatAppState): ChatAppState | null 
     typeof raw.currentConversationId === 'string' &&
     raw.currentConversationId in conversationsById
       ? raw.currentConversationId
-      : conversationOrder[0] ?? null
+      : (conversationOrder[0] ?? null)
 
   return {
     conversationOrder,
@@ -472,20 +502,11 @@ function getConversation(
   return state.conversationsById[conversationId]
 }
 
-function getConversationMessages(state: ChatAppState, conversationId: string): ChatUIMessage[] {
-  return state.messagesByConversationId[conversationId] ?? []
-}
-
-function getConversationWithMessages(
+function getConversationMessages(
   state: ChatAppState,
   conversationId: string,
-): ChatConversationWithMessages | undefined {
-  const conversation = getConversation(state, conversationId)
-  if (!conversation) return undefined
-  return {
-    ...conversation,
-    messages: getConversationMessages(state, conversationId),
-  }
+): ChatUIMessage[] {
+  return state.messagesByConversationId[conversationId] ?? []
 }
 
 export const chatActions = {
@@ -623,7 +644,9 @@ export const chatActions = {
       if (index < 0) return s
       const current = s.skills[index]
       const nextName =
-        patch.name !== undefined ? patch.name.trim().slice(0, 120) : current.name
+        patch.name !== undefined
+          ? patch.name.trim().slice(0, 120)
+          : current.name
       const nextInstructions =
         patch.instructions !== undefined
           ? patch.instructions.trim()
@@ -702,7 +725,8 @@ export const chatActions = {
   deleteConversation(id: string) {
     chatStore.setState((s) => {
       if (!(id in s.conversationsById)) return s
-      const { [id]: _removedConversation, ...conversationsById } = s.conversationsById
+      const { [id]: _removedConversation, ...conversationsById } =
+        s.conversationsById
       const { [id]: _removedMessages, ...messagesByConversationId } =
         s.messagesByConversationId
       const conversationOrder = s.conversationOrder.filter(
@@ -741,7 +765,10 @@ export const chatActions = {
             lastUsage: { ...usage, recordedAt },
             sessionTotalTokens: prevSession + usage.totalTokens,
             ...(usage.cost !== undefined
-              ? { sessionTotalCost: (conversation.sessionTotalCost ?? 0) + usage.cost }
+              ? {
+                  sessionTotalCost:
+                    (conversation.sessionTotalCost ?? 0) + usage.cost,
+                }
               : {}),
             updatedAt: Date.now(),
           },
@@ -780,35 +807,13 @@ export const chatActions = {
 }
 
 export const chatSelectors = {
-  currentConversation(state: ChatAppState): ChatConversationWithMessages | undefined {
-    const id = state.currentConversationId
-    if (!id) return undefined
-    return getConversationWithMessages(state, id)
-  },
-
   conversationList(state: ChatAppState): ChatConversation[] {
     return state.conversationOrder
       .map((id) => getConversation(state, id))
-      .filter((conversation): conversation is ChatConversation => conversation != null)
-  },
-
-  conversationMessages(
-    state: ChatAppState,
-    conversationId: string,
-  ): ChatUIMessage[] {
-    return getConversationMessages(state, conversationId)
-  },
-
-  attachedSkills(
-    state: ChatAppState,
-    conversationId: string,
-  ): ChatSkill[] {
-    const conversation = getConversation(state, conversationId)
-    if (!conversation) return []
-    const byId = new Map(state.skills.map((skill) => [skill.id, skill]))
-    return conversation.skillIds
-      .map((id) => byId.get(id))
-      .filter((skill): skill is ChatSkill => skill != null)
+      .filter(
+        (conversation): conversation is ChatConversation =>
+          conversation != null,
+      )
   },
 }
 
@@ -847,9 +852,11 @@ function deriveTitleFromMessages(messages: UIMessage[]): string | null {
 }
 
 /** Skill operations for harness tools, scoped to one conversation's attachments. */
-export function createConversationSkillsApi(conversationId: string): HarnessSkillsApi {
+export function createConversationSkillsApi(
+  conversationId: string,
+): HarnessSkillsApi {
   const attachedIds = () =>
-    chatStore.state.conversationsById[conversationId]?.skillIds ?? []
+    getConversation(chatStore.state, conversationId)?.skillIds ?? []
   const exists = (skillId: string) =>
     chatStore.state.skills.some((skill) => skill.id === skillId)
   return {
@@ -865,9 +872,13 @@ export function createConversationSkillsApi(conversationId: string): HarnessSkil
     create: (name, instructions) => chatActions.addSkill(name, instructions),
     update: (skillId, patch) => {
       if (!exists(skillId)) return false
-      const before = chatStore.state.skills.find((skill) => skill.id === skillId)
+      const before = chatStore.state.skills.find(
+        (skill) => skill.id === skillId,
+      )
       chatActions.updateSkill(skillId, patch)
-      return chatStore.state.skills.find((skill) => skill.id === skillId) !== before
+      return (
+        chatStore.state.skills.find((skill) => skill.id === skillId) !== before
+      )
     },
     setAttached: (skillId, attached) => {
       if (!exists(skillId)) return false
@@ -881,7 +892,9 @@ export function createConversationSkillsApi(conversationId: string): HarnessSkil
 }
 
 /** Read-only access to every saved chat except `conversationId`, for the history tools. */
-export function createChatHistoryApi(conversationId: string): HarnessChatHistoryApi {
+export function createChatHistoryApi(
+  conversationId: string,
+): HarnessChatHistoryApi {
   return {
     list: () =>
       chatSelectors

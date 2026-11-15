@@ -3,8 +3,11 @@ import type { ChatUIMessage } from '../store/chat.store'
 import {
   MAX_SHARE_HASH_BYTES,
   buildShareLink,
+  MAX_SHARE_HASH_CHARS,
   decodeSharedChat,
   encodeSharedChat,
+  gunzipBytes,
+  gzipBytes,
   sharedChatToUIMessages,
   toSharedChat,
 } from './chat-share'
@@ -113,5 +116,29 @@ describe('chat-share', () => {
     expect(result.overLimit).toBe(true)
     const decoded = await decodeSharedChat(result.hash)
     expect(decoded?.title).toBe('Huge')
+  })
+
+  it('omits createdAt when the date is invalid', () => {
+    const shared = toSharedChat({
+      title: 'T',
+      model: 'm',
+      messages: [
+        { ...textMessage('u1', 'user', 'Hi'), createdAt: new Date('nope') },
+        { ...textMessage('u2', 'user', 'Hi'), createdAt: new Date(1000) },
+      ],
+    })
+    expect(shared.messages[0].createdAt).toBeUndefined()
+    expect(shared.messages[1].createdAt).toBe(new Date(1000).toISOString())
+  })
+
+  it('rejects decompressed output over the cap', async () => {
+    const gz = await gzipBytes(new Uint8Array(10_000))
+    await expect(gunzipBytes(gz, 1000)).rejects.toThrow(/too large/)
+    expect((await gunzipBytes(gz, 10_000)).length).toBe(10_000)
+  })
+
+  it('rejects an oversized hash before decoding', async () => {
+    const hash = `#v1.${'A'.repeat(MAX_SHARE_HASH_CHARS)}`
+    expect(await decodeSharedChat(hash)).toBeNull()
   })
 })

@@ -54,4 +54,21 @@ describe('openrouter key storage', () => {
     expect(loadStoredApiKey()).toEqual({ key: '', remember: false })
     expect(() => storeApiKey({ key: 'k', remember: true })).not.toThrow()
   })
+
+  it('returns true on success', () => {
+    expect(storeApiKey({ key: 'k', remember: true })).toBe(true)
+  })
+
+  it('keeps the old key and returns false when the write fails', () => {
+    storeApiKey({ key: 'old', remember: false })
+    const local = memoryStorage()
+    local.setItem = () => {
+      throw new Error('quota')
+    }
+    vi.stubGlobal('localStorage', local)
+    expect(storeApiKey({ key: 'new', remember: true })).toBe(false)
+    expect(sessionStorage.getItem('solid-free-chat-openrouter-api-key')).toBe(
+      'old',
+    )
+  })
 })

@@ -1,4 +1,11 @@
-import { For, Show, createMemo, createSignal, onCleanup } from 'solid-js'
+import {
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+} from 'solid-js'
 import {
   ChevronRight,
   Download,
@@ -302,6 +309,12 @@ function ConversationListItem(props: {
 }) {
   const [confirmingDelete, setConfirmingDelete] = createSignal(false)
 
+  createEffect(confirmingDelete, (armed) => {
+    if (!armed) return
+    const timer = setTimeout(() => setConfirmingDelete(false), 4000)
+    return () => clearTimeout(timer)
+  })
+
   return (
     <li class="flex items-stretch gap-0.5">
       <button
@@ -338,6 +351,7 @@ function ConversationListItem(props: {
       >
         <button
           type="button"
+          ref={(el) => queueMicrotask(() => el.focus())}
           title="Confirm delete"
           aria-label={`Confirm delete: ${props.conversation.title || NEW_CHAT_TITLE}`}
           class="text-destructive hover:bg-muted shrink-0 rounded-lg px-2 text-xs font-medium"

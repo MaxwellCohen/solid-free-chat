@@ -15,18 +15,7 @@ import { renderHtml } from '@tanstack/markdown/html'
 import type { CodeHighlighter } from '@tanstack/markdown'
 
 const highlighter = createHighlighter({
-  languages: [
-    plaintext,
-    htmlLang,
-    css,
-    js,
-    jsx,
-    ts,
-    tsx,
-    shell,
-    json,
-    python,
-  ],
+  languages: [plaintext, htmlLang, css, js, jsx, ts, tsx, shell, json, python],
 })
 
 const highlightMarkdownCode: CodeHighlighter =
@@ -34,12 +23,33 @@ const highlightMarkdownCode: CodeHighlighter =
 
 const streamingExtensions = [streamingMarkdownExtension()]
 
+const REMOTE_LINK_RE = /<a href="(https?:\/\/[^"]*)"/gi
+const REMOTE_IMG_RE =
+  /<img src="((?:https?:)?\/\/[^"]*)"(?: alt="([^"]*)")?[^>]*>/gi
+
+function hardenHtml(html: string): string {
+  if (!html.includes('<a ') && !html.includes('<img ')) return html
+  return html
+    .replace(
+      REMOTE_LINK_RE,
+      (_m, href: string) =>
+        `<a href="${href}" target="_blank" rel="noopener noreferrer"`,
+    )
+    .replace(
+      REMOTE_IMG_RE,
+      (_m, src: string, alt?: string) =>
+        `<a href="${src}" target="_blank" rel="noopener noreferrer">${alt || 'image'}</a>`,
+    )
+}
+
 /** Sync Markdown → HTML for chat (streaming-safe, Highlight fences). */
 export function renderMarkdownToHtml(source: string): string {
-  return renderHtml(source, {
-    highlighter: highlightMarkdownCode,
-    extensions: streamingExtensions,
-    frontmatter: false,
-    headingIds: false,
-  })
+  return hardenHtml(
+    renderHtml(source, {
+      highlighter: highlightMarkdownCode,
+      extensions: streamingExtensions,
+      frontmatter: false,
+      headingIds: false,
+    }),
+  )
 }

@@ -2,6 +2,9 @@
   "name": "solid-free-chat",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
   "scripts": {
     "dev": "vite dev --port 3000",
     "build": "vite build",
@@ -31,9 +34,7 @@
     "@tanstack/highlight": "^0.0.9",
     "@tanstack/markdown": "^0.0.12",
     "@tanstack/solid-query": "6.0.0-rc.4",
-    "@tanstack/solid-query-devtools": "6.0.0-rc.4",
     "@tanstack/solid-router": "2.0.0-rc.8",
-    "@tanstack/solid-router-devtools": "2.0.0-rc.6",
     "@tanstack/solid-router-ssr-query": "2.0.0-rc.6",
     "@tanstack/solid-start": "2.0.0-rc.8",
     "@tanstack/store": "^0.11.0",

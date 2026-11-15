@@ -1,3 +1,4 @@
+import { classifyChatError } from '../../lib/chat-error'
 import {
   createEffect,
   createMemo,
@@ -9,6 +10,7 @@ import {
 import { stream } from '@tanstack/ai-client'
 import type { UIMessage } from '@tanstack/ai-client'
 import { useChat } from '../../lib/use-chat'
+import { clearDraft, loadDraft, saveDraft } from '../../lib/chat-drafts'
 import type { ContentPart, StreamChunk } from '@tanstack/ai'
 import { getProvider } from '../../lib/providers'
 import { runAgent } from '../../lib/harness/run-agent'
@@ -47,6 +49,7 @@ import {
   parseDataUrl,
   readFileAsDataUrl,
   guessImageMimeFromFilename,
+  hasAssistantOutput,
   messagesBefore,
   userMessageToResendParts,
 } from './chat-thread-utils'
@@ -65,6 +68,8 @@ export default function ChatThread(props: {
   onLoadingChange: (isLoading: boolean) => void
   onRegisterStop?: (stop: (() => void) | null) => void
   onReconnectOpenRouter?: () => void
+  /** Called when a send fails because the model it used is gone. */
+  onModelUnavailable?: (providerId: string, modelId: string) => void
 }) {
   return (
     <Show when={props.conversationId} keyed>
@@ -80,6 +85,7 @@ export default function ChatThread(props: {
           onLoadingChange={props.onLoadingChange}
           onRegisterStop={props.onRegisterStop}
           onReconnectOpenRouter={props.onReconnectOpenRouter}
+          onModelUnavailable={props.onModelUnavailable}
         />
       )}
     </Show>
@@ -98,13 +104,25 @@ function ChatThreadSession(props: {
   onLoadingChange: (isLoading: boolean) => void
   onRegisterStop?: (stop: (() => void) | null) => void
   onReconnectOpenRouter?: () => void
+  /** Called when a send fails because the model it used is gone. */
+  onModelUnavailable?: (providerId: string, modelId: string) => void
 }) {
   // The parent remounts this session per conversation, so these are snapshots.
   const conversationId = untrack(() => props.conversationId)
   const initialMessages = untrack(() => props.initialMessages)
-  const [draft, setDraft] = createSignal('')
-  const [pendingImages, setPendingImages] = createSignal<PendingImage[]>([])
-  const [pendingFiles, setPendingFiles] = createSignal<PendingFile[]>([])
+  const saved = loadDraft<PendingImage, PendingFile>(conversationId)
+  const [draft, setDraft] = createSignal(saved.text)
+  const [pendingImages, setPendingImages] = createSignal<PendingImage[]>(
+    saved.images,
+  )
+  const [pendingFiles, setPendingFiles] = createSignal<PendingFile[]>(
+    saved.files,
+  )
+  // Keep the unsent draft per conversation (previews are revoked on send/remove only).
+  createEffect(
+    () => ({ text: draft(), images: pendingImages(), files: pendingFiles() }),
+    (d) => saveDraft(conversationId, d),
+  )
   const [attachError, setAttachError] = createSignal<string | null>(null)
   const [imageAttachNotice, setImageAttachNotice] = createSignal<string | null>(
     null,
@@ -196,6 +214,7 @@ function ChatThreadSession(props: {
     isOverThreshold(sessionTotalCost() ?? 0, costThreshold()),
   )
 
+  let lastSent: { providerId: string; modelId: string } | undefined
   const chat = useChat({
     id: conversationId,
     initialMessages,
@@ -235,11 +254,12 @@ function ChatThreadSession(props: {
         chat.setMessages(next as UIMessage[])
       })
     },
-    connection: stream((messages, _data, abortSignal) =>
-      runAgent({
+    connection: stream((messages, _data, abortSignal) => {
+      lastSent = { providerId: props.providerId, modelId: selectedModel() }
+      return runAgent({
         apiKey: props.openRouterApiKey.trim(),
-        providerId: props.providerId,
-        model: selectedModel(),
+        providerId: lastSent.providerId,
+        model: lastSent.modelId,
         messages,
         systemPrompt: composeSystemPrompt(skillIds(), skills()),
         tools: props.supportsTools
@@ -249,8 +269,8 @@ function ChatThreadSession(props: {
             })
           : [],
         abortSignal,
-      }),
-    ),
+      })
+    }),
     onFinish: () => {
       commitConversationMessages()
     },
@@ -278,7 +298,14 @@ function ChatThreadSession(props: {
   createEffect(
     () => chat.error(),
     (error) => {
-      if (error) scheduleCommitCurrentMessages()
+      if (!error) return
+      scheduleCommitCurrentMessages()
+      const sent = lastSent
+      const info = classifyChatError(error, {
+        hasPartialResponse: hasAssistantOutput(chat.messages().at(-1)),
+      })
+      if (sent && info.kind === 'model-unavailable')
+        props.onModelUnavailable?.(sent.providerId, sent.modelId)
     },
   )
 
@@ -310,6 +337,16 @@ function ChatThreadSession(props: {
     if (!parts || parts.length === 0) return
     const truncated = messagesBefore(chat.messages(), message.id)
     if (!truncated) return
+    const following = chat.messages().slice(truncated.length + 1)
+    const laterCount =
+      following.length - (following[0]?.role === 'assistant' ? 1 : 0)
+    if (
+      laterCount > 0 &&
+      !window.confirm(
+        `This will permanently remove ${laterCount} later message${laterCount === 1 ? '' : 's'} from this chat. Continue?`,
+      )
+    )
+      return
     chat.setMessages(truncated)
     commitConversationMessages(truncated as ChatUIMessage[])
     const sendPromise = chat.sendMessage({
@@ -356,9 +393,6 @@ function ChatThreadSession(props: {
       if (imageButtonPulseTimer != null) {
         clearTimeout(imageButtonPulseTimer)
         imageButtonPulseTimer = null
-      }
-      for (const p of pendingImages()) {
-        URL.revokeObjectURL(p.previewUrl)
       }
       commitConversationMessages()
     }
@@ -512,6 +546,7 @@ function ChatThreadSession(props: {
     if (parts.length === 0) return
 
     setDraft('')
+    clearDraft(conversationId)
     for (const p of imgs) URL.revokeObjectURL(p.previewUrl)
     setPendingImages([])
     setPendingFiles([])

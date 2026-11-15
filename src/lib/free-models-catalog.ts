@@ -38,7 +38,7 @@ export function buildFreeModelsCatalog(raw: unknown): FreeModelsCatalog {
   const providers = raw as Record<string, { models?: Record<string, unknown> }>
 
   for (const [providerId, devId] of Object.entries(MODELS_DEV_PROVIDERS)) {
-    const models = providers[devId!]?.models
+    const models = providers[devId]?.models
     if (!models || typeof models !== 'object') continue
     const out: CatalogModel[] = []
     for (const [key, value] of Object.entries(models)) {

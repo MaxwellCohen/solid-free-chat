@@ -26,11 +26,14 @@ type PendingRun = (result: SandboxResult) => void
 
 let frame: HTMLIFrameElement | null = null
 let frameReady: Promise<HTMLIFrameElement> | null = null
+let messageHandler: ((event: MessageEvent) => void) | null = null
 const pending = new Map<string, PendingRun>()
+
+const READY_TIMEOUT_MS = 8_000
 
 function ensureFrame(): Promise<HTMLIFrameElement> {
   if (frameReady) return frameReady
-  frameReady = new Promise((resolve) => {
+  const ready = new Promise<HTMLIFrameElement>((resolve) => {
     const el = document.createElement('iframe')
     el.setAttribute('sandbox', 'allow-scripts')
     el.setAttribute('aria-hidden', 'true')
@@ -40,7 +43,10 @@ function ensureFrame(): Promise<HTMLIFrameElement> {
 
     const onMessage = (event: MessageEvent) => {
       if (event.source !== el.contentWindow) return
-      const data = event.data as { type?: string; id?: string } & SandboxResult
+      const data = event.data as {
+        type?: string
+        id?: string
+      } & Partial<SandboxResult>
       if (data.type === 'ready') {
         resolve(el)
         return
@@ -49,7 +55,7 @@ function ensureFrame(): Promise<HTMLIFrameElement> {
         const done = pending.get(data.id)
         pending.delete(data.id)
         done?.({
-          ok: data.ok,
+          ok: data.ok ?? false,
           output: data.output ?? '',
           result: data.result,
           error: data.error,
@@ -57,11 +63,26 @@ function ensureFrame(): Promise<HTMLIFrameElement> {
         })
       }
     }
+    messageHandler = onMessage
     window.addEventListener('message', onMessage)
     document.body.appendChild(el)
     frame = el
   })
-  return frameReady
+  frameReady = ready
+  return ready
+}
+
+/** Resolves the frame, or `undefined` (after tearing it down) if it never says `ready`. */
+async function frameOrTimeout(): Promise<HTMLIFrameElement | undefined> {
+  const ready = ensureFrame()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => resolve(undefined), READY_TIMEOUT_MS)
+  })
+  const el = await Promise.race([ready, timeout])
+  clearTimeout(timer)
+  if (!el && frameReady === ready) resetSandbox()
+  return el
 }
 
 export async function runInSandbox(
@@ -69,23 +90,37 @@ export async function runInSandbox(
   options: { timeoutMs: number; signal?: AbortSignal },
 ): Promise<SandboxResult> {
   if (typeof document === 'undefined') {
-    return { ok: false, output: '', error: 'Sandbox is only available in the browser.' }
+    return {
+      ok: false,
+      output: '',
+      error: 'Sandbox is only available in the browser.',
+    }
   }
-  const el = await ensureFrame()
   const id = crypto.randomUUID()
+  let frameEl: HTMLIFrameElement | undefined
   return new Promise<SandboxResult>((resolve) => {
     // Backstop in case the iframe itself is wedged (e.g. worker creation blocked).
     const backstop = setTimeout(
       () => {
         pending.delete(id)
-        resolve({ ok: false, output: '', timedOut: true, error: 'Sandbox did not respond.' })
+        resolve({
+          ok: false,
+          output: '',
+          timedOut: true,
+          error: 'Sandbox did not respond.',
+        })
       },
-      options.timeoutMs + 5_000,
+      options.timeoutMs + READY_TIMEOUT_MS + 5_000,
     )
     const onAbort = () => {
       clearTimeout(backstop)
       pending.delete(id)
+      frameEl?.contentWindow?.postMessage({ type: 'cancel', id }, '*')
       resolve({ ok: false, output: '', error: 'Aborted.' })
+    }
+    if (options.signal?.aborted) {
+      onAbort()
+      return
     }
     options.signal?.addEventListener('abort', onAbort, { once: true })
     pending.set(id, (result) => {
@@ -93,19 +128,31 @@ export async function runInSandbox(
       options.signal?.removeEventListener('abort', onAbort)
       resolve(result)
     })
-    el.contentWindow?.postMessage(
-      { type: 'run', id, code, timeoutMs: options.timeoutMs },
-      '*',
-    )
+    void frameOrTimeout().then((el) => {
+      if (!pending.has(id)) return
+      if (!el) {
+        const done = pending.get(id)
+        pending.delete(id)
+        done?.({ ok: false, output: '', error: 'Sandbox failed to start.' })
+        return
+      }
+      frameEl = el
+      el.contentWindow?.postMessage(
+        { type: 'run', id, code, timeoutMs: options.timeoutMs },
+        '*',
+      )
+    })
   })
 }
 
 /** Tear down the sandbox iframe. */
 export function resetSandbox() {
-  for (const done of pending.values()) {
-    done({ ok: false, output: '', error: 'Sandbox was reset.' })
-  }
+  const done = [...pending.values()]
   pending.clear()
+  for (const fn of done)
+    fn({ ok: false, output: '', error: 'Sandbox was reset.' })
+  if (messageHandler) window.removeEventListener('message', messageHandler)
+  messageHandler = null
   frame?.remove()
   frame = null
   frameReady = null

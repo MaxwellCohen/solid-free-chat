@@ -1,11 +1,8 @@
 import { For, Match, Show, Switch, createSignal, onSettled } from 'solid-js'
 import { Link, createFileRoute } from '@tanstack/solid-router'
 import type { ChatUIMessage } from '../store/chat.store'
-import {
-  decodeSharedChat,
-  sharedChatToUIMessages,
-  type SharedChatV1,
-} from '../lib/chat-share'
+import type { SharedChatV1 } from '../lib/chat-share'
+import { decodeSharedChat, sharedChatToUIMessages } from '../lib/chat-share'
 import { MessageParts } from '../components/chat/ChatMessageParts'
 
 export const Route = createFileRoute('/share')({
@@ -33,7 +30,10 @@ function SharePage() {
     return () => window.removeEventListener('hashchange', onHashChange)
   })
 
+  let loadId = 0
+
   async function loadFromHash() {
+    const id = ++loadId
     const hash = window.location.hash
     if (!hash || hash === '#' || hash === '#v1.') {
       setView({
@@ -43,6 +43,7 @@ function SharePage() {
       return
     }
     const chat = await decodeSharedChat(hash)
+    if (id !== loadId) return
     if (!chat) {
       setView({
         status: 'error',

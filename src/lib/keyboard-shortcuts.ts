@@ -88,8 +88,7 @@ export function matchesShortcut(
   chord: ShortcutChord,
 ): boolean {
   const key = event.key.length === 1 ? event.key.toLowerCase() : event.key
-  const expected =
-    chord.key.length === 1 ? chord.key.toLowerCase() : chord.key
+  const expected = chord.key.length === 1 ? chord.key.toLowerCase() : chord.key
   if (key !== expected) return false
   if (Boolean(chord.mod) !== modKey(event)) return false
   if (Boolean(chord.shift) !== event.shiftKey) return false
@@ -106,13 +105,6 @@ export function findMatchingShortcut(
   event: KeyboardEvent,
 ): ShortcutDefinition | undefined {
   return CHAT_SHORTCUTS.find((def) => matchesShortcut(event, def.keys))
-}
-
-export function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false
-  if (target.isContentEditable) return true
-  const tag = target.tagName
-  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
 }
 
 export function formatShortcutChord(chord: ShortcutChord): string {

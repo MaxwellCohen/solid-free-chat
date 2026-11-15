@@ -1,10 +1,12 @@
 import { createSignal, onCleanup } from 'solid-js'
 import type { ChatAppState } from './chat.store'
-import { chatStore, chatActions, chatSelectors } from './chat.store'
+import { chatStore, chatActions } from './chat.store'
 
 type ReadableStore<TState> = {
-  get(): TState
-  subscribe(onStoreChange: (state: TState) => void): { unsubscribe(): void }
+  get: () => TState
+  subscribe: (onStoreChange: (state: TState) => void) => {
+    unsubscribe: () => void
+  }
 }
 
 /**
@@ -17,11 +19,13 @@ function useSelector<TState, TSelected>(
   options?: { compare?: (previous: TSelected, next: TSelected) => boolean },
 ) {
   const compare = options?.compare ?? Object.is
+  // Matches Solid's createSignal overload, which excludes `Function` values.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
   type Stored = Exclude<TSelected, Function>
   const [selected, setSelected] = createSignal(
     selector(source.get()) as Stored,
     {
-      equals: (previous, next) => compare(previous as TSelected, next as TSelected),
+      equals: (previous, next) => compare(previous, next),
     },
   )
   const subscription = source.subscribe((state) => {
@@ -55,8 +59,4 @@ export function useChatStore<TSelected = ChatAppState>(
 
 export function useChatActions() {
   return chatActions
-}
-
-export function useChatSelectors() {
-  return chatSelectors
 }

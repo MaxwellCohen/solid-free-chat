@@ -7,8 +7,7 @@ export const EXPORT_VERSION = 1
 export const MAX_IMPORT_BYTES = 50 * 1024 * 1024
 
 export type ChatImportResult =
-  | { ok: true; state: ChatAppState }
-  | { ok: false; error: string }
+  { ok: true; state: ChatAppState } | { ok: false; error: string }
 
 function newId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -37,7 +36,10 @@ function serializeState(state: ChatAppState, now: number): string {
 }
 
 /** JSON backup of every chat (and skills). */
-export function serializeAllChats(state: ChatAppState, now = Date.now()): string {
+export function serializeAllChats(
+  state: ChatAppState,
+  now = Date.now(),
+): string {
   return serializeState(state, now)
 }
 
@@ -49,13 +51,17 @@ export function serializeChat(
 ): string | null {
   const conversation = state.conversationsById[id]
   if (!conversation) return null
-  const skills = state.skills.filter((s) => conversation.skillIds.includes(s.id))
+  const skills = state.skills.filter((s) =>
+    conversation.skillIds.includes(s.id),
+  )
   return serializeState(
     {
       ...state,
       conversationOrder: [id],
       conversationsById: { [id]: conversation },
-      messagesByConversationId: { [id]: state.messagesByConversationId[id] ?? [] },
+      messagesByConversationId: {
+        [id]: state.messagesByConversationId[id] ?? [],
+      },
       currentConversationId: id,
       skills,
     },
@@ -77,7 +83,11 @@ export function chatToMarkdown(state: ChatAppState, id: string): string | null {
       .trim()
     if (!text) continue
     const label =
-      message.role === 'user' ? 'User' : message.role === 'assistant' ? 'Assistant' : 'System'
+      message.role === 'user'
+        ? 'User'
+        : message.role === 'assistant'
+          ? 'Assistant'
+          : 'System'
     lines.push(`## ${label}`, '', text, '')
   }
   return lines.join('\n')
@@ -97,7 +107,8 @@ export function exportFileName(title: string, ext: string): string {
 
 /** Parse + validate + normalize an import file's text. */
 export function parseChatImport(text: string): ChatImportResult {
-  if (text.length > MAX_IMPORT_BYTES) return { ok: false, error: 'File is too large.' }
+  if (text.length > MAX_IMPORT_BYTES)
+    return { ok: false, error: 'File is too large.' }
   let raw: unknown
   try {
     raw = JSON.parse(text)
@@ -165,7 +176,8 @@ export function mergeImportedChats(
       id,
       skillIds: conversation.skillIds.map((s) => skillIdMap.get(s) ?? s),
     }
-    messagesByConversationId[id] = imported.messagesByConversationId[oldId] ?? []
+    messagesByConversationId[id] =
+      imported.messagesByConversationId[oldId] ?? []
     addedIds.push(id)
   }
 

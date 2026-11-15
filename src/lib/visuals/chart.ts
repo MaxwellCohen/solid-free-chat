@@ -91,7 +91,10 @@ export function validateChartSpec(input: unknown): ChartSpecResult {
     const data = dataset.data
     const label = optionalString(dataset.label) ?? `Series ${index + 1}`
     if (datasets.some((existing) => existing.label === label)) {
-      return { ok: false, error: `Dataset labels must be unique ("${label}" repeats).` }
+      return {
+        ok: false,
+        error: `Dataset labels must be unique ("${label}" repeats).`,
+      }
     }
     if (!Array.isArray(data) || data.length === 0) {
       return {

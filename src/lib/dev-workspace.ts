@@ -45,6 +45,9 @@ function loadBundler(): Promise<typeof EsbuildApi> {
     await api.initialize({ wasmURL })
     return api
   })()
+  globalBundler.__esbuildBundler.catch(() => {
+    globalBundler.__esbuildBundler = undefined
+  })
   return globalBundler.__esbuildBundler
 }
 
@@ -87,21 +90,25 @@ export type BuildResult =
 
 /** Bundles the workspace and returns a self-contained HTML document. */
 export async function buildWorkspace(files: Files): Promise<BuildResult> {
-  const html = files['index.html'] as string | undefined
+  const html = Object.hasOwn(files, 'index.html')
+    ? files['index.html']
+    : undefined
   if (html === undefined) return { ok: false, errors: ['Missing index.html.'] }
-  const entry = ENTRIES.find((name) => name in files)
+  const entry = ENTRIES.find((name) => Object.hasOwn(files, name))
   if (!entry) {
     return {
       ok: false,
       errors: ['Missing entry file (main.js, main.ts, main.jsx or main.tsx).'],
     }
   }
-  const esbuild = await loadBundler()
 
   const resolveFile = (path: string) =>
-    EXTENSIONS.map((ext) => `${path}${ext}`).find((p) => p in files)
+    EXTENSIONS.map((ext) => `${path}${ext}`).find((p) =>
+      Object.hasOwn(files, p),
+    )
 
   try {
+    const esbuild = await loadBundler()
     const result = await esbuild.build({
       entryPoints: [entry],
       bundle: true,
@@ -250,14 +257,17 @@ export function createWorkspaceTools(store: WorkspaceStore): Tool[] {
       const { path } = input as { path?: string }
       if (!path) return { ok: true, files: Object.keys(store.files()).sort() }
       const safe = normalizePath(path)
-      const content = safe === undefined ? undefined : store.files()[safe]
+      const content =
+        safe === undefined || !Object.hasOwn(store.files(), safe)
+          ? undefined
+          : store.files()[safe]
       return content === undefined
         ? { ok: false, error: `No such file: ${path}` }
         : { ok: true, content }
     }),
     deleteFileTool.server((input) => {
       const safe = normalizePath((input as { path: string }).path)
-      if (!safe || !(safe in store.files()))
+      if (!safe || !Object.hasOwn(store.files(), safe))
         return { ok: false, error: 'No such file.' }
       store.remove(safe)
       return { ok: true }

@@ -29,7 +29,10 @@ type ManagedCallbacks =
   | 'onSessionGeneratingChange'
   | 'onQueueChange'
 
-export type UseChatOptions = DistributedOmit<ChatClientOptions, ManagedCallbacks> & {
+export type UseChatOptions = DistributedOmit<
+  ChatClientOptions,
+  ManagedCallbacks
+> & {
   live?: boolean
 }
 
@@ -59,7 +62,13 @@ export function useChat(options: UseChatOptions) {
   const [queue, setQueue] = createSignal<QueuedMessage[]>([])
 
   const client = createMemo(() => {
-    const { live: _live, connection, fetcher: _fetcher, devtools, ...rest } = options
+    const {
+      live: _live,
+      connection,
+      fetcher: _fetcher,
+      devtools,
+      ...rest
+    } = options
     void _live
     void _fetcher
     const shared = {
@@ -154,7 +163,9 @@ export function useChat(options: UseChatOptions) {
     for (let i = list.length - 1; i > lastUserIndex; i--) {
       const message = list[i]
       if (message?.role !== 'assistant') continue
-      const part = message.parts.find((entry) => entry.type === 'structured-output')
+      const part = message.parts.find(
+        (entry) => entry.type === 'structured-output',
+      )
       if (part) return part
     }
     return null
@@ -210,12 +221,17 @@ export function useChat(options: UseChatOptions) {
       const part = activeStructuredPart()
       if (!part || part.type !== 'structured-output') return {}
       const value = part.partial ?? part.data ?? {}
-      if (value && typeof value === 'object') return value as Record<string, unknown>
+      if (value && typeof value === 'object')
+        return value as Record<string, unknown>
       return {}
     }),
     final: createMemo(() => {
       const part = activeStructuredPart()
-      if (!part || part.type !== 'structured-output' || part.status !== 'complete') {
+      if (
+        !part ||
+        part.type !== 'structured-output' ||
+        part.status !== 'complete'
+      ) {
         return null
       }
       return part.data

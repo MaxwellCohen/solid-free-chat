@@ -10,47 +10,81 @@ const VERSION = '__SW_VERSION__'
 const PAGES = `pages-${VERSION}`
 const ASSETS = `assets-${VERSION}`
 const STATIC = `static-${VERSION}`
+const META = 'sw-meta'
+const META_URL = '/__sw-meta'
+const NETWORK_TIMEOUT_MS = 4000
 const PRECACHE = ['/', '/manifest.json', '/favicon.svg', '/logo192.png']
+
+async function readMeta() {
+  const cache = await caches.open(META)
+  const res = await cache.match(META_URL)
+  return res ? res.json().catch(() => ({})) : {}
+}
+
+// Versions are commit hashes (unordered), so install records which asset cache
+// was current before this one. Activate keeps that previous cache, because tabs
+// still open on the old build keep lazy-loading its hashed `/assets/*` chunks.
+async function recordPreviousAssets() {
+  const meta = await readMeta()
+  const previous = meta.current === ASSETS ? meta.previous : meta.current
+  const cache = await caches.open(META)
+  await cache.put(
+    META_URL,
+    new Response(JSON.stringify({ current: ASSETS, previous })),
+  )
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(STATIC)
       .then((cache) => cache.addAll(PRECACHE))
+      .then(recordPreviousAssets)
       .then(() => self.skipWaiting()),
   )
 })
 
 self.addEventListener('activate', (event) => {
-  const keep = new Set([PAGES, ASSETS, STATIC])
   event.waitUntil(
-    caches
-      .keys()
-      .then((keys) =>
-        Promise.all(keys.filter((k) => !keep.has(k)).map((k) => caches.delete(k))),
-      )
+    readMeta()
+      .then(async (meta) => {
+        const keep = new Set([PAGES, ASSETS, STATIC, META, meta.previous])
+        const keys = await caches.keys()
+        await Promise.all(
+          keys.filter((k) => !keep.has(k)).map((k) => caches.delete(k)),
+        )
+      })
       .then(() => self.clients.claim()),
   )
 })
 
 async function networkFirstPage(request) {
   const cache = await caches.open(PAGES)
+  const exact = await cache.match(request, { ignoreSearch: true })
+  const controller = new AbortController()
+  // Only give up on a slow network when this exact page is already cached.
+  const timer = exact
+    ? setTimeout(() => controller.abort(), NETWORK_TIMEOUT_MS)
+    : undefined
   try {
-    const response = await fetch(request)
+    const response = await fetch(request, { signal: controller.signal })
     if (response.ok) cache.put(request, response.clone())
     return response
   } catch (err) {
     const cached =
-      (await cache.match(request, { ignoreSearch: true })) ||
-      (await caches.match('/'))
+      exact || (await cache.match('/')) || (await caches.match('/'))
     if (cached) return cached
     throw err
+  } finally {
+    clearTimeout(timer)
   }
 }
 
 async function cacheFirst(request) {
   const cache = await caches.open(ASSETS)
-  const cached = await cache.match(request)
+  // Fall back to any cache: tabs still on the previous build ask for its
+  // chunks, which only the kept previous asset cache still has.
+  const cached = (await cache.match(request)) || (await caches.match(request))
   if (cached) return cached
   const response = await fetch(request)
   if (response.ok) cache.put(request, response.clone())

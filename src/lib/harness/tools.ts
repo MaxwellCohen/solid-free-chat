@@ -26,7 +26,10 @@ export interface HarnessSkillSummary {
 export interface HarnessSkillsApi {
   list: () => HarnessSkillSummary[]
   create: (name: string, instructions: string) => string | undefined
-  update: (skillId: string, patch: { name?: string; instructions?: string }) => boolean
+  update: (
+    skillId: string,
+    patch: { name?: string; instructions?: string },
+  ) => boolean
   setAttached: (skillId: string, attached: boolean) => boolean
 }
 
@@ -121,8 +124,14 @@ const createSkillTool = toolDefinition({
   inputSchema: {
     type: 'object',
     properties: {
-      name: { type: 'string', description: 'Short, descriptive skill name (max 120 chars).' },
-      instructions: { type: 'string', description: 'The instructions the skill adds to the system prompt.' },
+      name: {
+        type: 'string',
+        description: 'Short, descriptive skill name (max 120 chars).',
+      },
+      instructions: {
+        type: 'string',
+        description: 'The instructions the skill adds to the system prompt.',
+      },
       attach: {
         type: 'boolean',
         description: 'Attach the new skill to this chat (default true).',
@@ -182,7 +191,10 @@ function createSkillTools({ skills }: HarnessToolContext): Tool[] {
       }
       const id = skills.create(name, instructions)
       if (!id) {
-        return { ok: false, error: 'Both name and instructions must be non-empty.' }
+        return {
+          ok: false,
+          error: 'Both name and instructions must be non-empty.',
+        }
       }
       const attached = attach !== false && skills.setAttached(id, true)
       return { ok: true, skill_id: id, attached }
@@ -194,7 +206,10 @@ function createSkillTools({ skills }: HarnessToolContext): Tool[] {
         instructions?: string
       }
       if (name === undefined && instructions === undefined) {
-        return { ok: false, error: 'Provide name and/or instructions to update.' }
+        return {
+          ok: false,
+          error: 'Provide name and/or instructions to update.',
+        }
       }
       if (!skills.list().some((skill) => skill.id === skill_id)) {
         return unknownSkill(skill_id)
@@ -204,7 +219,10 @@ function createSkillTools({ skills }: HarnessToolContext): Tool[] {
         : { ok: false, error: 'Name and instructions cannot be empty.' }
     }),
     setSkillAttachedTool.server((input) => {
-      const { skill_id, attached } = input as { skill_id: string; attached: boolean }
+      const { skill_id, attached } = input as {
+        skill_id: string
+        attached: boolean
+      }
       return skills.setAttached(skill_id, attached)
         ? { ok: true, skill_id, attached }
         : unknownSkill(skill_id)
@@ -357,14 +375,15 @@ export const HARNESS_TOOLS: readonly HarnessToolDescriptor[] = [
   {
     id: 'skills',
     label: 'Skills',
-    summary: 'Lets the model list, create, edit, and attach skills for this chat.',
+    summary:
+      'Lets the model list, create, edit, and attach skills for this chat.',
     enabledByDefault: true,
     create: createSkillTools,
   },
   {
     id: 'get_current_datetime',
     label: 'Date & time',
-    summary: "Reads your local date, time, and timezone.",
+    summary: 'Reads your local date, time, and timezone.',
     enabledByDefault: true,
     create: () =>
       currentDateTimeTool.server(() => {
@@ -385,13 +404,17 @@ export const HARNESS_TOOLS: readonly HarnessToolDescriptor[] = [
   {
     id: 'run_javascript',
     label: 'JavaScript sandbox',
-    summary: 'Runs JS in an isolated Web Worker for calculations and data work.',
+    summary:
+      'Runs JS in an isolated Web Worker for calculations and data work.',
     enabledByDefault: true,
     create: () =>
-      runJavaScriptTool.server(async (input) => {
+      runJavaScriptTool.server(async (input, context) => {
         const { code } = input as { code: string }
         return sandboxResultToToolOutput(
-          await runInSandbox(code, { timeoutMs: 15_000 }),
+          await runInSandbox(code, {
+            timeoutMs: 15_000,
+            signal: context?.abortSignal,
+          }),
         )
       }),
   },

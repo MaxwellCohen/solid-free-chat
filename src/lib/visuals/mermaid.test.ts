@@ -3,10 +3,13 @@ import { renderMermaidSvg, validateMermaid } from './mermaid'
 
 describe('mermaid (Pele)', () => {
   it('validates and renders diagrams', async () => {
-    const flowchart = 'flowchart TD\n  A[Start] --> B{Ok?}\n  B -->|yes| C[Done]'
+    const flowchart =
+      'flowchart TD\n  A[Start] --> B{Ok?}\n  B -->|yes| C[Done]'
     expect(await validateMermaid(flowchart)).toEqual({ ok: true })
     expect(await renderMermaidSvg(flowchart)).toMatch(/^<svg[\s\S]*Start/)
-    expect(await validateMermaid('sequenceDiagram\n  Alice->>Bob: Hi')).toEqual({ ok: true })
+    expect(await validateMermaid('sequenceDiagram\n  Alice->>Bob: Hi')).toEqual(
+      { ok: true },
+    )
   })
 
   it('reports syntax errors for the model to fix', async () => {
