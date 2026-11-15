@@ -78,6 +78,9 @@ export async function getProviderModelOptionsCached(
             name: meta.name,
             inputModalities: meta.inputModalities,
             supportsTools: meta.supportsTools,
+            ...(meta.contextWindow
+              ? { contextLength: meta.contextWindow }
+              : {}),
           }
         : { id, name: id },
     )

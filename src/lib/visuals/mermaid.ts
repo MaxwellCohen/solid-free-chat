@@ -73,13 +73,14 @@ export function enhanceMermaidBlocks(
   if (pending.length === 0) return () => {}
 
   let cancelled = false
+  const isCancelled = () => cancelled
   const timer = setTimeout(() => {
     void (async () => {
       for (const pre of pending) {
         if (cancelled) return
         try {
           const svg = await renderMermaidSvg(pre.textContent)
-          if (!cancelled && pre.isConnected) replaceWithSvg(pre, svg)
+          if (!isCancelled() && pre.isConnected) replaceWithSvg(pre, svg)
         } catch {
           // Invalid or incomplete diagram: leave the source visible.
         }

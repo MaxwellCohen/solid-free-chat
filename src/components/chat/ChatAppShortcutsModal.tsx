@@ -2,6 +2,7 @@ import { For, Show, onSettled } from 'solid-js'
 import { bindModalFocus } from '../../lib/modal-focus'
 import {
   CHAT_SHORTCUTS,
+  THREAD_SHORTCUTS,
   formatShortcutChord,
 } from '../../lib/keyboard-shortcuts'
 
@@ -65,6 +66,21 @@ function ShortcutsModalDialog(props: { onClose: () => void }) {
                 <span class="text-foreground">{shortcut.label}</span>
                 <kbd class="border-border bg-muted text-muted-foreground inline-flex shrink-0 items-center rounded-md border px-2 py-0.5 font-mono text-xs tracking-wide">
                   {formatShortcutChord(shortcut.keys)}
+                </kbd>
+              </li>
+            )}
+          </For>
+        </ul>
+        <h3 class="text-muted-foreground -mb-2 text-xs font-medium">
+          Message list (when not typing)
+        </h3>
+        <ul class="flex flex-col gap-2">
+          <For each={[...THREAD_SHORTCUTS]}>
+            {(shortcut) => (
+              <li class="flex items-center justify-between gap-4 text-sm">
+                <span class="text-foreground">{shortcut.label}</span>
+                <kbd class="border-border bg-muted text-muted-foreground inline-flex shrink-0 items-center rounded-md border px-2 py-0.5 font-mono text-xs tracking-wide">
+                  {shortcut.key}
                 </kbd>
               </li>
             )}

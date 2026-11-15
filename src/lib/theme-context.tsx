@@ -1,11 +1,13 @@
 import { createContext, useContext } from 'solid-js'
 import type { Accessor, ParentProps } from 'solid-js'
 
-import type { ThemePreference } from './theme-preference'
+import type { AccentPreference, ThemePreference } from './theme-preference'
 
 export type ThemeContextValue = {
   preference: Accessor<ThemePreference>
   setPreference: (pref: ThemePreference) => void
+  accent: Accessor<AccentPreference>
+  setAccent: (accent: AccentPreference) => void
   effective: Accessor<'light' | 'dark'>
 }
 

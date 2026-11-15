@@ -12,8 +12,12 @@ export type ShortcutId =
   | 'focusComposer'
   | 'shareChat'
   | 'openSkills'
+  | 'commandPalette'
+  | 'findInChat'
   | 'stopGeneration'
   | 'showHelp'
+  | 'toggleOutline'
+  | 'zenMode'
 
 export type ShortcutDefinition = {
   id: ShortcutId
@@ -54,6 +58,16 @@ export const CHAT_SHORTCUTS: readonly ShortcutDefinition[] = [
     keys: { key: 'k', mod: true, shift: true },
   },
   {
+    id: 'commandPalette',
+    label: 'Command palette',
+    keys: { key: 'k', mod: true },
+  },
+  {
+    id: 'findInChat',
+    label: 'Find in chat',
+    keys: { key: 'f', mod: true },
+  },
+  {
     id: 'stopGeneration',
     label: 'Stop generation',
     keys: { key: 'Escape' },
@@ -63,7 +77,26 @@ export const CHAT_SHORTCUTS: readonly ShortcutDefinition[] = [
     label: 'Keyboard shortcuts',
     keys: { key: '/', mod: true },
   },
+  {
+    id: 'toggleOutline',
+    label: 'Toggle outline',
+    keys: { key: 'u', mod: true, shift: true },
+  },
+  {
+    id: 'zenMode',
+    label: 'Zen mode (Esc exits)',
+    keys: { key: 'z', mod: true, shift: true },
+  },
 ] as const
+
+/** Bare-key shortcuts for the message thread; ignored while typing (see message-nav.ts). */
+export const THREAD_SHORTCUTS: ReadonlyArray<{ label: string; key: string }> = [
+  { label: 'Next message', key: 'j' },
+  { label: 'Previous message', key: 'k' },
+  { label: 'Copy focused message', key: 'c' },
+  { label: 'Bookmark focused message', key: 'b' },
+  { label: 'Clear message focus', key: 'Esc' },
+]
 
 export function isMacPlatform(): boolean {
   if (typeof navigator === 'undefined') return false
@@ -123,4 +156,11 @@ export function formatShortcutChord(chord: ShortcutChord): string {
           : chord.key
   parts.push(keyLabel)
   return parts.join(mac ? '' : '+')
+}
+
+export function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  if (target.isContentEditable) return true
+  const tag = target.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
 }

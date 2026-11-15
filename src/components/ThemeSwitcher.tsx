@@ -2,6 +2,7 @@ import { For } from 'solid-js'
 import { Computer, Moon, Sun } from './icons'
 
 import { useTheme } from '~/lib/theme-context'
+import { ACCENTS, ACCENT_SWATCH } from '~/lib/theme-preference'
 import type { ThemePreference } from '~/lib/theme-preference'
 
 const OPTIONS: Array<{
@@ -18,34 +19,59 @@ export default function ThemeSwitcher() {
   const theme = useTheme()
 
   return (
-    <div
-      class="border-border bg-muted/50 inline-flex rounded-lg border p-0.5"
-      role="group"
-      aria-label="Theme"
-    >
-      <For each={OPTIONS}>
-        {(opt) => (
-          <button
-            type="button"
-            class={[
-              'text-muted-foreground hover:text-foreground inline-flex size-8 items-center justify-center rounded-md transition-colors',
-              {
-                'bg-background text-foreground shadow-sm':
-                  theme.preference() === opt.value,
-              },
-            ]}
-            aria-label={opt.label}
-            aria-pressed={theme.preference() === opt.value ? 'true' : 'false'}
-            onClick={() => theme.setPreference(opt.value)}
-          >
-            <opt.Icon
-              class="size-4 shrink-0"
-              strokeWidth={2}
-              aria-hidden="true"
+    <div class="inline-flex items-center gap-2">
+      <div
+        class="border-border bg-muted/50 inline-flex rounded-lg border p-0.5"
+        role="group"
+        aria-label="Theme"
+      >
+        <For each={OPTIONS}>
+          {(opt) => (
+            <button
+              type="button"
+              class={[
+                'text-muted-foreground hover:text-foreground inline-flex size-8 items-center justify-center rounded-md transition-colors',
+                {
+                  'bg-background text-foreground shadow-sm':
+                    theme.preference() === opt.value,
+                },
+              ]}
+              aria-label={opt.label}
+              aria-pressed={theme.preference() === opt.value ? 'true' : 'false'}
+              onClick={() => theme.setPreference(opt.value)}
+            >
+              <opt.Icon
+                class="size-4 shrink-0"
+                strokeWidth={2}
+                aria-hidden="true"
+              />
+            </button>
+          )}
+        </For>
+      </div>
+      <div
+        class="inline-flex items-center gap-1 max-sm:hidden"
+        role="group"
+        aria-label="Accent color"
+      >
+        <For each={ACCENTS}>
+          {(a) => (
+            <button
+              type="button"
+              class={[
+                'size-4 rounded-full border transition-shadow',
+                theme.accent() === a
+                  ? 'ring-foreground ring-2 ring-offset-1'
+                  : 'border-border',
+              ]}
+              style={{ 'background-color': ACCENT_SWATCH[a] }}
+              aria-label={`Accent: ${a}`}
+              aria-pressed={theme.accent() === a ? 'true' : 'false'}
+              onClick={() => theme.setAccent(a)}
             />
-          </button>
-        )}
-      </For>
+          )}
+        </For>
+      </div>
     </div>
   )
 }

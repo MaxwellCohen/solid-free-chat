@@ -161,7 +161,7 @@ export function useChat(options: UseChatOptions) {
     }
     if (lastUserIndex === -1) return null
     for (let i = list.length - 1; i > lastUserIndex; i--) {
-      const message = list[i]
+      const message = list.at(i)
       if (message?.role !== 'assistant') continue
       const part = message.parts.find(
         (entry) => entry.type === 'structured-output',
@@ -219,7 +219,7 @@ export function useChat(options: UseChatOptions) {
     cancelQueued: (id: string) => client().cancelQueued(id),
     partial: createMemo((): Record<string, unknown> => {
       const part = activeStructuredPart()
-      if (!part || part.type !== 'structured-output') return {}
+      if (!part) return {}
       const value = part.partial ?? part.data ?? {}
       if (value && typeof value === 'object')
         return value as Record<string, unknown>

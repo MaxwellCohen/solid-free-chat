@@ -19,7 +19,7 @@ function useSelector<TState, TSelected>(
   options?: { compare?: (previous: TSelected, next: TSelected) => boolean },
 ) {
   const compare = options?.compare ?? Object.is
-  // Matches Solid's createSignal overload, which excludes `Function` values.
+  // Solid treats function values as lazy computes; keep the exact `Function` exclusion.
   // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
   type Stored = Exclude<TSelected, Function>
   const [selected, setSelected] = createSignal(
@@ -41,6 +41,7 @@ export type {
   ChatAppState,
   ChatConversation,
   ChatConversationWithMessages,
+  ChatProject,
   ChatSkill,
   TokenUsageSnapshot,
 } from './chat.store'

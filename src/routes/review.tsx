@@ -8,19 +8,19 @@ import {
   onSettled,
 } from 'solid-js'
 
-import { runAgent } from '../lib/harness/run-agent'
+import { runAgent } from '../lib/harness/run-agent-lazy'
 import { ModelSelect } from '../components/ModelSelect'
 import { loadToolModelSelection } from '../lib/model-options'
 import type { ModelSelection } from '../lib/model-options'
 import { loadStoredApiKey } from '../lib/openrouter-key-storage'
 import { getProvider } from '../lib/providers'
-import type { ReviewComment, ReviewFocus } from '../lib/writing-review'
 import {
   applySuggestion,
   buildReviewSystemPrompt,
   parseReviewComments,
   segmentText,
 } from '../lib/writing-review'
+import type { ReviewComment, ReviewFocus } from '../lib/writing-review'
 
 export const Route = createFileRoute('/review')({
   component: Review,

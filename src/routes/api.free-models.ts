@@ -1,9 +1,9 @@
 import { createFileRoute } from '@tanstack/solid-router'
-import type { FreeModelsCatalog } from '../lib/free-models-catalog'
 import {
   MODELS_DEV_URL,
   buildFreeModelsCatalog,
 } from '../lib/free-models-catalog'
+import type { FreeModelsCatalog } from '../lib/free-models-catalog'
 
 const FRESH_MS = 15 * 60_000
 const BACKOFF_MS = 60_000

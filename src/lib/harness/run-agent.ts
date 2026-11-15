@@ -20,6 +20,9 @@ export type RunAgentOptions = {
   model: string
   messages: unknown[]
   systemPrompt?: string
+  /** Undefined = provider default. */
+  temperature?: number
+  maxTokens?: number
   tools?: Tool[]
   abortSignal?: AbortSignal
 }
@@ -105,12 +108,28 @@ export function runAgent(options: RunAgentOptions): AsyncIterable<StreamChunk> {
 
   const systemPrompt = options.systemPrompt?.trim() ?? ''
   const tools = options.tools ?? []
+  // Each adapter spells the limit differently (request body shape).
+  const { temperature, maxTokens } = options
+  const usesResponses =
+    provider.id === 'openrouter' &&
+    messagesIncludeDocumentParts(options.messages)
+  const maxKey =
+    provider.id !== 'openrouter'
+      ? 'max_tokens'
+      : usesResponses
+        ? 'maxOutputTokens'
+        : 'maxCompletionTokens'
+  const modelOptions = {
+    ...(temperature !== undefined ? { temperature } : {}),
+    ...(maxTokens !== undefined ? { [maxKey]: maxTokens } : {}),
+  }
   // TanStack AI strips role=system UIMessages during conversion; the OpenRouter
   // adapter injects via systemPrompts (see mapTextOptionsToSDK).
   return chat({
     adapter: adapter as unknown as AnyTextAdapter,
     messages: options.messages as never,
     ...(systemPrompt.length > 0 ? { systemPrompts: [systemPrompt] } : {}),
+    ...(Object.keys(modelOptions).length > 0 ? { modelOptions } : {}),
     ...(tools.length > 0
       ? { tools, agentLoopStrategy: maxIterations(MAX_AGENT_ITERATIONS) }
       : {}),

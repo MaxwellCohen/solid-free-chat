@@ -22,6 +22,36 @@ body {
   }
 }
 
+/* Display preferences (src/lib/display-prefs.ts) set these data attributes on <html>. */
+:root {
+  --chat-font-size: 0.875rem;
+  --chat-message-width: 42rem;
+}
+:root[data-font='s'] {
+  --chat-font-size: 0.8125rem;
+}
+:root[data-font='l'] {
+  --chat-font-size: 1rem;
+}
+:root[data-font='xl'] {
+  --chat-font-size: 1.1875rem;
+}
+:root[data-width='narrow'] {
+  --chat-message-width: 32rem;
+}
+:root[data-width='wide'] {
+  --chat-message-width: 56rem;
+}
+.chat-bubble {
+  font-size: var(--chat-font-size);
+}
+:root[data-compact='1'] .chat-bubble {
+  padding-block: 0.375rem;
+}
+:root[data-hide-usage='1'] [data-usage-line] {
+  display: none;
+}
+
 code {
   font-family:
     source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
@@ -40,7 +70,7 @@ code {
   --secondary: oklch(0.967 0.001 286.375);
   --secondary-foreground: oklch(0.21 0.006 285.885);
   --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
+  --muted-foreground: oklch(0.5 0.016 285.938);
   --accent: oklch(0.967 0.001 286.375);
   --accent-foreground: oklch(0.21 0.006 285.885);
   --destructive: oklch(0.577 0.245 27.325);
@@ -98,6 +128,104 @@ code {
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(0.274 0.006 286.033);
   --sidebar-ring: oklch(0.442 0.017 285.786);
+}
+
+/* Accent palettes: override primary/ring/sidebar-primary. */
+:root[data-accent='indigo'] {
+  --primary: oklch(0.5 0.2 277);
+  --primary-foreground: oklch(0.99 0 0);
+  --ring: oklch(0.5 0.2 277);
+  --sidebar-primary: oklch(0.5 0.2 277);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-ring: oklch(0.5 0.2 277);
+}
+.dark[data-accent='indigo'] {
+  --primary: oklch(0.72 0.15 277);
+  --primary-foreground: oklch(0.2 0.04 277);
+  --ring: oklch(0.72 0.15 277);
+  --sidebar-primary: oklch(0.72 0.15 277);
+  --sidebar-primary-foreground: oklch(0.2 0.04 277);
+  --sidebar-ring: oklch(0.72 0.15 277);
+}
+:root[data-accent='emerald'] {
+  --primary: oklch(0.5 0.12 160);
+  --primary-foreground: oklch(0.99 0 0);
+  --ring: oklch(0.5 0.12 160);
+  --sidebar-primary: oklch(0.5 0.12 160);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-ring: oklch(0.5 0.12 160);
+}
+.dark[data-accent='emerald'] {
+  --primary: oklch(0.75 0.15 160);
+  --primary-foreground: oklch(0.2 0.04 160);
+  --ring: oklch(0.75 0.15 160);
+  --sidebar-primary: oklch(0.75 0.15 160);
+  --sidebar-primary-foreground: oklch(0.2 0.04 160);
+  --sidebar-ring: oklch(0.75 0.15 160);
+}
+:root[data-accent='rose'] {
+  --primary: oklch(0.5 0.2 17);
+  --primary-foreground: oklch(0.99 0 0);
+  --ring: oklch(0.5 0.2 17);
+  --sidebar-primary: oklch(0.5 0.2 17);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-ring: oklch(0.5 0.2 17);
+}
+.dark[data-accent='rose'] {
+  --primary: oklch(0.72 0.15 17);
+  --primary-foreground: oklch(0.2 0.04 17);
+  --ring: oklch(0.72 0.15 17);
+  --sidebar-primary: oklch(0.72 0.15 17);
+  --sidebar-primary-foreground: oklch(0.2 0.04 17);
+  --sidebar-ring: oklch(0.72 0.15 17);
+}
+:root[data-accent='amber'] {
+  --primary: oklch(0.55 0.15 70);
+  --primary-foreground: oklch(0.99 0 0);
+  --ring: oklch(0.55 0.15 70);
+  --sidebar-primary: oklch(0.55 0.15 70);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-ring: oklch(0.55 0.15 70);
+}
+.dark[data-accent='amber'] {
+  --primary: oklch(0.8 0.16 70);
+  --primary-foreground: oklch(0.2 0.04 70);
+  --ring: oklch(0.8 0.16 70);
+  --sidebar-primary: oklch(0.8 0.16 70);
+  --sidebar-primary-foreground: oklch(0.2 0.04 70);
+  --sidebar-ring: oklch(0.8 0.16 70);
+}
+:root[data-accent='sky'] {
+  --primary: oklch(0.5 0.12 235);
+  --primary-foreground: oklch(0.99 0 0);
+  --ring: oklch(0.5 0.12 235);
+  --sidebar-primary: oklch(0.5 0.12 235);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-ring: oklch(0.5 0.12 235);
+}
+.dark[data-accent='sky'] {
+  --primary: oklch(0.75 0.15 235);
+  --primary-foreground: oklch(0.2 0.04 235);
+  --ring: oklch(0.75 0.15 235);
+  --sidebar-primary: oklch(0.75 0.15 235);
+  --sidebar-primary-foreground: oklch(0.2 0.04 235);
+  --sidebar-ring: oklch(0.75 0.15 235);
+}
+:root[data-accent='violet'] {
+  --primary: oklch(0.5 0.2 293);
+  --primary-foreground: oklch(0.99 0 0);
+  --ring: oklch(0.5 0.2 293);
+  --sidebar-primary: oklch(0.5 0.2 293);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-ring: oklch(0.5 0.2 293);
+}
+.dark[data-accent='violet'] {
+  --primary: oklch(0.72 0.15 293);
+  --primary-foreground: oklch(0.2 0.04 293);
+  --ring: oklch(0.72 0.15 293);
+  --sidebar-primary: oklch(0.72 0.15 293);
+  --sidebar-primary-foreground: oklch(0.2 0.04 293);
+  --sidebar-ring: oklch(0.72 0.15 293);
 }
 
 @theme inline {
@@ -218,5 +346,82 @@ code {
     --ts-chart-tooltip-background: var(--popover);
     --ts-chart-tooltip-color: var(--popover-foreground);
     --ts-chart-tooltip-border: 1px solid var(--border);
+  }
+}
+
+::highlight(find-match) {
+  background-color: rgb(250 204 21 / 0.45);
+}
+::highlight(find-current) {
+  background-color: rgb(249 115 22 / 0.7);
+}
+
+/* Print / Save as PDF: only the expanded transcript (#print-root) is shown. */
+#print-root {
+  display: none;
+}
+@media print {
+  body > *:not(#print-root) {
+    display: none !important;
+  }
+  html,
+  body {
+    background: #fff !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  #print-root {
+    display: block;
+    color: #111 !important;
+    background: #fff !important;
+    font-size: 11pt;
+    line-height: 1.5;
+  }
+  #print-root * {
+    color: #111 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  #print-root h1 {
+    font-size: 18pt;
+    margin: 0 0 12pt;
+  }
+  #print-root .print-msg {
+    margin-bottom: 12pt;
+  }
+  #print-root .print-msg h2 {
+    font-size: 9pt;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin: 0 0 2pt;
+    color: #555 !important;
+  }
+  #print-root pre {
+    border: 1px solid #ccc;
+    padding: 6pt;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  #print-root ul {
+    list-style: disc;
+    padding-left: 1.5em;
+  }
+  #print-root ol {
+    list-style: decimal;
+    padding-left: 1.5em;
+  }
+  #print-root th,
+  #print-root td {
+    border: 1px solid #ccc;
+    padding: 2pt 6pt;
+  }
+  #print-root table {
+    border-collapse: collapse;
+  }
+  #print-root table,
+  #print-root blockquote,
+  #print-root img {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 }

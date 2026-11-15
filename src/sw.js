@@ -13,7 +13,7 @@ const STATIC = `static-${VERSION}`
 const META = 'sw-meta'
 const META_URL = '/__sw-meta'
 const NETWORK_TIMEOUT_MS = 4000
-const PRECACHE = ['/', '/manifest.json', '/favicon.svg', '/logo192.png']
+const PRECACHE = ['/', '/manifest.webmanifest', '/favicon.svg', '/logo192.png']
 
 async function readMeta() {
   const cache = await caches.open(META)

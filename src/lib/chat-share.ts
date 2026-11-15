@@ -3,9 +3,9 @@ import type { ChatUIMessage } from '../store/chat.store'
 
 /** Soft cap on the encoded hash body (`#` + payload). Warn when exceeded; still allow copy. */
 export const MAX_SHARE_HASH_BYTES = 1_048_576
+const MAX_SHARE_INFLATED_BYTES = 16 * 1024 * 1024
 
-/** Hard caps so a crafted link can't exhaust memory (gzip bomb / giant hash). */
-export const MAX_DECODED_SHARE_BYTES = 16 * 1024 * 1024
+/** Hard cap so a giant hash can't exhaust memory. */
 export const MAX_SHARE_HASH_CHARS = 2 * 1024 * 1024
 
 const SHARE_VERSION_PREFIX = 'v1.'
@@ -323,29 +323,30 @@ export async function gzipBytes(input: Uint8Array): Promise<Uint8Array> {
 
 export async function gunzipBytes(
   input: Uint8Array,
-  maxBytes = MAX_DECODED_SHARE_BYTES,
+  maxBytes = MAX_SHARE_INFLATED_BYTES,
 ): Promise<Uint8Array> {
-  const reader = new Blob([blobBytes(input)])
+  const stream = new Blob([blobBytes(input)])
     .stream()
     .pipeThrough(new DecompressionStream('gzip'))
-    .getReader()
+  // Cap output so a tiny crafted link cannot inflate into gigabytes (gzip bomb).
+  const reader = stream.getReader()
   const chunks: Uint8Array[] = []
   let total = 0
   for (;;) {
     const { done, value } = await reader.read()
     if (done) break
-    total += value.byteLength
+    total += value.length
     if (total > maxBytes) {
       await reader.cancel()
-      throw new Error('Decompressed data is too large')
+      throw new Error('Shared chat is too large.')
     }
     chunks.push(value)
   }
   const out = new Uint8Array(total)
-  let offset = 0
-  for (const chunk of chunks) {
-    out.set(chunk, offset)
-    offset += chunk.byteLength
+  let at = 0
+  for (const c of chunks) {
+    out.set(c, at)
+    at += c.length
   }
   return out
 }

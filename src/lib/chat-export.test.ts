@@ -11,6 +11,7 @@ import {
 
 function makeState(): ChatAppState {
   return {
+    projects: [],
     conversationOrder: ['a', 'b'],
     conversationsById: {
       a: { id: 'a', title: 'Alpha', updatedAt: 1, skillIds: ['s1'] },

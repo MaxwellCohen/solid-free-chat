@@ -53,3 +53,31 @@ describe('searchSidebarConversations', () => {
     expect(hit.snippet?.match).toBe('needle')
   })
 })
+
+describe('search message ids', () => {
+  it('reports the message holding the snippet', () => {
+    const out = searchSidebarConversations(
+      [
+        {
+          id: 'c1',
+          title: 'Chat',
+          updatedAt: 1,
+          messages: [
+            {
+              id: 'm1',
+              role: 'user',
+              parts: [{ type: 'text', content: 'hello' }],
+            },
+            {
+              id: 'm2',
+              role: 'assistant',
+              parts: [{ type: 'text', content: 'needle here' }],
+            },
+          ],
+        },
+      ] as never,
+      'needle',
+    )
+    expect(out[0].messageId).toBe('m2')
+  })
+})

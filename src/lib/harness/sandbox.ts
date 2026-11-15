@@ -10,6 +10,7 @@
  * `srcdoc`: a `srcdoc` frame would inherit the app's Content-Security-Policy,
  * whose locked-down `connect-src` would stop sandboxed code from fetching.
  */
+import { maybe } from '../nullable'
 import { SANDBOX_DOCUMENT_PATH } from './sandbox-document'
 
 export type SandboxResult = {
@@ -55,8 +56,8 @@ function ensureFrame(): Promise<HTMLIFrameElement> {
         const done = pending.get(data.id)
         pending.delete(data.id)
         done?.({
-          ok: data.ok ?? false,
-          output: data.output ?? '',
+          ok: data.ok === true,
+          output: maybe(data.output) ?? '',
           result: data.result,
           error: data.error,
           timedOut: data.timedOut,
