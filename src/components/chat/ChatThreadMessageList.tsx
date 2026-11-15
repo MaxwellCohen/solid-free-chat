@@ -33,6 +33,7 @@ import {
   messageToPlainText,
   userMessageToResendParts,
   withEditedText,
+  hasAssistantOutput,
 } from './chat-thread-utils'
 import { MessageParts } from './ChatMessageParts'
 import { STARTER_PROMPTS } from '../../lib/starter-prompts'
@@ -644,8 +645,9 @@ function ErrorBanner(props: { props: ChatThreadMessageListProps }) {
       {(err) => {
         const info = () =>
           classifyChatError(err, {
-            hasPartialResponse:
-              props.props.messages().at(-1)?.role === 'assistant',
+            hasPartialResponse: hasAssistantOutput(
+              props.props.messages().at(-1),
+            ),
             providerName: props.props.providerName,
           })
         return (

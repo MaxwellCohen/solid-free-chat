@@ -208,3 +208,11 @@ export function wasNudged(messages: UIMessage[]): boolean {
   }
   return false
 }
+
+/** Whether an assistant reply had produced anything before failing. */
+export function hasAssistantOutput(message: UIMessage | undefined): boolean {
+  if (message?.role !== 'assistant') return false
+  return message.parts.some((p) =>
+    p.type === 'text' || p.type === 'thinking' ? p.content.trim() !== '' : true,
+  )
+}

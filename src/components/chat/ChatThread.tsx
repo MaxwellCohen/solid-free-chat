@@ -9,6 +9,7 @@ import {
   untrack,
 } from 'solid-js'
 import { stream } from '@tanstack/ai-client'
+import { classifyChatError } from '../../lib/chat-error'
 import type { UIMessage } from '@tanstack/ai-client'
 import { useChat } from '../../lib/use-chat'
 import type { ContentPart, StreamChunk } from '@tanstack/ai'
@@ -97,6 +98,7 @@ import {
   readFileAsDataUrl,
   guessImageMimeFromFilename,
   messageToPlainText,
+  hasAssistantOutput,
   messagesBefore,
   userMessageToResendParts,
 } from './chat-thread-utils'
@@ -123,6 +125,8 @@ export default function ChatThread(props: {
   onLoadingChange: (isLoading: boolean) => void
   onRegisterStop?: (stop: (() => void) | null) => void
   onReconnectOpenRouter?: () => void
+  /** Called when a send fails because the model it used is gone. */
+  onModelUnavailable?: (providerId: string, modelId: string) => void
   onOpenPersonas?: () => void
   onSlashAction?: (action: SlashAction) => void
   snippets?: () => Snippet[]
@@ -142,6 +146,7 @@ export default function ChatThread(props: {
           onLoadingChange={props.onLoadingChange}
           onRegisterStop={props.onRegisterStop}
           onReconnectOpenRouter={props.onReconnectOpenRouter}
+          onModelUnavailable={props.onModelUnavailable}
           onOpenPersonas={props.onOpenPersonas}
           onSlashAction={props.onSlashAction}
           snippets={props.snippets}
@@ -164,6 +169,8 @@ function ChatThreadSession(props: {
   onLoadingChange: (isLoading: boolean) => void
   onRegisterStop?: (stop: (() => void) | null) => void
   onReconnectOpenRouter?: () => void
+  /** Called when a send fails because the model it used is gone. */
+  onModelUnavailable?: (providerId: string, modelId: string) => void
   onOpenPersonas?: () => void
   onSlashAction?: (action: SlashAction) => void
   snippets?: () => Snippet[]
@@ -280,6 +287,7 @@ function ChatThreadSession(props: {
 
   /** Start of the in-flight model run (0 when idle); feeds `elapsedMs`. */
   let runStartedAt = 0
+  let lastSent: { providerId: string; modelId: string } | undefined
   const chat = useChat({
     id: conversationId,
     initialMessages,
@@ -341,10 +349,11 @@ function ChatThreadSession(props: {
     },
     connection: stream((messages, _data, abortSignal) => {
       runStartedAt = Date.now()
+      lastSent = { providerId: props.providerId, modelId: selectedModel() }
       return runAgent({
         apiKey: props.openRouterApiKey.trim(),
-        providerId: props.providerId,
-        model: selectedModel(),
+        providerId: lastSent.providerId,
+        model: lastSent.modelId,
         messages,
         systemPrompt: composeSystemPrompt(
           skillIds(),
@@ -409,7 +418,14 @@ function ChatThreadSession(props: {
   createEffect(
     () => chat.error(),
     (error) => {
-      if (error) scheduleCommitCurrentMessages()
+      if (!error) return
+      scheduleCommitCurrentMessages()
+      const sent = lastSent
+      const info = classifyChatError(error, {
+        hasPartialResponse: hasAssistantOutput(chat.messages().at(-1)),
+      })
+      if (sent && info.kind === 'model-unavailable')
+        props.onModelUnavailable?.(sent.providerId, sent.modelId)
     },
   )
 

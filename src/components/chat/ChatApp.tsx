@@ -39,7 +39,11 @@ import {
   storeActiveProviderId,
   storeApiKey,
 } from '../../lib/openrouter-key-storage'
-import { loadAllModelOptions } from '../../lib/model-options'
+import {
+  MODEL_REFRESH_MS,
+  loadAllModelOptions,
+  markModelUnavailable,
+} from '../../lib/model-options'
 import { getProvider } from '../../lib/providers'
 import {
   completeOpenRouterLogin,
@@ -362,19 +366,33 @@ export default function ChatApp() {
     return lookup(state.messagesByConversationId, id)?.length ?? 0
   })
 
+  /** Bumped to re-check model availability without changing keys. */
+  const [modelRefreshTick, setModelRefreshTick] = createSignal(0)
+  let loadedKeysVersion: number | undefined
+
   createEffect(
-    () => (isServer ? null : keysVersion()),
-    (version) => {
-      if (version == null || isServer) return
+    () =>
+      isServer ? null : { version: keysVersion(), tick: modelRefreshTick() },
+    (deps) => {
+      if (deps == null || isServer) return
+      // Background refreshes keep the current list visible and ignore errors.
+      const silent = loadedKeysVersion === deps.version
       let cancelled = false
       const isCancelled = () => cancelled
-      setModelListLoading(true)
-      setModelListError(undefined)
+      if (!silent) {
+        setModelListLoading(true)
+        setModelListError(undefined)
+      }
       void (async () => {
         const { options, error } = await loadAllModelOptions()
         if (isCancelled()) return
-        if (options.length === 0 && error) setModelListError(error)
-        else setModelList(options)
+        if (options.length === 0 && error) {
+          if (!silent) setModelListError(error)
+        } else {
+          loadedKeysVersion = deps.version
+          setModelListError(undefined)
+          setModelList(options)
+        }
         setModelListLoading(false)
       })()
       return () => {
@@ -1075,6 +1093,27 @@ export default function ChatApp() {
     return items
   })
 
+  // Re-check models when the user comes back to the page, and every 10 min.
+  onSettled(() => {
+    if (typeof window === 'undefined') return
+    // Tab return fires both focus and visibilitychange; refresh once.
+    let last = Date.now()
+    const refresh = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - last < 5000)
+        return
+      last = Date.now()
+      setModelRefreshTick((n) => n + 1)
+    }
+    const timer = window.setInterval(refresh, MODEL_REFRESH_MS)
+    document.addEventListener('visibilitychange', refresh)
+    window.addEventListener('focus', refresh)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', refresh)
+      window.removeEventListener('focus', refresh)
+    }
+  })
+
   onSettled(() => {
     if (typeof window === 'undefined') return
     window.addEventListener('keydown', handleChatShortcut)
@@ -1291,6 +1330,14 @@ export default function ChatApp() {
                     onSlashAction={handleSlashAction}
                     snippets={snippets}
                     onReconnectOpenRouter={openOpenRouterApiKeyModal}
+                    onModelUnavailable={(pid, mid) => {
+                      markModelUnavailable(pid, mid)
+                      setModelList((l) =>
+                        l?.filter(
+                          (m) => !(m.providerId === pid && m.id === mid),
+                        ),
+                      )
+                    }}
                     onOpenPersonas={() => setPersonasOpen(true)}
                     onRegisterStop={(stop) => {
                       stopStreaming = stop
