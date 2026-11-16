@@ -9,9 +9,12 @@ import { getContext } from './integrations/tanstack-query/provider'
 // which the default JSON-only server function encoding rejects.
 enableRichArguments()
 
-/** OpenRouter keys (`sk-or-…`) and OAuth callback codes must never reach Sentry. */
+/** Provider keys (OpenRouter, Groq, Cerebras, Hugging Face) and OAuth callback codes must never reach Sentry. */
 const SECRET_PATTERNS: [RegExp, string][] = [
   [/sk-or-[A-Za-z0-9_-]+/g, '[redacted-key]'],
+  [/gsk_[A-Za-z0-9_-]+/g, '[redacted-key]'],
+  [/csk-[A-Za-z0-9_-]+/g, '[redacted-key]'],
+  [/hf_[A-Za-z0-9_-]+/g, '[redacted-key]'],
   [/([?&]code=)[^&#\s"]+/g, '$1[redacted]'],
   [/(bearer\s+)[^\s"]+/gi, '$1[redacted]'],
 ]

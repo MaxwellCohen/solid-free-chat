@@ -23,12 +23,60 @@ const highlightMarkdownCode: CodeHighlighter =
 
 const streamingExtensions = [streamingMarkdownExtension()]
 
+const HTTP_URL_RE = /^(https?:)?\/\//i
+const TAG_RE =
+  /<a href="([^"]*)"|<\/a>|<img src="([^"]*)"(?: alt="([^"]*)")?[^>]*>/gi
+const LOCAL_BASE = 'https://local.invalid'
+
+/** True unless the URL stays on this origin or is inline data (parsed the way a browser would). */
+export function isRemoteUrl(src: string): boolean {
+  try {
+    const url = new URL(src, LOCAL_BASE)
+    if (url.protocol === 'data:' || url.protocol === 'blob:') return false
+    return url.origin !== LOCAL_BASE
+  } catch {
+    return true
+  }
+}
+
+export function isHttpUrl(src: string): boolean {
+  return HTTP_URL_RE.test(src)
+}
+
+/** Remote links open in a new tab; remote images become links (or plain text inside a link). */
+function hardenHtml(html: string): string {
+  if (!html.includes('<a ') && !html.includes('<img ')) return html
+  let inLink = false
+  return html.replace(
+    TAG_RE,
+    (tag: string, href?: string, src?: string, alt?: string) => {
+      if (href !== undefined) {
+        inLink = true
+        return /^https?:\/\//i.test(href)
+          ? `${tag} target="_blank" rel="noopener noreferrer"`
+          : tag
+      }
+      if (src === undefined) {
+        inLink = false
+        return tag
+      }
+      if (!isRemoteUrl(src)) return tag
+      const label = alt || 'image'
+      return inLink || !isHttpUrl(src)
+        ? label
+        : `<a href="${src}" target="_blank" rel="noopener noreferrer">${label}</a>`
+    },
+  )
+}
+
 /** Sync Markdown → HTML for chat (streaming-safe, Highlight fences). */
 export function renderMarkdownToHtml(source: string): string {
-  return renderHtml(source, {
-    highlighter: highlightMarkdownCode,
-    extensions: streamingExtensions,
-    frontmatter: false,
-    headingIds: false,
-  })
+  return hardenHtml(
+    renderHtml(source, {
+      highlighter: highlightMarkdownCode,
+      extensions: streamingExtensions,
+      frontmatter: false,
+      headingIds: false,
+    }),
+  )
 }

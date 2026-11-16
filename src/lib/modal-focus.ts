@@ -27,7 +27,10 @@ export function bindModalFocus(dialog: HTMLElement | undefined): () => void {
 
   const focusFirst = () => {
     const items = focusableElements(dialog)
-    const target = items[0] ?? dialog
+    const target =
+      dialog.querySelector<HTMLElement>('[data-autofocus]') ??
+      items[0] ??
+      dialog
     target.focus()
   }
 

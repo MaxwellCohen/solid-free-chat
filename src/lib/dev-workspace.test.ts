@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { createWorkspaceTools, normalizePath } from './dev-workspace'
+import {
+  buildWorkspace,
+  createWorkspaceTools,
+  normalizePath,
+} from './dev-workspace'
 import type { Files, WorkspaceStore } from './dev-workspace'
 
 describe('normalizePath', () => {
@@ -74,6 +78,20 @@ describe('workspace tools', () => {
     expect('src/x.js' in store.files()).toBe(false)
   })
 
+  it('does not treat prototype properties as files', async () => {
+    const tools = createWorkspaceTools(makeStore({}))
+    for (const path of ['constructor', 'toString']) {
+      expect(await toolByName(tools, 'read_file').execute({ path })).toEqual({
+        ok: false,
+        error: `No such file: ${path}`,
+      })
+      expect(await toolByName(tools, 'delete_file').execute({ path })).toEqual({
+        ok: false,
+        error: 'No such file.',
+      })
+    }
+  })
+
   it('refuses paths outside the workspace', async () => {
     const store = makeStore({})
     const tools = createWorkspaceTools(store)
@@ -84,5 +102,16 @@ describe('workspace tools', () => {
       }),
     ).toEqual({ ok: false, error: 'Invalid path.' })
     expect(Object.keys(store.files())).toHaveLength(0)
+  })
+})
+
+describe('buildWorkspace', () => {
+  it('ignores inherited properties when looking for index.html and the entry', async () => {
+    expect(await buildWorkspace({})).toEqual({
+      ok: false,
+      errors: ['Missing index.html.'],
+    })
+    const result = await buildWorkspace({ 'index.html': '<html></html>' })
+    expect(result.ok).toBe(false)
   })
 })

@@ -1,13 +1,27 @@
 const DB_NAME = 'solid-free-chat'
 const STORE = 'kv'
 
+let dbPromise: Promise<IDBDatabase> | null = null
+
+/** One shared connection, so a write on page hide starts without an open round trip. */
 function open(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+  dbPromise ??= new Promise<IDBDatabase>((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, 1)
     req.onupgradeneeded = () => req.result.createObjectStore(STORE)
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
+    req.onsuccess = () => {
+      const db = req.result
+      db.onclose = db.onversionchange = () => {
+        db.close()
+        dbPromise = null
+      }
+      resolve(db)
+    }
+    req.onerror = () => {
+      dbPromise = null
+      reject(req.error)
+    }
   })
+  return dbPromise
 }
 
 export function idbAvailable(): boolean {

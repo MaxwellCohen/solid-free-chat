@@ -1,3 +1,4 @@
+import { classifyChatError } from '../../lib/chat-error'
 import {
   createEffect,
   createMemo,
@@ -9,9 +10,9 @@ import {
   untrack,
 } from 'solid-js'
 import { stream } from '@tanstack/ai-client'
-import { classifyChatError } from '../../lib/chat-error'
 import type { UIMessage } from '@tanstack/ai-client'
 import { useChat } from '../../lib/use-chat'
+import { clearDraft, loadDraft, saveDraft } from '../../lib/chat-drafts'
 import type { ContentPart, StreamChunk } from '@tanstack/ai'
 import { getProvider } from '../../lib/providers'
 import { runAgent } from '../../lib/harness/run-agent-lazy'
@@ -178,11 +179,21 @@ function ChatThreadSession(props: {
   // The parent remounts this session per conversation, so these are snapshots.
   const conversationId = untrack(() => props.conversationId)
   const initialMessages = untrack(() => props.initialMessages)
-  const [draft, setDraft] = createSignal('')
+  const saved = loadDraft<PendingImage, PendingFile>(conversationId)
+  const [draft, setDraft] = createSignal(saved.text)
+  const [pendingImages, setPendingImages] = createSignal<PendingImage[]>(
+    saved.images,
+  )
+  const [pendingFiles, setPendingFiles] = createSignal<PendingFile[]>(
+    saved.files,
+  )
+  // Keep the unsent draft per conversation (previews are revoked on send/remove only).
+  createEffect(
+    () => ({ text: draft(), images: pendingImages(), files: pendingFiles() }),
+    (d) => saveDraft(conversationId, d),
+  )
   const dictation = createDictation((text) => setDraft(text))
   const stopDictation = () => dictation?.stop()
-  const [pendingImages, setPendingImages] = createSignal<PendingImage[]>([])
-  const [pendingFiles, setPendingFiles] = createSignal<PendingFile[]>([])
   const [attachError, setAttachError] = createSignal<string | null>(null)
   const [imageAttachNotice, setImageAttachNotice] = createSignal<string | null>(
     null,
@@ -668,6 +679,16 @@ function ChatThreadSession(props: {
     if (!parts || parts.length === 0) return
     const truncated = messagesBefore(chat.messages(), message.id)
     if (!truncated) return
+    const following = chat.messages().slice(truncated.length + 1)
+    const laterCount =
+      following.length - (following[0]?.role === 'assistant' ? 1 : 0)
+    if (
+      laterCount > 0 &&
+      !window.confirm(
+        `This will permanently remove ${laterCount} later message${laterCount === 1 ? '' : 's'} from this chat. Continue?`,
+      )
+    )
+      return
     pendingVariants = prevVariants
       ? { prev: prevVariants, length: truncated.length + 2 }
       : null
@@ -790,9 +811,6 @@ function ChatThreadSession(props: {
       if (imageButtonPulseTimer != null) {
         clearTimeout(imageButtonPulseTimer)
         imageButtonPulseTimer = null
-      }
-      for (const p of pendingImages()) {
-        URL.revokeObjectURL(p.previewUrl)
       }
       commitConversationMessages()
     }
@@ -1009,6 +1027,7 @@ function ChatThreadSession(props: {
     if (parts.length === 0) return
 
     setDraft('')
+    clearDraft(conversationId)
     for (const p of imgs) URL.revokeObjectURL(p.previewUrl)
     setPendingImages([])
     setPendingFiles([])

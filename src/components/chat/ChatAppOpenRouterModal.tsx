@@ -159,8 +159,15 @@ function OpenRouterModalDialog(props: {
             spellcheck={false}
             class="border-input bg-background placeholder:text-muted-foreground focus-visible:ring-ring w-full rounded-lg border px-3 py-2 font-mono text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
             placeholder={getProvider(props.providerId()).keyPlaceholder}
+            data-autofocus
             value={props.draft()}
             onInput={(e) => props.onDraftInput(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.isComposing) {
+                e.preventDefault()
+                props.onSave()
+              }
+            }}
           />
         </label>
         <label class="text-muted-foreground flex items-start gap-2 text-xs">

@@ -1,4 +1,4 @@
-import { For, Show } from 'solid-js'
+import { For, Show, onSettled } from 'solid-js'
 import { maybe } from '../../lib/nullable'
 import {
   Keyboard,
@@ -94,13 +94,24 @@ function ToolsMenu(props: { props: ChatAppModelToolbarProps }) {
   const enabledCount = () => enabledToolIds().length
   const isEnabled = (id: string) => enabledToolIds().includes(id)
 
+  onSettled(() => {
+    const onDocumentPointerDown = (e: PointerEvent) => {
+      if (details?.open && !details.contains(e.target as Node)) {
+        details.open = false
+      }
+    }
+    document.addEventListener('pointerdown', onDocumentPointerDown)
+    return () =>
+      document.removeEventListener('pointerdown', onDocumentPointerDown)
+  })
+
   return (
     <details
       ref={details}
       class="relative shrink-0"
       onFocusOut={(e) => {
         const next = e.relatedTarget as Node | null
-        if (details && (!next || !details.contains(next))) details.open = false
+        if (details && next && !details.contains(next)) details.open = false
       }}
       onKeyDown={(e) => {
         if (e.key === 'Escape' && details?.open) {

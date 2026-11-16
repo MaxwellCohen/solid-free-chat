@@ -30,7 +30,10 @@ function SharePage() {
     return () => window.removeEventListener('hashchange', onHashChange)
   })
 
+  let loadId = 0
+
   async function loadFromHash() {
+    const id = ++loadId
     const hash = window.location.hash
     if (!hash || hash === '#' || hash === '#v1.') {
       setView({
@@ -40,6 +43,7 @@ function SharePage() {
       return
     }
     const chat = await decodeSharedChat(hash)
+    if (id !== loadId) return
     if (!chat) {
       setView({
         status: 'error',

@@ -438,6 +438,8 @@ function normalizeVariants(raw: unknown): MessageVariant[] | null {
   return out.length >= 2 ? out.slice(-MAX_MESSAGE_VARIANTS) : null
 }
 
+const MESSAGE_ROLES = new Set(['system', 'user', 'assistant'])
+
 function normalizeMessage(raw: unknown): ChatUIMessage | null {
   if (!raw || typeof raw !== 'object') return null
   const { bookmarked, variants, variantIndex, elapsedMs, ...message } =
@@ -448,10 +450,24 @@ function normalizeMessage(raw: unknown): ChatUIMessage | null {
       variants?: unknown
       variantIndex?: unknown
     }
+  if (typeof message.id !== 'string' || !message.id) return null
+  if (!MESSAGE_ROLES.has(message.role)) return null
+  if (!Array.isArray(message.parts)) return null
+  const parts = message.parts.filter(
+    (part: unknown): part is UIMessage['parts'][number] =>
+      !!part &&
+      typeof part === 'object' &&
+      typeof (part as { type?: unknown }).type === 'string',
+  )
   const tokenUsage = normalizeTokenUsageSnapshot(message.tokenUsage)
+  const createdAt =
+    message.createdAt != null
+      ? new Date(message.createdAt as unknown as string | number)
+      : undefined
   const normalizedVariants = normalizeVariants(variants)
   return {
     ...message,
+    parts,
     ...(normalizedVariants
       ? {
           variants: normalizedVariants,
@@ -468,9 +484,7 @@ function normalizeMessage(raw: unknown): ChatUIMessage | null {
       ? { elapsedMs }
       : {}),
     createdAt:
-      message.createdAt != null
-        ? new Date(message.createdAt as unknown as string | number)
-        : undefined,
+      createdAt && !Number.isNaN(createdAt.getTime()) ? createdAt : undefined,
     ...(tokenUsage ? { tokenUsage } : {}),
   } as ChatUIMessage
 }
@@ -512,7 +526,8 @@ function normalizePersistedChatState(raw: unknown): ChatAppState | null {
     if (result.conversation.id === '__proto__') continue
     conversationsById[result.conversation.id] = result.conversation
     messagesByConversationId[result.conversation.id] = normalizeMessages(
-      rawMessagesByConversationId[result.conversation.id],
+      rawMessagesByConversationId[key] ??
+        rawMessagesByConversationId[result.conversation.id],
     )
   }
 
@@ -635,18 +650,6 @@ function getConversationMessages(
   conversationId: string,
 ): ChatUIMessage[] {
   return state.messagesByConversationId[conversationId] ?? []
-}
-
-function getConversationWithMessages(
-  state: ChatAppState,
-  conversationId: string,
-): ChatConversationWithMessages | undefined {
-  const conversation = getConversation(state, conversationId)
-  if (!conversation) return undefined
-  return {
-    ...conversation,
-    messages: getConversationMessages(state, conversationId),
-  }
 }
 
 export const chatActions = {
@@ -1146,14 +1149,6 @@ export const chatActions = {
 }
 
 export const chatSelectors = {
-  currentConversation(
-    state: ChatAppState,
-  ): ChatConversationWithMessages | undefined {
-    const id = state.currentConversationId
-    if (!id) return undefined
-    return getConversationWithMessages(state, id)
-  },
-
   conversationList(state: ChatAppState): ChatConversation[] {
     const all = state.conversationOrder
       .map((id) => getConversation(state, id))
@@ -1162,22 +1157,6 @@ export const chatSelectors = {
           conversation != null,
       )
     return [...all.filter((c) => c.pinned), ...all.filter((c) => !c.pinned)]
-  },
-
-  conversationMessages(
-    state: ChatAppState,
-    conversationId: string,
-  ): ChatUIMessage[] {
-    return getConversationMessages(state, conversationId)
-  },
-
-  attachedSkills(state: ChatAppState, conversationId: string): ChatSkill[] {
-    const conversation = getConversation(state, conversationId)
-    if (!conversation) return []
-    const byId = new Map(state.skills.map((skill) => [skill.id, skill]))
-    return conversation.skillIds
-      .map((id) => byId.get(id))
-      .filter((skill): skill is ChatSkill => skill != null)
   },
 }
 

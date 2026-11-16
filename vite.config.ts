@@ -10,23 +10,6 @@ import { tanstackStart } from '@tanstack/solid-start/plugin/vite'
 
 import solidPlugin from '@solidjs/vite-plugin'
 
-// `@tanstack/solid-query-devtools@6.0.0-rc.4` imports Solid patch-channel exports
-// removed in solid-js 2.0.0-rc.8. Those names are unused in the published build.
-function stripRemovedSolidImports() {
-  const removed =
-    /\b(?:patchableRaw|registerRowOps|registerSlotPatch|registerPatch)\s*,\s*/g
-
-  return {
-    name: 'strip-removed-solid-imports',
-    transform(code: string, id: string) {
-      if (!id.includes('@tanstack/solid-query-devtools') || !removed.test(code))
-        return
-      removed.lastIndex = 0
-      return code.replace(removed, '')
-    },
-  }
-}
-
 function gitCommitHash(): string {
   try {
     return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim()
@@ -71,7 +54,6 @@ export default defineConfig({
     exclude: ['@solidjs/web/server-functions/rich-args'],
   },
   plugins: [
-    stripRemovedSolidImports(),
     serviceWorker(),
     devtools(),
     // this is the plugin that enables path aliases
@@ -88,6 +70,17 @@ export default defineConfig({
       // Cloudflare compresses static assets at the edge.
       compressPublicAssets: false,
       cloudflare: { deployConfig: true, nodeCompat: true },
+      // Clickjacking / sniffing protection for every server-rendered response.
+      // SAMEORIGIN (not DENY) because the app frames its own `/harness-sandbox`.
+      routeRules: {
+        '/**': {
+          headers: {
+            'x-frame-options': 'SAMEORIGIN',
+            'x-content-type-options': 'nosniff',
+            'referrer-policy': 'strict-origin-when-cross-origin',
+          },
+        },
+      },
     }),
     solidPlugin({ ssr: true }),
   ],

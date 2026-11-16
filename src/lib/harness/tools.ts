@@ -524,10 +524,13 @@ export const HARNESS_TOOLS: readonly HarnessToolDescriptor[] = [
       'Runs JS in an isolated Web Worker for calculations and data work.',
     enabledByDefault: true,
     create: () =>
-      runJavaScriptTool.server(async (input) => {
+      runJavaScriptTool.server(async (input, context) => {
         const { code } = input as { code: string }
         return sandboxResultToToolOutput(
-          await runInSandbox(code, { timeoutMs: 15_000 }),
+          await runInSandbox(code, {
+            timeoutMs: 15_000,
+            signal: context?.abortSignal,
+          }),
         )
       }),
   },

@@ -28,13 +28,21 @@ function toPersistedChatState(state: ChatAppState): ChatAppState {
   }
 }
 
+function backupCorruptState(raw: string) {
+  try {
+    localStorage.setItem(`${CHAT_STORAGE_KEY}:corrupt-${Date.now()}`, raw)
+  } catch {
+    /* quota or unavailable; nothing more to do */
+  }
+}
+
 export function loadChatState(): ChatAppState | null {
   if (typeof localStorage === 'undefined') return null
   const candidates = [
     localStorage.getItem(CHAT_STORAGE_KEY),
     localStorage.getItem(LEGACY_CHAT_STORAGE_KEY),
   ]
-  for (const raw of candidates) {
+  for (const [index, raw] of candidates.entries()) {
     if (!raw) continue
     try {
       const parsed: unknown = JSON.parse(raw)
@@ -43,6 +51,7 @@ export function loadChatState(): ChatAppState | null {
     } catch {
       /* ignore malformed entry and try fallback */
     }
+    if (index === 0) backupCorruptState(raw)
   }
   return null
 }
@@ -71,6 +80,22 @@ function isQuotaError(e: unknown) {
 let channel: BroadcastChannel | null = null
 /** Set while applying another tab's state so we don't echo it back. */
 let applyingRemote = false
+
+/** Remote tab's state, keeping this tab's model and (if it still exists) open chat. */
+export function mergeRemoteChatState(
+  local: ChatAppState,
+  incoming: ChatAppState,
+): ChatAppState {
+  return {
+    ...incoming,
+    selectedModel: local.selectedModel,
+    currentConversationId:
+      local.currentConversationId !== null &&
+      Object.hasOwn(incoming.conversationsById, local.currentConversationId)
+        ? local.currentConversationId
+        : incoming.currentConversationId,
+  }
+}
 
 /** Prefers IndexedDB (migrating from localStorage); falls back to localStorage. */
 export async function loadChatStateAsync(): Promise<ChatAppState | null> {
@@ -127,10 +152,10 @@ export function startChatPersistence(onRemoteChange?: () => void): () => void {
     channel = new BroadcastChannel(SYNC_CHANNEL)
     channel.onmessage = () => {
       void loadChatStateAsync().then((remote) => {
-        if (!remote) return
+        if (!remote || !channel) return
         applyingRemote = true
         try {
-          chatStore.setState(() => remote)
+          chatStore.setState((local) => mergeRemoteChatState(local, remote))
           onRemoteChange?.()
         } finally {
           applyingRemote = false
@@ -146,9 +171,25 @@ export function startChatPersistence(onRemoteChange?: () => void): () => void {
       saveTimer = null
     }, DEBOUNCE_MS)
   })
+  // Save a pending change as soon as the tab is hidden. A write that only
+  // starts during unload may not finish, so hiding is the reliable signal.
+  const flush = () => {
+    if (saveTimer === null) return
+    clearTimeout(saveTimer)
+    saveTimer = null
+    void persistChatStateAsync()
+  }
+  const onVisibility = () => {
+    if (document.visibilityState === 'hidden') flush()
+  }
+  window.addEventListener('pagehide', flush)
+  document.addEventListener('visibilitychange', onVisibility)
   return () => {
+    window.removeEventListener('pagehide', flush)
+    document.removeEventListener('visibilitychange', onVisibility)
     sub.unsubscribe()
     if (saveTimer !== null) clearTimeout(saveTimer)
+    saveTimer = null
     void persistChatStateAsync()
     channel?.close()
     channel = null

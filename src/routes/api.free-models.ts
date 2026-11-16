@@ -6,7 +6,22 @@ import {
 import type { FreeModelsCatalog } from '../lib/free-models-catalog'
 
 const FRESH_MS = 15 * 60_000
+const BACKOFF_MS = 60_000
 let memo: { body: string; fetchedAt: number } | undefined
+
+async function refreshMemo(): Promise<void> {
+  try {
+    const res = await fetch(MODELS_DEV_URL, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) throw new Error(`models.dev ${res.status}`)
+    const catalog: FreeModelsCatalog = buildFreeModelsCatalog(await res.json())
+    memo = { body: JSON.stringify(catalog), fetchedAt: Date.now() }
+  } catch {
+    if (memo) memo.fetchedAt = Date.now() - FRESH_MS + BACKOFF_MS
+  }
+}
 
 /**
  * Small, cacheable catalog of free-tier chat models per provider. It holds no
@@ -16,26 +31,16 @@ let memo: { body: string; fetchedAt: number } | undefined
  */
 async function serveFreeModels(): Promise<Response> {
   if (!memo || Date.now() - memo.fetchedAt > FRESH_MS) {
-    try {
-      const res = await fetch(MODELS_DEV_URL, {
-        headers: { Accept: 'application/json' },
-      })
-      if (!res.ok) throw new Error(`models.dev ${res.status}`)
-      const catalog: FreeModelsCatalog = buildFreeModelsCatalog(
-        await res.json(),
-      )
-      memo = { body: JSON.stringify(catalog), fetchedAt: Date.now() }
-    } catch {
-      if (!memo) {
-        return new Response(JSON.stringify({ error: 'catalog unavailable' }), {
-          status: 502,
-          headers: {
-            'content-type': 'application/json',
-            'cache-control': 'no-store',
-          },
-        })
-      }
-    }
+    await refreshMemo()
+  }
+  if (!memo) {
+    return new Response(JSON.stringify({ error: 'catalog unavailable' }), {
+      status: 502,
+      headers: {
+        'content-type': 'application/json',
+        'cache-control': 'no-store',
+      },
+    })
   }
   return new Response(memo.body, {
     headers: {

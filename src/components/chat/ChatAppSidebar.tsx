@@ -539,6 +539,12 @@ function ConversationListItem(props: {
     chatActions.renameConversation(props.conversation.id, draft())
   }
 
+  createEffect(confirmingDelete, (armed) => {
+    if (!armed) return
+    const timer = setTimeout(() => setConfirmingDelete(false), 4000)
+    return () => clearTimeout(timer)
+  })
+
   return (
     <li class="flex flex-wrap items-stretch gap-0.5">
       <Show when={editing()}>
@@ -664,6 +670,7 @@ function ConversationListItem(props: {
       >
         <button
           type="button"
+          ref={(el) => queueMicrotask(() => el.focus())}
           title="Confirm delete"
           aria-label={`Confirm delete: ${props.conversation.title || NEW_CHAT_TITLE}`}
           class="text-destructive hover:bg-muted shrink-0 rounded-lg px-2 text-xs font-medium"

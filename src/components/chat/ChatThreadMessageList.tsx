@@ -94,6 +94,36 @@ export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
     return stop
   })
 
+  const [awayFromEnd, setAwayFromEnd] = createSignal(false)
+  const [replyStatus, setReplyStatus] = createSignal('')
+
+  function updateAwayFromEnd() {
+    const el = scrollContainerRef
+    if (!el) return
+    setAwayFromEnd(
+      el.scrollHeight - el.scrollTop - el.clientHeight >
+        SCROLL_END_THRESHOLD_PX,
+    )
+  }
+
+  // A growing reply moves the end away without firing a scroll event.
+  createEffect(
+    () => virtualizer.getTotalSize(),
+    () => {
+      requestAnimationFrame(updateAwayFromEnd)
+    },
+  )
+
+  let wasLoading = false
+  createEffect(
+    () => props.isLoading(),
+    (loading) => {
+      if (wasLoading && !loading) setReplyStatus('Reply finished')
+      else if (loading) setReplyStatus('')
+      wasLoading = loading
+    },
+  )
+
   // When the user sends a message, pin it to the top so the reply fills the view.
   let prevCount = props.messages().length
   createEffect(
@@ -122,91 +152,119 @@ export function ChatThreadMessageList(props: ChatThreadMessageListProps) {
   }
 
   return (
-    <div
-      ref={(el) => {
-        scrollContainerRef = el
-      }}
-      role="log"
-      aria-label="Conversation"
-      aria-live="polite"
-      class="min-h-0 w-full flex-1 overflow-y-auto px-3 py-4 group-data-[zen]/app:mx-auto group-data-[zen]/app:max-w-3xl group-data-[zen]/app:pt-12 sm:px-6"
-    >
-      <Show when={props.messages().length === 0 && !props.isLoading()}>
-        <div class="mx-auto flex max-w-2xl flex-col items-center gap-4 py-8 text-center">
-          <Show when={props.needsSignIn}>
-            <section
-              class="border-border bg-card w-full rounded-xl border p-4 text-left"
-              aria-label="Get started"
-            >
-              <h2 class="text-foreground text-base font-semibold tracking-tight">
-                Welcome — get chatting in 3 steps
+    <div class="flex min-h-0 flex-1 flex-col">
+      <div class="relative min-h-0 flex-1">
+        <div
+          ref={(el) => {
+            scrollContainerRef = el
+          }}
+          role="log"
+          aria-label="Conversation"
+          aria-live="polite"
+          aria-busy={props.isLoading() ? 'true' : 'false'}
+          onScroll={updateAwayFromEnd}
+          class="h-full w-full overflow-y-auto px-3 py-4 group-data-[zen]/app:mx-auto group-data-[zen]/app:max-w-3xl group-data-[zen]/app:pt-12 sm:px-6"
+        >
+          <Show when={props.messages().length === 0 && !props.isLoading()}>
+            <div class="mx-auto flex max-w-2xl flex-col items-center gap-4 py-8 text-center">
+              <Show when={props.needsSignIn}>
+                <section
+                  class="border-border bg-card w-full rounded-xl border p-4 text-left"
+                  aria-label="Get started"
+                >
+                  <h2 class="text-foreground text-base font-semibold tracking-tight">
+                    Welcome — get chatting in 3 steps
+                  </h2>
+                  <ol class="text-foreground mt-3 flex list-decimal flex-col gap-1.5 pl-5 text-sm">
+                    <li>Sign in with OpenRouter (it is free).</li>
+                    <li>Pick a free model from the model menu.</li>
+                    <li>Say hi!</li>
+                  </ol>
+                  <button
+                    type="button"
+                    class="bg-primary text-primary-foreground mt-3 rounded-lg px-3 py-1.5 text-sm font-medium"
+                    onClick={() => props.onReconnectOpenRouter?.()}
+                  >
+                    Sign in with OpenRouter
+                  </button>
+                  <p class="text-muted-foreground mt-3 text-xs">
+                    Every model used here is free, and nothing leaves your
+                    browser except requests to OpenRouter.
+                  </p>
+                </section>
+              </Show>
+              <h2 class="text-foreground text-lg font-semibold tracking-tight">
+                How can I help today?
               </h2>
-              <ol class="text-foreground mt-3 flex list-decimal flex-col gap-1.5 pl-5 text-sm">
-                <li>Sign in with OpenRouter (it is free).</li>
-                <li>Pick a free model from the model menu.</li>
-                <li>Say hi!</li>
-              </ol>
-              <button
-                type="button"
-                class="bg-primary text-primary-foreground mt-3 rounded-lg px-3 py-1.5 text-sm font-medium"
-                onClick={() => props.onReconnectOpenRouter?.()}
-              >
-                Sign in with OpenRouter
-              </button>
-              <p class="text-muted-foreground mt-3 text-xs">
-                Every model used here is free, and nothing leaves your browser
-                except requests to OpenRouter.
-              </p>
-            </section>
-          </Show>
-          <h2 class="text-foreground text-lg font-semibold tracking-tight">
-            How can I help today?
-          </h2>
-          <div class="grid w-full gap-2 sm:grid-cols-2">
-            <For each={STARTER_PROMPTS}>
-              {(starter) => (
+              <div class="grid w-full gap-2 sm:grid-cols-2">
+                <For each={STARTER_PROMPTS}>
+                  {(starter) => (
+                    <button
+                      type="button"
+                      class="border-border hover:bg-muted rounded-xl border p-3 text-left"
+                      onClick={() => props.onPickStarter(starter.prompt)}
+                    >
+                      <span class="text-foreground block text-sm font-medium">
+                        {starter.title}
+                      </span>
+                      <span class="text-muted-foreground block text-xs">
+                        {starter.description}
+                      </span>
+                    </button>
+                  )}
+                </For>
+              </div>
+              <Show when={props.onOpenPersonas}>
                 <button
                   type="button"
-                  class="border-border hover:bg-muted rounded-xl border p-3 text-left"
-                  onClick={() => props.onPickStarter(starter.prompt)}
+                  class="text-muted-foreground hover:text-foreground text-sm underline"
+                  onClick={() => props.onOpenPersonas?.()}
                 >
-                  <span class="text-foreground block text-sm font-medium">
-                    {starter.title}
-                  </span>
-                  <span class="text-muted-foreground block text-xs">
-                    {starter.description}
-                  </span>
+                  Browse personas…
                 </button>
+              </Show>
+            </div>
+          </Show>
+          <div
+            class="relative w-full"
+            style={{
+              height: `${virtualizer.getTotalSize() + trailingSpace()}px`,
+            }}
+          >
+            {/* Key by item key: the virtualizer re-creates item objects on every measure,
+              and remounting would reset open <details> (e.g. Reasoning). */}
+            <For
+              each={virtualizer.getVirtualItems()}
+              keyed={(item) => item.key}
+            >
+              {(virtualItem) => (
+                <VirtualChatMessage
+                  virtualItem={virtualItem}
+                  virtualizer={virtualizer}
+                  listProps={props}
+                />
               )}
             </For>
           </div>
-          <Show when={props.onOpenPersonas}>
-            <button
-              type="button"
-              class="text-muted-foreground hover:text-foreground text-sm underline"
-              onClick={() => props.onOpenPersonas?.()}
-            >
-              Browse personas…
-            </button>
-          </Show>
         </div>
-      </Show>
-      <div
-        class="relative w-full"
-        style={{ height: `${virtualizer.getTotalSize() + trailingSpace()}px` }}
-      >
-        {/* Key by item key: the virtualizer re-creates item objects on every measure,
-            and remounting would reset open <details> (e.g. Reasoning). */}
-        <For each={virtualizer.getVirtualItems()} keyed={(item) => item.key}>
-          {(virtualItem) => (
-            <VirtualChatMessage
-              virtualItem={virtualItem}
-              virtualizer={virtualizer}
-              listProps={props}
-            />
-          )}
-        </For>
+        <Show when={awayFromEnd()}>
+          <button
+            type="button"
+            class="border-border bg-background hover:bg-muted absolute right-4 bottom-3 rounded-full border px-3 py-1 text-xs font-medium shadow-sm sm:right-8"
+            onClick={() =>
+              scrollContainerRef?.scrollTo({
+                top: scrollContainerRef.scrollHeight,
+                behavior: 'smooth',
+              })
+            }
+          >
+            Jump to latest
+          </button>
+        </Show>
       </div>
+      <p class="sr-only" role="status" aria-live="polite">
+        {replyStatus()}
+      </p>
       <ErrorBanner props={props} />
     </div>
   )
@@ -617,6 +675,7 @@ function EditMessageForm(props: {
     >
       <textarea
         class="border-border bg-background text-foreground min-h-20 w-full rounded-xl border px-3 py-2 text-sm"
+        aria-label="Edit message"
         value={value()}
         onInput={(e) => setValue(e.currentTarget.value)}
         ref={(el) => queueMicrotask(() => el.focus())}
@@ -652,7 +711,7 @@ function ErrorBanner(props: { props: ChatThreadMessageListProps }) {
           })
         return (
           <div
-            class="bg-destructive/10 text-destructive mt-4 flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm"
+            class="bg-destructive/10 text-destructive mx-3 mb-2 flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm sm:mx-6"
             role="alert"
           >
             <span>

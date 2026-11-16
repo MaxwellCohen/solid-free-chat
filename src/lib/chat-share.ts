@@ -5,6 +5,9 @@ import type { ChatUIMessage } from '../store/chat.store'
 export const MAX_SHARE_HASH_BYTES = 1_048_576
 const MAX_SHARE_INFLATED_BYTES = 16 * 1024 * 1024
 
+/** Hard cap so a giant hash can't exhaust memory. */
+export const MAX_SHARE_HASH_CHARS = 2 * 1024 * 1024
+
 const SHARE_VERSION_PREFIX = 'v1.'
 
 export type SharedTextPart = { type: 'text'; content: string }
@@ -102,6 +105,7 @@ export async function decodeSharedChat(
 ): Promise<SharedChatV1 | null> {
   const raw = hash.startsWith('#') ? hash.slice(1) : hash
   if (!raw.startsWith(SHARE_VERSION_PREFIX)) return null
+  if (raw.length > MAX_SHARE_HASH_CHARS) return null
   const payload = raw.slice(SHARE_VERSION_PREFIX.length)
   if (!payload) return null
   try {
@@ -147,7 +151,10 @@ function sanitizeMessage(message: ChatUIMessage): SharedMessage {
     parts,
   }
   if (message.createdAt) {
-    shared.createdAt = new Date(message.createdAt).toISOString()
+    const createdAt = new Date(message.createdAt)
+    if (!Number.isNaN(createdAt.getTime())) {
+      shared.createdAt = createdAt.toISOString()
+    }
   }
   return shared
 }

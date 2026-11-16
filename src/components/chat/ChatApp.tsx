@@ -22,7 +22,7 @@ import {
   importChatsFromFile,
 } from './chat-app-files'
 import { ChatErrorFallback } from './ChatErrorFallback'
-import { buildShareLink } from '../../lib/chat-share'
+import { MAX_SHARE_HASH_CHARS, buildShareLink } from '../../lib/chat-share'
 import type { ChatModelOption } from '../../lib/chat-models'
 import { DEFAULT_CHAT_MODEL, modelSupportsTools } from '../../lib/chat-models'
 import {
@@ -150,6 +150,8 @@ function isNarrowViewport() {
   if (typeof window === 'undefined') return false
   return window.matchMedia('(max-width: 639.98px)').matches
 }
+
+const SHARE_TOO_LARGE = new Error('share link too large')
 
 export default function ChatApp() {
   const actions = useChatActions()
@@ -528,14 +530,19 @@ export default function ChatApp() {
 
   function persistOpenRouterApiKey(raw: string, remember: boolean) {
     const v = raw.trim()
+    if (!storeApiKey({ key: v, remember }, providerIdDraft())) {
+      setShareFeedback(
+        'Could not save the key — browser storage is full or blocked.',
+      )
+      return
+    }
     setOpenRouterApiKeyDraft(v)
     setOpenRouterApiKeyApplied(v)
     setRememberApiKey(remember)
     setRememberApiKeyDraft(remember)
-    storeApiKey({ key: v, remember }, providerIdDraft())
     setProviderId(providerIdDraft())
     storeActiveProviderId(providerIdDraft())
-    setKeysVersion((v) => v + 1)
+    setKeysVersion((n) => n + 1)
   }
 
   function selectProviderDraft(id: string) {
@@ -638,13 +645,22 @@ export default function ChatApp() {
     }
   }
 
+  function confirmLeaveStreaming() {
+    return (
+      !currentConversationLoading() ||
+      window.confirm('A reply is still generating. Stop it and switch chats?')
+    )
+  }
+
   function selectConversation(id: string) {
+    if (id !== currentConversationId() && !confirmLeaveStreaming()) return
     setCurrentConversationLoading(false)
     actions.setCurrentConversationId(id)
     collapseSidebarIfNarrow()
   }
 
   function createConversationFromSidebar() {
+    if (!confirmLeaveStreaming()) return
     setCurrentConversationLoading(false)
     actions.createConversation()
     collapseSidebarIfNarrow()
@@ -1152,13 +1168,41 @@ export default function ChatApp() {
     try {
       const title =
         lookup(chatStore.state.conversationsById, id)?.title ?? 'Shared chat'
-      const result = await buildShareLink({
+      const linkPromise = buildShareLink({
         baseUrl: `${window.location.origin}/share`,
         title,
         model: selectedModel(),
         messages,
+      }).then((r) => {
+        if (r.url.length > MAX_SHARE_HASH_CHARS) throw SHARE_TOO_LARGE
+        return r
       })
-      await navigator.clipboard.writeText(result.url)
+      // Safari only allows clipboard writes started synchronously in the click handler.
+      const copyPromise =
+        typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write
+          ? navigator.clipboard.write([
+              new ClipboardItem({
+                'text/plain': linkPromise.then(
+                  (r) => new Blob([r.url], { type: 'text/plain' }),
+                ),
+              }),
+            ])
+          : linkPromise.then((r) => navigator.clipboard.writeText(r.url))
+      copyPromise.catch(() => {})
+      const result = await linkPromise
+      try {
+        await copyPromise
+      } catch {
+        try {
+          await navigator.clipboard.writeText(result.url)
+        } catch {
+          window.prompt('Copy share link', result.url)
+          setShareFeedback(
+            'Could not copy automatically — copy the link shown.',
+          )
+          return
+        }
+      }
       if (result.overLimit) {
         const mb = (result.byteLength / (1024 * 1024)).toFixed(1)
         setShareFeedback(
@@ -1167,8 +1211,12 @@ export default function ChatApp() {
       } else {
         setShareFeedback('Read-only link copied to clipboard.')
       }
-    } catch {
-      setShareFeedback('Could not copy share link.')
+    } catch (e) {
+      setShareFeedback(
+        e === SHARE_TOO_LARGE
+          ? 'This chat is too large to share as a link. Export it instead.'
+          : 'Could not copy share link.',
+      )
     } finally {
       setShareBusy(false)
     }

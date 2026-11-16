@@ -1,6 +1,6 @@
 import { createSignal, onCleanup } from 'solid-js'
 import type { ChatAppState } from './chat.store'
-import { chatStore, chatActions, chatSelectors } from './chat.store'
+import { chatStore, chatActions } from './chat.store'
 
 type ReadableStore<TState> = {
   get: () => TState
@@ -60,8 +60,4 @@ export function useChatStore<TSelected = ChatAppState>(
 
 export function useChatActions() {
   return chatActions
-}
-
-export function useChatSelectors() {
-  return chatSelectors
 }

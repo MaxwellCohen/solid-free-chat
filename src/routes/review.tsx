@@ -1,5 +1,12 @@
 import { createFileRoute } from '@tanstack/solid-router'
-import { For, Show, createMemo, createSignal, onSettled } from 'solid-js'
+import {
+  For,
+  Show,
+  createMemo,
+  createSignal,
+  onCleanup,
+  onSettled,
+} from 'solid-js'
 
 import { runAgent } from '../lib/harness/run-agent-lazy'
 import { ModelSelect } from '../components/ModelSelect'
@@ -69,7 +76,9 @@ function Review() {
     const input = text()
     if (!input.trim()) return
     abort?.abort()
-    abort = new AbortController()
+    const controller = new AbortController()
+    abort = controller
+    const stale = () => controller.signal.aborted || abort !== controller
     setLoading(true)
     setError('')
     setComments([])
@@ -82,23 +91,26 @@ function Review() {
         model: sel.modelId,
         messages: [{ role: 'user', content: input }],
         systemPrompt: buildReviewSystemPrompt(focus()),
-        abortSignal: abort.signal,
+        abortSignal: controller.signal,
       })) {
         if (chunk.type === 'TEXT_MESSAGE_CONTENT') raw += chunk.delta
         else if (chunk.type === 'RUN_ERROR') throw new Error(chunk.message)
       }
+      if (stale()) return
       const parsed = parseReviewComments(raw)
       if (parsed.length === 0)
         setError('No feedback could be parsed. Try again.')
       setComments(parsed)
     } catch (e) {
-      if (!abort.signal.aborted) {
+      if (!stale()) {
         setError(e instanceof Error ? e.message : 'Review failed.')
       }
     } finally {
-      setLoading(false)
+      if (abort === controller) setLoading(false)
     }
   }
+
+  onCleanup(() => abort?.abort())
 
   return (
     <main class="mx-auto grid max-w-6xl gap-6 px-4 py-8 lg:grid-cols-[1fr_20rem]">

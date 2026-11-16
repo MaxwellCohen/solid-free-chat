@@ -140,13 +140,6 @@ export function findMatchingShortcut(
   return CHAT_SHORTCUTS.find((def) => matchesShortcut(event, def.keys))
 }
 
-export function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false
-  if (target.isContentEditable) return true
-  const tag = target.tagName
-  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
-}
-
 export function formatShortcutChord(chord: ShortcutChord): string {
   const parts: string[] = []
   const mac = isMacPlatform()
@@ -163,4 +156,11 @@ export function formatShortcutChord(chord: ShortcutChord): string {
           : chord.key
   parts.push(keyLabel)
   return parts.join(mac ? '' : '+')
+}
+
+export function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  if (target.isContentEditable) return true
+  const tag = target.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
 }

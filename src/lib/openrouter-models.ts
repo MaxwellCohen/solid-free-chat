@@ -88,6 +88,7 @@ function parseModelsDataArray(json: unknown): OpenRouterUserModelRow[] {
 async function fetchPublicFreeTextModelOptions(): Promise<ChatModelOption[]> {
   const res = await fetch(openRouterApiUrl('/models'), {
     headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(10_000),
   })
   const json: unknown = await res.json().catch(() => null)
   if (!res.ok) {
@@ -106,6 +107,7 @@ async function fetchFreeTextModelOptions(
   if (!apiKey) return fetchPublicFreeTextModelOptions()
   const res = await fetch(openRouterApiUrl('/models/user'), {
     headers: { Authorization: `Bearer ${apiKey}` },
+    signal: AbortSignal.timeout(10_000),
   })
 
   const json: unknown = await res.json().catch(() => null)

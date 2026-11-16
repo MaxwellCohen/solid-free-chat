@@ -1,5 +1,6 @@
 import {
   base64UrlToBytes,
+  MAX_SHARE_HASH_CHARS,
   bytesToBase64Url,
   gunzipBytes,
   gzipBytes,
@@ -17,6 +18,7 @@ export async function encodeWorkspace(files: Files): Promise<string> {
 export async function decodeWorkspace(hash: string): Promise<Files | null> {
   const raw = hash.startsWith('#') ? hash.slice(1) : hash
   if (!raw.startsWith(PREFIX)) return null
+  if (raw.length > MAX_SHARE_HASH_CHARS) return null
   try {
     const json = await gunzipBytes(base64UrlToBytes(raw.slice(PREFIX.length)))
     const parsed: unknown = JSON.parse(new TextDecoder().decode(json))

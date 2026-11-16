@@ -221,12 +221,17 @@ export function useChat(options: UseChatOptions) {
       const part = activeStructuredPart()
       if (!part) return {}
       const value = part.partial ?? part.data ?? {}
-      if (typeof value === 'object') return value as Record<string, unknown>
+      if (value && typeof value === 'object')
+        return value as Record<string, unknown>
       return {}
     }),
     final: createMemo(() => {
       const part = activeStructuredPart()
-      if (!part || part.status !== 'complete') {
+      if (
+        !part ||
+        part.type !== 'structured-output' ||
+        part.status !== 'complete'
+      ) {
         return null
       }
       return part.data

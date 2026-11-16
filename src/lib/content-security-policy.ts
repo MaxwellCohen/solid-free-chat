@@ -3,7 +3,8 @@ import { providerOrigins } from './providers'
 /**
  * Page CSP. The point is `connect-src`: even if hostile script ran in the page,
  * the browser refuses `fetch`/XHR/WebSocket/beacon to anywhere but this origin,
- * OpenRouter, and Sentry — so the API key cannot be quietly sent elsewhere.
+ * the configured provider origins, and Sentry — so the API key cannot be quietly
+ * sent elsewhere.
  */
 function sentryOrigin(): string | undefined {
   const dsn = import.meta.env.VITE_SENTRY_DSN
@@ -41,7 +42,7 @@ export function contentSecurityPolicy(): string {
     // Inline theme bootstrap + SSR hydration scripts.
     "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
     "style-src 'self' 'unsafe-inline'",
-    // Model-returned markdown may embed remote images.
+    // Previews may load remote images. Chat markdown never does: it renders them as links.
     `img-src 'self' data: blob: https: ${IMAGE_ORIGINS.join(' ')}`,
     "font-src 'self' data:",
     `connect-src ${connect.join(' ')}`,
