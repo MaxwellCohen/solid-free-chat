@@ -338,7 +338,7 @@ code {
     --pele-accent: #3b82f6;
     --pele-font: inherit;
   }
-  .chat-diagram :where(svg) {
+  .chat-diagram :where(svg, img) {
     @apply mx-auto h-auto max-w-full;
   }
   /* TanStack Charts: axes/text use currentColor; match the tooltip to the theme. */

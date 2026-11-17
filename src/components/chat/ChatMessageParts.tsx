@@ -11,6 +11,7 @@ import { validateChartSpec } from '../../lib/visuals/chart'
 import type { ChartSpec } from '../../lib/visuals/chart'
 import { enhanceCodeBlocks } from '../../lib/code-block-actions'
 import { enhanceMermaidBlocks } from '../../lib/visuals/mermaid'
+import { enhanceSvgBlocks } from '../../lib/visuals/svg'
 import { ChartView, DiagramView, ImageCard } from './ChatVisuals'
 import { isImageUrl } from '../../lib/harness/image-url'
 
@@ -81,9 +82,10 @@ function TextPart(props: {
   )
   let container: HTMLDivElement | undefined
 
-  // Draw ```mermaid fences once the markdown HTML is in the DOM.
+  // Draw ```svg and ```mermaid fences once the markdown HTML is in the DOM.
   createEffect(html, (markup) => {
     if (!container) return
+    if (markup.includes('&lt;svg')) enhanceSvgBlocks(container)
     enhanceCodeBlocks(container)
     if (!markup.includes('data-lang="mermaid"')) return
     return enhanceMermaidBlocks(container)
