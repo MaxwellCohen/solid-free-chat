@@ -45,6 +45,15 @@ export function ChatThreadComposer(props: ChatThreadComposerProps) {
       onSubmit={props.onSubmit}
     >
       <div class="mx-auto flex max-w-3xl flex-col gap-2">
+        <Show when={props.isLoading()}>
+          <button
+            type="button"
+            class="border-border hover:bg-muted self-center rounded-full border px-4 py-1.5 text-xs"
+            onClick={props.onStop}
+          >
+            Stop generating
+          </button>
+        </Show>
         <AttachmentPickerRow props={props} />
         <ComposerFeedback props={props} />
         <PendingAttachmentList props={props} />
@@ -416,15 +425,6 @@ function ComposerInputRow(props: { props: ChatThreadComposerProps }) {
             onClick={() => props.props.onToggleDictation?.()}
           >
             <Mic class="size-4" aria-hidden="true" />
-          </button>
-        </Show>
-        <Show when={props.props.isLoading()}>
-          <button
-            type="button"
-            class="border-border hover:bg-muted rounded-xl border px-3 py-1 text-xs"
-            onClick={props.props.onStop}
-          >
-            Stop
           </button>
         </Show>
       </div>
