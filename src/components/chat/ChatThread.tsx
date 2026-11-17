@@ -11,6 +11,10 @@ import {
 } from 'solid-js'
 import { stream } from '@tanstack/ai-client'
 import type { UIMessage } from '@tanstack/ai-client'
+import {
+  startBackgroundKeepalive,
+  stopBackgroundKeepalive,
+} from '../../lib/background-keepalive'
 import { useChat } from '../../lib/use-chat'
 import { clearDraft, loadDraft, saveDraft } from '../../lib/chat-drafts'
 import type { ContentPart, StreamChunk } from '@tanstack/ai'
@@ -423,6 +427,15 @@ function ChatThreadSession(props: {
     () => ({ loading: chat.isLoading(), notify: props.onLoadingChange }),
     ({ loading, notify }) => {
       notify(loading)
+    },
+  )
+
+  createEffect(
+    () => chat.isLoading(),
+    (loading) => {
+      if (!loading) return
+      startBackgroundKeepalive()
+      return () => stopBackgroundKeepalive()
     },
   )
 
