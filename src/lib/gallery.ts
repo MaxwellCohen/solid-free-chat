@@ -1,6 +1,7 @@
 import { classifyChatError } from './chat-error'
 import { idbAvailable, idbGet, idbSet } from './idb-kv'
-import { pickFrom, type Rng } from './harness/random'
+import { pickFrom } from './harness/random'
+import type { Rng } from './harness/random'
 
 export type GalleryStatus = 'drawing' | 'done'
 
@@ -37,10 +38,14 @@ export type GalleryRunner = (
 
 export const GALLERY_MAX_ITEMS = 200
 export const GALLERY_MAX_FAILURES = 4
-export const GALLERY_CONCURRENCY = 3
+export const GALLERY_CONCURRENCY = 4
 export const GALLERY_MAX_SESSIONS = 40
 /** Slight creativity bump so parallel fresh threads diverge. */
 export const GALLERY_TEMPERATURE = 0.95
+/** Hard cap so a rambling model can't hold a slot for minutes. */
+export const GALLERY_MAX_TOKENS = 3500
+/** A cut-off picture this long is still worth keeping (closed up). */
+const SALVAGE_MIN_CHARS = 600
 
 const MAX_SVG_CHARS = 200_000
 const SVG_NS = 'http://www.w3.org/2000/svg'
@@ -89,22 +94,58 @@ export function extractSvg(text: string): string | null {
   return svg.length > MAX_SVG_CHARS ? null : svg
 }
 
+const TAG_RE = /<(\/?)([a-zA-Z][\w:.-]*)\b[^<>]*?(\/?)>/g
+
 /**
- * Best-effort SVG for live preview: complete extract when possible, otherwise
- * close an open <svg> so the browser can paint partial output.
+ * Turns a cut-off SVG into well-formed XML: drops the trailing half-written
+ * tag, then closes every element still open. Browsers refuse to paint an
+ * <img> whose SVG isn't well-formed, so this is what makes partial output
+ * visible. Null if no <svg> start tag has finished yet.
  */
-export function previewSvg(text: string): string | null {
-  const complete = extractSvg(text)
-  if (complete) return complete
+export function repairPartialSvg(text: string): string | null {
   const start = text.search(/<svg[\s>]/i)
   if (start < 0) return null
   let svg = text.slice(start)
-  if (!/<\/svg>/i.test(svg)) svg += '</svg>'
+  const lastOpen = svg.lastIndexOf('<')
+  const lastClose = svg.lastIndexOf('>')
+  // Inside an unfinished tag: drop it.
+  if (lastOpen > lastClose) svg = svg.slice(0, lastOpen)
+  if (svg.indexOf('>') < 0) return null
+  // Drop an unfinished comment / CDATA.
+  const comment = svg.lastIndexOf('<!--')
+  if (comment >= 0 && svg.indexOf('-->', comment) < 0) {
+    svg = svg.slice(0, comment)
+  }
+  const stack: string[] = []
+  for (const m of svg.matchAll(TAG_RE)) {
+    const [, closing, name, selfClosing] = m
+    if (selfClosing) continue
+    if (closing) {
+      const at = stack.lastIndexOf(name)
+      if (at >= 0) stack.length = at
+    } else {
+      stack.push(name)
+    }
+  }
+  if (stack.length === 0) return null
+  // Unclosed text (e.g. a half-written <title>) is fine as-is once closed.
+  svg += stack
+    .reverse()
+    .map((n) => `</${n}>`)
+    .join('')
   const tagEnd = svg.indexOf('>')
-  if (tagEnd > 0 && !/\sxmlns\s*=/i.test(svg.slice(0, tagEnd))) {
+  if (!/\sxmlns\s*=/i.test(svg.slice(0, tagEnd))) {
     svg = `<svg xmlns="${SVG_NS}"${svg.slice(4)}`
   }
   return svg.length > MAX_SVG_CHARS ? null : svg
+}
+
+/**
+ * Best-effort SVG for live preview: complete extract when possible, otherwise
+ * a repaired, well-formed version of the partial output.
+ */
+export function previewSvg(text: string): string | null {
+  return extractSvg(text) ?? repairPartialSvg(text)
 }
 
 /** Text of the first <title>, trimmed to 80 chars; '' if none. */
@@ -142,17 +183,17 @@ export function buildGalleryRequest(opts: {
   const rng = opts.rng ?? Math.random
   const twistPick = pickFrom(GALLERY_TWISTS, 1, rng)
   const moodPick = pickFrom(GALLERY_MOODS, 1, rng)
-  const twist = twistPick.ok ? twistPick.picks[0]! : GALLERY_TWISTS[0]!
-  const mood = moodPick.ok ? moodPick.picks[0]! : GALLERY_MOODS[0]!
+  const twist = twistPick.ok ? twistPick.picks[0] : GALLERY_TWISTS[0]
+  const mood = moodPick.ok ? moodPick.picks[0] : GALLERY_MOODS[0]
   const seed = Math.floor(rng() * 1_000_000)
   const system =
-    'You are an SVG illustrator. Reply with ONLY one complete standalone <svg> element: no markdown fences, no commentary. ' +
-    'It must have xmlns="http://www.w3.org/2000/svg" and viewBox="0 0 512 512". ' +
-    'The first child must be a short <title> naming the piece. ' +
-    'Fill the whole canvas with a background. Use shapes, paths and gradients. ' +
-    'No <script>, no <foreignObject>, no external images, fonts or hrefs. ' +
-    'Keep it under about 6000 characters so it is never cut off. ' +
-    'This is a brand-new request; invent a unique composition.'
+    'You are a fast SVG illustrator. Reply with ONLY one <svg> element: no markdown fences, no commentary, no thinking out loud. ' +
+    'Start with <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">, then a short <title> naming the piece, ' +
+    'then a full-canvas background, then the main shapes from back to front. ' +
+    'Write compact SVG: no indentation or blank lines, no comments, integer coordinates, short hex colours, ' +
+    'reuse fills via <defs>/<use> or <g> where helpful. Aim for 2500-3500 characters total. ' +
+    'No <script>, no <foreignObject>, no <text> blocks beyond the title, no external images, fonts or hrefs. ' +
+    'This is a brand-new request; invent a unique composition.\n'
   const lines = [
     `Theme: ${opts.prompt.trim()}`,
     `This is piece #${opts.n} in an endless gallery on this theme.`,
@@ -161,7 +202,7 @@ export function buildGalleryRequest(opts: {
   if (opts.previousTitles.length > 0) {
     lines.push(
       'Already in the gallery (make something clearly different in subject, composition and palette): ' +
-        opts.previousTitles.slice(-12).join('; '),
+        opts.previousTitles.slice(-8).join('; '),
     )
   }
   lines.push(
@@ -227,10 +268,12 @@ function parseSession(raw: unknown): GallerySession | null {
   if (typeof s.id !== 'string' || !s.id) return null
   const prompt = typeof s.prompt === 'string' ? s.prompt : ''
   const items = Array.isArray(s.items)
-    ? s.items.flatMap((i) => {
-        const item = parseItem(i)
-        return item ? [item] : []
-      }).slice(-GALLERY_MAX_ITEMS)
+    ? s.items
+        .flatMap((i) => {
+          const item = parseItem(i)
+          return item ? [item] : []
+        })
+        .slice(-GALLERY_MAX_ITEMS)
     : []
   const createdAt =
     typeof s.createdAt === 'number' && Number.isFinite(s.createdAt)
@@ -263,10 +306,12 @@ export function parseGalleryLibrary(raw: string | null): GalleryLibrary {
     }
     const obj = data as Partial<GalleryLibrary>
     const sessions = Array.isArray(obj.sessions)
-      ? obj.sessions.flatMap((s) => {
-          const session = parseSession(s)
-          return session ? [session] : []
-        }).slice(0, GALLERY_MAX_SESSIONS)
+      ? obj.sessions
+          .flatMap((s) => {
+            const session = parseSession(s)
+            return session ? [session] : []
+          })
+          .slice(0, GALLERY_MAX_SESSIONS)
       : []
     const currentId =
       typeof obj.currentId === 'string' &&
@@ -342,7 +387,9 @@ export async function loadGalleryLibrary(): Promise<GalleryLibrary> {
   }
 }
 
-export async function saveGalleryLibrary(library: GalleryLibrary): Promise<void> {
+export async function saveGalleryLibrary(
+  library: GalleryLibrary,
+): Promise<void> {
   if (!idbAvailable()) return
   try {
     const cleaned: GalleryLibrary = {
@@ -439,6 +486,11 @@ export async function runGallery(opts: {
   const drawOne = async (id: string, n: number): Promise<void> => {
     let message = ''
     let rateLimited = false
+    // Per-picture abort so we can hang up as soon as </svg> arrives.
+    const local = new AbortController()
+    const hangUp = () => local.abort()
+    if (signal.aborted) local.abort()
+    else signal.addEventListener('abort', hangUp, { once: true })
     try {
       const req = buildGalleryRequest({
         prompt: opts.prompt,
@@ -450,9 +502,11 @@ export async function runGallery(opts: {
       })
       let text = ''
       let lastPreview = 0
-      for await (const delta of opts.runner(req, signal)) {
+      for await (const delta of opts.runner(req, local.signal)) {
         if (signal.aborted) break
         text += delta
+        // Done drawing: stop paying for any trailing chatter.
+        if (/<\/svg>/i.test(text.slice(-delta.length - 6))) break
         const t = now()
         if (t - lastPreview < PREVIEW_MIN_MS) continue
         lastPreview = t
@@ -468,7 +522,12 @@ export async function runGallery(opts: {
         emit(without(id))
         return
       }
-      const svg = extractSvg(text)
+      let svg = extractSvg(text)
+      if (!svg) {
+        // Cut off (token cap / dropped stream): keep it if there's enough.
+        const salvaged = repairPartialSvg(text)
+        if (salvaged && salvaged.length >= SALVAGE_MIN_CHARS) svg = salvaged
+      }
       if (!svg) throw new Error('Model did not return a complete SVG')
       patch(id, {
         status: 'done',
@@ -483,6 +542,9 @@ export async function runGallery(opts: {
       const info = classifyChatError(e)
       rateLimited = info.kind === 'rate-limit'
       message = rateLimited ? 'Rate limited' : info.detail
+    } finally {
+      signal.removeEventListener('abort', hangUp)
+      local.abort()
     }
     failures++
     if (failures >= GALLERY_MAX_FAILURES) {

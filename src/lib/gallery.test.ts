@@ -10,10 +10,11 @@ import {
   parseGalleryLibrary,
   parseSavedGallery,
   previewSvg,
+  repairPartialSvg,
   runGallery,
   upsertGallerySession,
-  type GalleryRunner,
 } from './gallery'
+import type { GalleryRunner } from './gallery'
 
 const svg = (title: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><title>${title}</title><rect width="512" height="512" fill="#123"/></svg>`
@@ -23,6 +24,19 @@ describe('gallery svg helpers', () => {
     const raw = '<svg viewBox="0 0 10 10"><title>t</title></svg>'
     expect(extractSvg(raw)).toContain('xmlns=')
     expect(extractSvg('nope')).toBeNull()
+  })
+
+  it('repairs a cut-off svg into well-formed xml', () => {
+    const partial =
+      '<svg viewBox="0 0 10 10"><title>Sun</title><g fill="#f00"><rect width="5" height="5"/><circle cx="1" cy="1" r'
+    const fixed = repairPartialSvg(partial)!
+    expect(fixed).toBe(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><title>Sun</title><g fill="#f00"><rect width="5" height="5"/></g></svg>`,
+    )
+    expect(repairPartialSvg('<svg viewBox="0 0')).toBeNull()
+    expect(repairPartialSvg('<svg><title>Half a ti')).toBe(
+      `<svg xmlns="http://www.w3.org/2000/svg"><title>Half a ti</title></svg>`,
+    )
   })
 
   it('previews incomplete svg by closing the tag', () => {
@@ -140,12 +154,47 @@ describe('runGallery', () => {
       },
     })
     expect(maxActive).toBeGreaterThan(1)
-    expect(res.items.filter((i) => i.status === 'done').length).toBeGreaterThanOrEqual(
-      1,
-    )
-    expect(updates.some((u) => u.some((x) => x.startsWith('drawing:svg')))).toBe(
-      true,
-    )
+    expect(
+      res.items.filter((i) => i.status === 'done').length,
+    ).toBeGreaterThanOrEqual(1)
+    expect(
+      updates.some((u) => u.some((x) => x.startsWith('drawing:svg'))),
+    ).toBe(true)
+  })
+
+  it('hangs up once </svg> arrives and salvages cut-off pictures', async () => {
+    const signals: AbortSignal[] = []
+    let calls = 0
+    let trailingRead = false
+    const runner: GalleryRunner = async function* (_req, signal) {
+      signals.push(signal)
+      calls++
+      if (calls === 1) {
+        yield svg('Whole')
+        trailingRead = true
+        yield ' Hope you like it!'
+      } else {
+        // Cut off mid-path, but plenty drawn already.
+        yield `<svg viewBox="0 0 512 512"><title>Cut</title><g>${'<rect width="9" height="9" fill="#123"/>'.repeat(20)}<path d="M0 0 L`
+      }
+    }
+    const ac = new AbortController()
+    const res = await runGallery({
+      prompt: 'theme',
+      items: [],
+      runner,
+      signal: ac.signal,
+      concurrency: 1,
+      sleep: async () => {},
+      onUpdate: (items) => {
+        if (items.filter((i) => i.status === 'done').length >= 2) ac.abort()
+      },
+    })
+    expect(trailingRead).toBe(false)
+    expect(signals[0].aborted).toBe(true)
+    const done = res.items.filter((i) => i.status === 'done')
+    expect(done.map((i) => i.title)).toEqual(['Whole', 'Cut'])
+    expect(done[1].svg.endsWith('</g></svg>')).toBe(true)
   })
 
   it('stops after too many consecutive failures', async () => {

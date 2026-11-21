@@ -1,8 +1,10 @@
 import { Link, createFileRoute } from '@tanstack/solid-router'
 import { For, Show, createSignal, onCleanup, onSettled } from 'solid-js'
 
+import { classifyChatError } from '../lib/chat-error'
 import type { ChatModelOption } from '../lib/chat-models'
 import {
+  GALLERY_MAX_TOKENS,
   GALLERY_TEMPERATURE,
   createGallerySession,
   deleteGallerySession,
@@ -31,19 +33,62 @@ export const Route = createFileRoute('/gallery')({
 const encode = (providerId: string, modelId: string) =>
   `${providerId}\n${modelId}`
 
+/**
+ * Request fields that switch off (or minimise) hidden reasoning. Free
+ * reasoning models can otherwise "think" for 30s+ before the first SVG byte.
+ */
+function noReasoningOptions(
+  providerId: string,
+): Record<string, unknown> | undefined {
+  if (providerId === 'openrouter') return { reasoning: { effort: 'none' } }
+  if (providerId === 'groq' || providerId === 'cerebras') {
+    return { reasoning_effort: 'low' }
+  }
+  return undefined
+}
+
+/** Models that rejected the no-reasoning fields; don't send them again. */
+const reasoningRejected = new Set<string>()
+
 function makeRunner(providerId: string, modelId: string): GalleryRunner {
+  const key = encode(providerId, modelId)
   return async function* (req, signal) {
     const apiKey = loadStoredApiKey(providerId).key.trim()
-    // Each picture is a fresh one-shot thread (no prior turns).
-    for await (const chunk of runAgent({
-      apiKey,
-      providerId,
-      model: modelId,
-      systemPrompt: req.system,
-      messages: [{ role: 'user', content: req.prompt }],
-      temperature: GALLERY_TEMPERATURE,
-      abortSignal: signal,
-    })) {
+    const stream = (extra?: Record<string, unknown>) =>
+      // Each picture is a fresh one-shot thread (no prior turns).
+      runAgent({
+        apiKey,
+        providerId,
+        model: modelId,
+        systemPrompt: req.system,
+        messages: [{ role: 'user', content: req.prompt }],
+        temperature: GALLERY_TEMPERATURE,
+        maxTokens: GALLERY_MAX_TOKENS,
+        extraModelOptions: extra,
+        abortSignal: signal,
+      })
+    const extra = reasoningRejected.has(key)
+      ? undefined
+      : noReasoningOptions(providerId)
+    let sawText = false
+    try {
+      for await (const chunk of stream(extra)) {
+        if (chunk.type === 'TEXT_MESSAGE_CONTENT') {
+          sawText = true
+          yield chunk.delta
+        } else if (chunk.type === 'RUN_ERROR') throw new Error(chunk.message)
+      }
+      return
+    } catch (e) {
+      // Some models insist on reasoning (or don't know the field): retry plain.
+      if (!extra || sawText || signal.aborted) throw e
+      const kind = classifyChatError(e).kind
+      if (kind === 'rate-limit' || kind === 'auth' || kind === 'credits') {
+        throw e
+      }
+      reasoningRejected.add(key)
+    }
+    for await (const chunk of stream()) {
       if (chunk.type === 'TEXT_MESSAGE_CONTENT') yield chunk.delta
       else if (chunk.type === 'RUN_ERROR') throw new Error(chunk.message)
     }

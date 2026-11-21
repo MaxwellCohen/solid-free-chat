@@ -23,6 +23,8 @@ export type RunAgentOptions = {
   /** Undefined = provider default. */
   temperature?: number
   maxTokens?: number
+  /** Provider-specific request fields (e.g. reasoning effort), sent as-is. */
+  extraModelOptions?: Record<string, unknown>
   tools?: Tool[]
   abortSignal?: AbortSignal
 }
@@ -122,6 +124,7 @@ export function runAgent(options: RunAgentOptions): AsyncIterable<StreamChunk> {
   const modelOptions = {
     ...(temperature !== undefined ? { temperature } : {}),
     ...(maxTokens !== undefined ? { [maxKey]: maxTokens } : {}),
+    ...options.extraModelOptions,
   }
   // TanStack AI strips role=system UIMessages during conversion; the OpenRouter
   // adapter injects via systemPrompts (see mapTextOptionsToSDK).
