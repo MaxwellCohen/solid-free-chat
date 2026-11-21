@@ -3,12 +3,22 @@ import { For, Show, createSignal, onCleanup, onSettled } from 'solid-js'
 
 import type { ChatModelOption } from '../lib/chat-models'
 import {
-  loadSavedGallery,
+  GALLERY_TEMPERATURE,
+  createGallerySession,
+  deleteGallerySession,
+  gallerySessionTitle,
+  loadGalleryLibrary,
   runGallery,
-  saveGallery,
+  saveGalleryLibrary,
   svgDataUrl,
+  upsertGallerySession,
 } from '../lib/gallery'
-import type { GalleryItem, GalleryRunner } from '../lib/gallery'
+import type {
+  GalleryItem,
+  GalleryLibrary,
+  GalleryRunner,
+  GallerySession,
+} from '../lib/gallery'
 import { runAgent } from '../lib/harness/run-agent-lazy'
 import { loadAllModelOptions } from '../lib/model-options'
 import { loadStoredApiKey } from '../lib/openrouter-key-storage'
@@ -24,12 +34,14 @@ const encode = (providerId: string, modelId: string) =>
 function makeRunner(providerId: string, modelId: string): GalleryRunner {
   return async function* (req, signal) {
     const apiKey = loadStoredApiKey(providerId).key.trim()
+    // Each picture is a fresh one-shot thread (no prior turns).
     for await (const chunk of runAgent({
       apiKey,
       providerId,
       model: modelId,
       systemPrompt: req.system,
       messages: [{ role: 'user', content: req.prompt }],
+      temperature: GALLERY_TEMPERATURE,
       abortSignal: signal,
     })) {
       if (chunk.type === 'TEXT_MESSAGE_CONTENT') yield chunk.delta
@@ -69,6 +81,10 @@ function Gallery() {
   const [model, setModel] = createSignal('')
   const [prompt, setPrompt] = createSignal('')
   const [items, setItems] = createSignal<GalleryItem[]>([])
+  const [library, setLibrary] = createSignal<GalleryLibrary>({
+    sessions: [],
+    currentId: null,
+  })
   const [running, setRunning] = createSignal(false)
   const [status, setStatus] = createSignal('')
   const [error, setError] = createSignal('')
@@ -78,22 +94,88 @@ function Gallery() {
   const [ready, setReady] = createSignal(false)
   let abort: AbortController | undefined
   let dialog: HTMLDialogElement | undefined
-  let savedKey = ''
+  let persistTimer: ReturnType<typeof setTimeout> | undefined
+
+  const currentSession = (): GallerySession | undefined => {
+    const lib = library()
+    return lib.sessions.find((s) => s.id === lib.currentId)
+  }
+
+  const persist = (nextItems: GalleryItem[], nextPrompt = prompt()) => {
+    const lib = library()
+    const existing = lib.sessions.find((s) => s.id === lib.currentId)
+    const theme = nextPrompt.trim() || existing?.prompt || ''
+    const session = existing
+      ? {
+          ...existing,
+          prompt: theme,
+          title: gallerySessionTitle(theme),
+          items: nextItems.filter((i) => i.status === 'done'),
+          updatedAt: Date.now(),
+        }
+      : {
+          ...createGallerySession(theme),
+          items: nextItems.filter((i) => i.status === 'done'),
+        }
+    const next = upsertGallerySession(lib, session)
+    setLibrary(next)
+    clearTimeout(persistTimer)
+    persistTimer = setTimeout(() => void saveGalleryLibrary(next), 200)
+  }
 
   const update = (next: GalleryItem[]) => {
     setItems(next)
-    const done = next.filter((i) => i.status === 'done')
-    const key = `${done.length}:${done.at(-1)?.id ?? ''}`
-    if (key === savedKey) return
-    savedKey = key
-    void saveGallery(done)
+    persist(next)
+  }
+
+  const selectSession = (id: string) => {
+    if (running()) return
+    const lib = library()
+    const session = lib.sessions.find((s) => s.id === id)
+    if (!session) return
+    const next = { ...lib, currentId: id }
+    setLibrary(next)
+    setItems(session.items)
+    setPrompt(session.prompt)
+    setError('')
+    void saveGalleryLibrary(next)
+  }
+
+  const newGallery = () => {
+    if (running()) return
+    const session = createGallerySession('')
+    const next = upsertGallerySession(library(), session)
+    setLibrary(next)
+    setItems([])
+    setPrompt('')
+    setError('')
+    void saveGalleryLibrary(next)
+  }
+
+  const removeSession = (id: string) => {
+    if (running()) return
+    if (!window.confirm('Delete this gallery thread?')) return
+    const next = deleteGallerySession(library(), id)
+    setLibrary(next)
+    const cur = next.sessions.find((s) => s.id === next.currentId)
+    setItems(cur?.items ?? [])
+    setPrompt(cur?.prompt ?? '')
+    setError('')
+    void saveGalleryLibrary(next)
   }
 
   onSettled(() => {
-    void loadSavedGallery().then((saved) => {
-      savedKey = `${saved.length}:${saved.at(-1)?.id ?? ''}`
-      setItems(saved)
-      setPrompt((p) => p || (saved.at(-1)?.prompt ?? ''))
+    void loadGalleryLibrary().then((lib) => {
+      let next = lib
+      if (!next.currentId) {
+        const session = createGallerySession('')
+        next = upsertGallerySession(next, session)
+        void saveGalleryLibrary(next)
+      }
+      setLibrary(next)
+      const cur = next.sessions.find((s) => s.id === next.currentId)
+      setItems(cur?.items ?? [])
+      setPrompt(cur?.prompt ?? '')
       setReady(true)
     })
     setHasKey(!!loadStoredApiKey('openrouter').key.trim())
@@ -113,7 +195,10 @@ function Gallery() {
       )
     })
   })
-  onCleanup(() => abort?.abort())
+  onCleanup(() => {
+    abort?.abort()
+    clearTimeout(persistTimer)
+  })
 
   const decoded = () => {
     const raw = model()
@@ -132,13 +217,27 @@ function Gallery() {
     abort?.abort()
     const ac = new AbortController()
     abort = ac
+    const theme = prompt().trim()
+    const cur = currentSession()
+    let baseItems = items()
+    // Changing theme on a thread that already has pictures → new chat thread.
+    if (cur && cur.prompt && cur.prompt !== theme && cur.items.length > 0) {
+      const session = createGallerySession(theme)
+      const next = upsertGallerySession(library(), session)
+      setLibrary(next)
+      baseItems = []
+      setItems([])
+      void saveGalleryLibrary(next)
+    } else {
+      persist(baseItems, theme)
+    }
     setRunning(true)
     setError('')
     setStatus('Starting…')
     try {
       const res = await runGallery({
-        prompt: prompt().trim(),
-        items: items(),
+        prompt: theme,
+        items: baseItems,
         runner: makeRunner(d.providerId, d.modelId),
         signal: ac.signal,
         onUpdate: update,
@@ -182,8 +281,8 @@ function Gallery() {
         Endless gallery
       </h1>
       <p class="text-muted-foreground mb-4 text-sm">
-        Give it a theme and it keeps drawing SVG pictures until you stop it.
-        Pictures are saved on this device.
+        Each Start is a fresh thread: several pictures draw in parallel with
+        random twists. Past threads stay on this device.
       </p>
 
       <Show when={!hasKey()}>
@@ -236,7 +335,7 @@ function Gallery() {
             disabled={!canStart()}
             onClick={() => void start()}
           >
-            {items().length === 0 ? 'Start' : 'Continue'}
+            {items().some((i) => i.status === 'done') ? 'Continue' : 'Start'}
           </button>
           <button
             type="button"
@@ -249,9 +348,17 @@ function Gallery() {
           <button
             type="button"
             class="border-border text-foreground rounded-lg border px-4 py-2 text-sm font-medium disabled:opacity-50"
+            disabled={running()}
+            onClick={newGallery}
+          >
+            New thread
+          </button>
+          <button
+            type="button"
+            class="border-border text-foreground rounded-lg border px-4 py-2 text-sm font-medium disabled:opacity-50"
             disabled={running() || items().length === 0}
             onClick={() => {
-              if (!window.confirm('Delete all saved pictures?')) return
+              if (!window.confirm('Clear pictures in this thread?')) return
               update([])
               setError('')
             }}
@@ -260,6 +367,46 @@ function Gallery() {
           </button>
         </div>
       </section>
+
+      <Show when={library().sessions.length > 0}>
+        <section class="mb-6" aria-label="Previous gallery threads">
+          <h2 class="text-foreground mb-2 text-sm font-medium">Threads</h2>
+          <ul class="flex flex-col gap-1">
+            <For each={library().sessions}>
+              {(s) => (
+                <li class="flex items-stretch gap-1">
+                  <button
+                    type="button"
+                    class="border-border hover:bg-muted min-h-10 flex-1 rounded-lg border px-3 py-2 text-left text-sm aria-[current=true]:border-primary aria-[current=true]:bg-muted/60"
+                    aria-current={
+                      s.id === library().currentId ? 'true' : undefined
+                    }
+                    disabled={running()}
+                    onClick={() => selectSession(s.id)}
+                  >
+                    <span class="text-foreground block truncate font-medium">
+                      {s.title || 'Untitled gallery'}
+                    </span>
+                    <span class="text-muted-foreground text-xs">
+                      {s.items.length}{' '}
+                      {s.items.length === 1 ? 'picture' : 'pictures'}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    class="border-border text-muted-foreground hover:bg-muted hover:text-foreground min-h-10 rounded-lg border px-3 text-xs disabled:opacity-50"
+                    aria-label={`Delete ${s.title || 'gallery'}`}
+                    disabled={running()}
+                    onClick={() => removeSession(s.id)}
+                  >
+                    Delete
+                  </button>
+                </li>
+              )}
+            </For>
+          </ul>
+        </section>
+      </Show>
 
       <p class="text-muted-foreground mb-3 text-sm" role="status">
         <Show when={running() && status()}>{status()} · </Show>
@@ -283,47 +430,63 @@ function Gallery() {
               data-status={item().status}
             >
               <Show
-                when={item().status === 'done'}
+                when={item().svg}
                 fallback={
                   <div class="bg-muted text-muted-foreground flex aspect-square animate-pulse items-center justify-center text-sm">
                     Drawing…
                   </div>
                 }
               >
-                <button
-                  type="button"
-                  class="block w-full"
-                  aria-label={`View ${item().title} full size`}
-                  onClick={() => open(item())}
+                <Show
+                  when={item().status === 'done'}
+                  fallback={
+                    <div class="relative">
+                      <img
+                        class="aspect-square w-full object-contain opacity-70"
+                        alt=""
+                        src={svgDataUrl(item().svg)}
+                      />
+                      <p class="text-muted-foreground absolute inset-x-0 bottom-0 bg-black/40 px-2 py-1 text-center text-xs text-white">
+                        Drawing…
+                      </p>
+                    </div>
+                  }
                 >
-                  <img
-                    class="aspect-square w-full object-contain"
-                    loading="lazy"
-                    alt={item().title}
-                    src={svgDataUrl(item().svg)}
-                  />
-                </button>
-                <p class="text-foreground m-0 truncate px-2 pt-2 text-xs">
-                  {item().title}
-                </p>
-                <div class="flex gap-2 p-2">
                   <button
                     type="button"
-                    class={smallBtn}
-                    aria-label={`Download ${item().title}`}
-                    onClick={() => downloadSvg(item())}
+                    class="block w-full"
+                    aria-label={`View ${item().title} full size`}
+                    onClick={() => open(item())}
                   >
-                    Download
+                    <img
+                      class="aspect-square w-full object-contain"
+                      loading="lazy"
+                      alt={item().title}
+                      src={svgDataUrl(item().svg)}
+                    />
                   </button>
-                  <button
-                    type="button"
-                    class={smallBtn}
-                    aria-label={`Copy SVG of ${item().title}`}
-                    onClick={() => void copy(item())}
-                  >
-                    {copied() === item().id ? 'Copied' : 'Copy'}
-                  </button>
-                </div>
+                  <p class="text-foreground m-0 truncate px-2 pt-2 text-xs">
+                    {item().title}
+                  </p>
+                  <div class="flex gap-2 p-2">
+                    <button
+                      type="button"
+                      class={smallBtn}
+                      aria-label={`Download ${item().title}`}
+                      onClick={() => downloadSvg(item())}
+                    >
+                      Download
+                    </button>
+                    <button
+                      type="button"
+                      class={smallBtn}
+                      aria-label={`Copy SVG of ${item().title}`}
+                      onClick={() => void copy(item())}
+                    >
+                      {copied() === item().id ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                </Show>
               </Show>
             </li>
           )}
