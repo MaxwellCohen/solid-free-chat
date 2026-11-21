@@ -2,7 +2,12 @@ import { Link, createFileRoute } from '@tanstack/solid-router'
 import { For, Show, createSignal, onCleanup, onSettled } from 'solid-js'
 
 import type { ChatModelOption } from '../lib/chat-models'
-import { svgDataUrl, runGallery } from '../lib/gallery'
+import {
+  loadSavedGallery,
+  runGallery,
+  saveGallery,
+  svgDataUrl,
+} from '../lib/gallery'
 import type { GalleryItem, GalleryRunner } from '../lib/gallery'
 import { runAgent } from '../lib/harness/run-agent-lazy'
 import { loadAllModelOptions } from '../lib/model-options'
@@ -56,6 +61,9 @@ function downloadSvg(item: GalleryItem) {
 const smallBtn =
   'border-border text-foreground hover:bg-muted min-h-9 flex-1 rounded-md border px-2 text-xs'
 
+const navBtn =
+  'border-border text-foreground hover:bg-muted min-h-10 rounded-lg border px-4 text-sm font-medium aria-disabled:opacity-40'
+
 function Gallery() {
   const [options, setOptions] = createSignal<ChatModelOption[]>([])
   const [model, setModel] = createSignal('')
@@ -65,12 +73,29 @@ function Gallery() {
   const [status, setStatus] = createSignal('')
   const [error, setError] = createSignal('')
   const [hasKey, setHasKey] = createSignal(true)
-  const [viewing, setViewing] = createSignal<GalleryItem | null>(null)
+  const [viewingId, setViewingId] = createSignal<string | null>(null)
   const [copied, setCopied] = createSignal('')
+  const [ready, setReady] = createSignal(false)
   let abort: AbortController | undefined
   let dialog: HTMLDialogElement | undefined
+  let savedKey = ''
+
+  const update = (next: GalleryItem[]) => {
+    setItems(next)
+    const done = next.filter((i) => i.status === 'done')
+    const key = `${done.length}:${done.at(-1)?.id ?? ''}`
+    if (key === savedKey) return
+    savedKey = key
+    void saveGallery(done)
+  }
 
   onSettled(() => {
+    void loadSavedGallery().then((saved) => {
+      savedKey = `${saved.length}:${saved.at(-1)?.id ?? ''}`
+      setItems(saved)
+      setPrompt((p) => p || (saved.at(-1)?.prompt ?? ''))
+      setReady(true)
+    })
     setHasKey(!!loadStoredApiKey('openrouter').key.trim())
     void loadAllModelOptions().then((r) => {
       setOptions(r.options)
@@ -98,8 +123,7 @@ function Gallery() {
       : { providerId: raw.slice(0, i), modelId: raw.slice(i + 1) }
   }
   const canStart = () =>
-    !running() && !!prompt().trim() && !!decoded() && hasKey()
-  const shown = () => [...items()].reverse()
+    ready() && !running() && !!prompt().trim() && !!decoded() && hasKey()
   const doneCount = () => items().filter((i) => i.status === 'done').length
 
   const start = async () => {
@@ -117,7 +141,7 @@ function Gallery() {
         items: items(),
         runner: makeRunner(d.providerId, d.modelId),
         signal: ac.signal,
-        onUpdate: setItems,
+        onUpdate: update,
         onStatus: setStatus,
       })
       if (res.error) setError(res.error)
@@ -137,10 +161,20 @@ function Gallery() {
     }
   }
 
+  const pictures = () => items().filter((i) => i.status === 'done')
+  const viewIndex = () => pictures().findIndex((i) => i.id === viewingId())
+  const viewing = () => pictures().find((i) => i.id === viewingId())
   const open = (item: GalleryItem) => {
-    setViewing(item)
+    setViewingId(item.id)
     dialog?.showModal()
   }
+  const step = (delta: number) => {
+    const i = viewIndex()
+    const next = i < 0 ? undefined : pictures().at(Math.max(0, i + delta))
+    if (next) setViewingId(next.id)
+  }
+  let touchX = 0
+  let touchY = 0
 
   return (
     <main class="mx-auto max-w-5xl px-4 py-8">
@@ -149,6 +183,7 @@ function Gallery() {
       </h1>
       <p class="text-muted-foreground mb-4 text-sm">
         Give it a theme and it keeps drawing SVG pictures until you stop it.
+        Pictures are saved on this device.
       </p>
 
       <Show when={!hasKey()}>
@@ -216,7 +251,8 @@ function Gallery() {
             class="border-border text-foreground rounded-lg border px-4 py-2 text-sm font-medium disabled:opacity-50"
             disabled={running() || items().length === 0}
             onClick={() => {
-              setItems([])
+              if (!window.confirm('Delete all saved pictures?')) return
+              update([])
               setError('')
             }}
           >
@@ -239,7 +275,7 @@ function Gallery() {
         class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
         aria-label="Gallery"
       >
-        <For each={shown()} keyed={false}>
+        <For each={items()} keyed={false}>
           {(item) => (
             <li
               class="border-border bg-card overflow-hidden rounded-xl border"
@@ -294,14 +330,28 @@ function Gallery() {
         </For>
       </ul>
 
-      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- backdrop click only; Escape closes natively */}
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- backdrop click, arrow keys and swipe; Escape closes natively */}
       <dialog
         ref={(el) => (dialog = el)}
         aria-label="Picture preview"
         class="border-border bg-card text-foreground m-auto max-w-[90vw] rounded-xl border p-4 backdrop:bg-black/60"
-        onClose={() => setViewing(null)}
+        onClose={() => setViewingId(null)}
         onClick={(e) => {
           if (e.target === e.currentTarget) dialog?.close()
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowLeft') step(-1)
+          else if (e.key === 'ArrowRight') step(1)
+        }}
+        onTouchStart={(e) => {
+          touchX = e.changedTouches[0].clientX
+          touchY = e.changedTouches[0].clientY
+        }}
+        onTouchEnd={(e) => {
+          const dx = e.changedTouches[0].clientX - touchX
+          const dy = e.changedTouches[0].clientY - touchY
+          if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5)
+            step(dx < 0 ? 1 : -1)
         }}
       >
         <Show when={viewing()}>
@@ -312,10 +362,40 @@ function Gallery() {
                 alt={v().title}
                 src={svgDataUrl(v().svg)}
               />
-              <p class="m-0 text-sm font-medium">{v().title}</p>
+              <p class="m-0 max-w-full truncate text-sm font-medium">
+                {v().title}
+              </p>
+              <div class="flex w-full items-center justify-between gap-2">
+                <button
+                  type="button"
+                  class={navBtn}
+                  aria-label="Previous picture"
+                  aria-disabled={viewIndex() <= 0 ? 'true' : 'false'}
+                  onClick={() => step(-1)}
+                >
+                  ‹ Previous
+                </button>
+                <span
+                  class="text-muted-foreground text-xs"
+                  data-testid="gallery-position"
+                >
+                  {viewIndex() + 1} / {pictures().length}
+                </span>
+                <button
+                  type="button"
+                  class={navBtn}
+                  aria-label="Next picture"
+                  aria-disabled={
+                    viewIndex() >= pictures().length - 1 ? 'true' : 'false'
+                  }
+                  onClick={() => step(1)}
+                >
+                  Next ›
+                </button>
+              </div>
               <button
                 type="button"
-                class="border-border text-foreground rounded-lg border px-4 py-2 text-sm font-medium"
+                class={navBtn}
                 onClick={() => dialog?.close()}
               >
                 Close

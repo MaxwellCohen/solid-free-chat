@@ -1,4 +1,5 @@
 import { classifyChatError } from './chat-error'
+import { idbAvailable, idbGet, idbSet } from './idb-kv'
 
 export type GalleryStatus = 'drawing' | 'done'
 
@@ -212,4 +213,59 @@ export async function runGallery(opts: {
     }
   }
   return { items }
+}
+
+const GALLERY_KEY = 'solid-free-chat-gallery'
+
+/** Finished pictures from a saved payload; [] for anything unreadable. */
+export function parseSavedGallery(raw: string | null): GalleryItem[] {
+  if (!raw) return []
+  try {
+    const data: unknown = JSON.parse(raw)
+    if (!Array.isArray(data)) return []
+    return (data as Array<Partial<GalleryItem> | null>)
+      .flatMap((i) =>
+        i &&
+        typeof i.id === 'string' &&
+        typeof i.n === 'number' &&
+        typeof i.svg === 'string' &&
+        i.svg
+          ? [
+              {
+                id: i.id,
+                n: i.n,
+                prompt: typeof i.prompt === 'string' ? i.prompt : '',
+                title: typeof i.title === 'string' ? i.title : '',
+                svg: i.svg,
+                status: 'done' as const,
+              },
+            ]
+          : [],
+      )
+      .slice(-GALLERY_MAX_ITEMS)
+  } catch {
+    return []
+  }
+}
+
+export async function loadSavedGallery(): Promise<GalleryItem[]> {
+  if (!idbAvailable()) return []
+  try {
+    return parseSavedGallery(await idbGet(GALLERY_KEY))
+  } catch {
+    return []
+  }
+}
+
+/** Saves the finished pictures on this device; storage failures are ignored. */
+export async function saveGallery(items: GalleryItem[]): Promise<void> {
+  if (!idbAvailable()) return
+  try {
+    await idbSet(
+      GALLERY_KEY,
+      JSON.stringify(items.filter((i) => i.status === 'done')),
+    )
+  } catch {
+    /* storage unavailable or full */
+  }
 }
