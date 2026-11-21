@@ -326,6 +326,9 @@ export default function ChatApp() {
       case 'roundtable':
         void navigate({ to: '/roundtable' })
         break
+      case 'gallery':
+        void navigate({ to: '/gallery' })
+        break
       case 'insights':
         void navigate({ to: '/insights' })
         break
@@ -996,6 +999,12 @@ export default function ChatApp() {
         label: 'Open roundtable',
         keywords: 'personas debate conversation panel discuss',
         run: () => void navigate({ to: '/roundtable' }),
+      },
+      {
+        id: 'openGallery',
+        label: 'Open endless gallery',
+        keywords: 'svg pictures art images draw stream generate',
+        run: () => void navigate({ to: '/gallery' }),
       },
       {
         id: 'openTour',

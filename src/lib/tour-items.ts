@@ -5,6 +5,7 @@ export type TourAction =
   | 'arena'
   | 'study'
   | 'roundtable'
+  | 'gallery'
   | 'insights'
   | 'saved'
   | 'shortcuts'
@@ -78,6 +79,14 @@ export const TOUR_ITEMS: readonly TourItem[] = [
     description: 'Let several personas discuss a topic together.',
     how: 'Command palette: Open roundtable',
     action: 'roundtable',
+  },
+  {
+    id: 'gallery',
+    emoji: '🖼️',
+    title: 'Endless gallery',
+    description: 'Give it a theme and watch an endless stream of SVG pictures.',
+    how: 'Command palette: Open endless gallery',
+    action: 'gallery',
   },
   {
     id: 'insights',

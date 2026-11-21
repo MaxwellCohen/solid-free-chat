@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as ArenaRouteImport } from './routes/arena'
 import { Route as DevRouteImport } from './routes/dev'
+import { Route as GalleryRouteImport } from './routes/gallery'
 import { Route as HarnessSandboxRouteImport } from './routes/harness-sandbox'
 import { Route as InsightsRouteImport } from './routes/insights'
 import { Route as ReviewRouteImport } from './routes/review'
@@ -40,6 +41,11 @@ const ArenaRoute = ArenaRouteImport.update({
 const DevRoute = DevRouteImport.update({
   id: '/dev',
   path: '/dev',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GalleryRoute = GalleryRouteImport.update({
+  id: '/gallery',
+  path: '/gallery',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HarnessSandboxRoute = HarnessSandboxRouteImport.update({
@@ -88,6 +94,7 @@ export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
   '/arena': typeof ArenaRoute
   '/dev': typeof DevRoute
+  '/gallery': typeof GalleryRoute
   '/harness-sandbox': typeof HarnessSandboxRoute
   '/insights': typeof InsightsRoute
   '/review': typeof ReviewRoute
@@ -102,6 +109,7 @@ export interface FileRoutesByTo {
   '/about': typeof AboutRoute
   '/arena': typeof ArenaRoute
   '/dev': typeof DevRoute
+  '/gallery': typeof GalleryRoute
   '/harness-sandbox': typeof HarnessSandboxRoute
   '/insights': typeof InsightsRoute
   '/review': typeof ReviewRoute
@@ -117,6 +125,7 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/arena': typeof ArenaRoute
   '/dev': typeof DevRoute
+  '/gallery': typeof GalleryRoute
   '/harness-sandbox': typeof HarnessSandboxRoute
   '/insights': typeof InsightsRoute
   '/review': typeof ReviewRoute
@@ -133,6 +142,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/arena'
     | '/dev'
+    | '/gallery'
     | '/harness-sandbox'
     | '/insights'
     | '/review'
@@ -147,6 +157,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/arena'
     | '/dev'
+    | '/gallery'
     | '/harness-sandbox'
     | '/insights'
     | '/review'
@@ -161,6 +172,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/arena'
     | '/dev'
+    | '/gallery'
     | '/harness-sandbox'
     | '/insights'
     | '/review'
@@ -176,6 +188,7 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   ArenaRoute: typeof ArenaRoute
   DevRoute: typeof DevRoute
+  GalleryRoute: typeof GalleryRoute
   HarnessSandboxRoute: typeof HarnessSandboxRoute
   InsightsRoute: typeof InsightsRoute
   ReviewRoute: typeof ReviewRoute
@@ -214,6 +227,13 @@ declare module '@tanstack/solid-router' {
       path: '/dev'
       fullPath: '/dev'
       preLoaderRoute: typeof DevRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gallery': {
+      id: '/gallery'
+      path: '/gallery'
+      fullPath: '/gallery'
+      preLoaderRoute: typeof GalleryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/harness-sandbox': {
@@ -280,6 +300,7 @@ const rootRouteChildren: RootRouteChildren = {
   AboutRoute: AboutRoute,
   ArenaRoute: ArenaRoute,
   DevRoute: DevRoute,
+  GalleryRoute: GalleryRoute,
   HarnessSandboxRoute: HarnessSandboxRoute,
   InsightsRoute: InsightsRoute,
   ReviewRoute: ReviewRoute,

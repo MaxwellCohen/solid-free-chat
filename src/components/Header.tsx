@@ -58,6 +58,7 @@ const NAV_LINKS = [
   { to: '/arena', label: 'Arena' },
   { to: '/study', label: 'Study' },
   { to: '/roundtable', label: 'Roundtable' },
+  { to: '/gallery', label: 'Gallery' },
   { to: '/dev', label: 'Dev' },
   { to: '/about', label: 'About' },
 ] as const

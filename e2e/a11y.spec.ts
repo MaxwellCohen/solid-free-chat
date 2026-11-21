@@ -47,6 +47,7 @@ const PAGES = [
   '/',
   '/arena',
   '/roundtable',
+  '/gallery',
   '/insights',
   '/saved',
   '/study',
